@@ -9,4 +9,11 @@ export type RootStackParamList = {
     SuccessMessage: undefined;
     ErrorMessage: undefined;
     DashboardHome: undefined;
+    SaleOrders: undefined;
+
+    SaleOrderStart: undefined;
+    SaleOrderEntry: undefined;
+    SaleOrderItemSelect: undefined;
+    SaleOrderItemDetail: undefined;
+    SaleOrderApprove: undefined;
 };
