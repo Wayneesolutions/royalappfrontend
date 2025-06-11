@@ -17,12 +17,27 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
   const [password, setPassword] = useState('');
 
   const handleLogin = () => {
-    if (username === 'admin' && password === '123456') {
-      navigation.navigate('DashboardHome');  // Navigate here on success
+    const users = [
+      { username: 'admin', password: '123456', route: 'DashboardAdmin' },
+      { username: 'rsm', password: '123456', route: 'DashboardRSM' },
+      { username: 'asm', password: '123456', route: 'DashboardASM' },
+      { username: 'distributor', password: '123456', route: 'DashboardDistributor' },
+      { username: 'dealer', password: '123456', route: 'DashboardDealer' },
+      { username: 'subdealer', password: '123456', route: 'DashboardSubDealer' },
+      { username: 'salesman', password: '123456', route: 'DashboardSalesman' },
+    ];
+
+    const user = users.find(
+      (u) => u.username === username.toLowerCase() && u.password === password
+    );
+
+    if (user) {
+      navigation.navigate(user.route as any);
     } else {
       alert('Invalid credentials');
     }
   };
+
 
   return (
     <ScrollView className="flex-1 bg-white px-6 py-12">
