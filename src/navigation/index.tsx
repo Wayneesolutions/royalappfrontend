@@ -52,7 +52,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
+    <Stack.Navigator   id={undefined} initialRouteName="Splash" screenOptions={{ headerShown: false }}>
       {/* --- Auth Stack --- */}
       <Stack.Screen name="Splash" component={Splash} />
       <Stack.Screen name="SignIn" component={SignIn} />

@@ -1,8 +1,9 @@
 import React from 'react';
-import AppNavigator from '../src/navigation';
+import AppNavigator from './src/navigation/index';
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import * as SplashScreen from 'expo-splash-screen';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native'; // ✅ ADD THIS
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,9 +25,9 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1 }}>
+      <NavigationContainer> {/* ✅ WRAP YOUR NAVIGATOR */}
         <AppNavigator />
-      </SafeAreaView>
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }

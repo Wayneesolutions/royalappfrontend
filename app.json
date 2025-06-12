@@ -28,13 +28,12 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router",
-      "expo-font"
+     "expo-font"
     ],
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "47503802-1a2a-4f24-933d-da1aab962692"
+        "projectId": "e066debc-f5a4-4def-b369-70782cd48b42"
       }
     }
   }
