@@ -13,27 +13,36 @@
       "backgroundColor": "#077BC3"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "splash": {
+        "image": "./assets/splash-logo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#077BC3"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.santkaur.royalsoftware"
+      "package": "com.santkaur.royalsoftware",
+      "splash": {
+        "image": "./assets/splash-logo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#077BC3"
+      }
     },
     "web": {
       "bundler": "metro",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-     "expo-font"
+      "expo-font"
     ],
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e066debc-f5a4-4def-b369-70782cd48b42"
+        "projectId": "47503802-1a2a-4f24-933d-da1aab962692"
       }
     }
   }
