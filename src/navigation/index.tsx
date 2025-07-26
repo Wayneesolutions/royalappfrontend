@@ -15,13 +15,13 @@ import ErrorMessage from '../screens/auth/ErrorMessage';
 
 // --- Admin Dashboard and Pages ---
 import DashboardAdmin from '../screens/dashboard/admin/DashboardHome';
-import Companies from '../screens/dashboard/admin/Companies';
-import Users from '../screens/dashboard/admin/Users';
-import Product from '../screens/dashboard/admin/Product';
-import Sales from '../screens/dashboard/admin/Sales';
-import ProductSummary from '../screens/dashboard/admin/ProductSummary';
+// import Companies from '../screens/dashboard/admin/Companies';
+// import Users from '../screens/dashboard/admin/Users';
+// import Product from '../screens/dashboard/admin/Product';
+// import Sales from '../screens/dashboard/admin/Sales';
+import ProductSummary from '../screens/dashboard/admin/saleOrder/ProductSummary';
 
-import SaleOrders from '../screens/dashboard/admin/SalesOrders';
+import SaleOrders from '../screens/dashboard/admin/saleOrder/SalesOrders';
 import SaleOrderStart from '../screens/dashboard/admin/saleOrder/SaleOrderStart';
 import SaleOrderEntry from '../screens/dashboard/admin/saleOrder/SaleOrderEntry';
 import SaleOrderItemSelect from '../screens/dashboard/admin/saleOrder/SaleOrderItemSelect';
@@ -64,18 +64,18 @@ export default function AppNavigator() {
 
       {/* --- Admin Stack --- */}
       <Stack.Screen name="DashboardAdmin" component={DashboardAdmin} />
-      <Stack.Screen name="Companies" component={Companies} />
+      {/* <Stack.Screen name="Companies" component={Companies} />
       <Stack.Screen name="Users" component={Users} />
       <Stack.Screen name="Sales" component={Sales} />
-      <Stack.Screen name="Product" component={Product} />
+      <Stack.Screen name="Product" component={Product} /> */}
       <Stack.Screen name="ProductSummary" component={ProductSummary} />
 
       <Stack.Screen name="SaleOrders" component={SaleOrders} />
-      <Stack.Screen name="SaleOrderStart" component={SaleOrderStart} />
+      {/* <Stack.Screen name="SaleOrderStart" component={SaleOrderStart} />
       <Stack.Screen name="SaleOrderEntry" component={SaleOrderEntry} />
       <Stack.Screen name="SaleOrderItemSelect" component={SaleOrderItemSelect} />
       <Stack.Screen name="SaleOrderItemDetail" component={SaleOrderItemDetail} />
-      <Stack.Screen name="SaleOrderApprove" component={SaleOrderApprove} />
+      <Stack.Screen name="SaleOrderApprove" component={SaleOrderApprove} /> */}
 
       {/* --- RSM Stack --- */}
       <Stack.Screen name="DashboardRSM" component={DashboardRSM} />
