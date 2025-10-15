@@ -1,25 +1,25 @@
 // src/navigation/AdminNavigator.tsx
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { RootStackParamList } from './types';
+import { RootStackParamList } from '../types';
 
 // Admin Dashboard and Pages
-import DashboardAdmin from '../screens/dashboard/admin/DashboardHome';
+import DashboardAdmin from '../../screens/dashboard/admin/DashboardHome';
 
 // Common Screens (you'll need to create these)
-import ZonalScreen from '../screens/dashboard/admin/ZonalScreen';
-import RSMScreen from '../screens/dashboard/admin/RSMScreen';
-import ASMScreen from '../screens/dashboard/admin/ASMScreen';
-import SalesScreen from '../screens/dashboard/admin/SalesScreen';
-import DealerScreen from '../screens/dashboard/admin/DealerScreen';
-import DistributorsScreen from '../screens/dashboard/admin/DistributorsScreen';
-import InvoiceScreen from '../screens/dashboard/admin/InvoiceScreen';
-import LedgerScreen from '../screens/dashboard/admin/LedgerScreen';
-import TargetScreen from '../screens/dashboard/admin/TargetScreen';
-import PendingOrdersScreen from '../screens/dashboard/admin/PendingOrdersScreen';
-import ClearOrdersScreen from '../screens/dashboard/admin/ClearOrdersScreen';
-import SettingsScreen from '../screens/dashboard/admin/SettingsScreen';
-import ProfileScreen from '../screens/dashboard/admin/ProfileScreen';
+import ZonalScreen from '../../screens/dashboard/admin/ZonalScreen';
+import RSMScreen from '../../screens/dashboard/admin/RSMScreen';
+import ASMScreen from '../../screens/dashboard/admin/ASMScreen';
+import SalesScreen from '../../screens/dashboard/admin/SalesScreen';
+import DealerScreen from '../../screens/dashboard/admin/DealerScreen';
+import DistributorsScreen from '../../screens/dashboard/admin/DistributorsScreen';
+import InvoiceScreen from '../../screens/dashboard/admin/InvoiceScreen';
+import LedgerScreen from '../../screens/dashboard/admin/LedgerScreen';
+import TargetScreen from '../../screens/dashboard/admin/TargetScreen';
+import PendingOrdersScreen from '../../screens/dashboard/admin/PendingOrdersScreen';
+import ClearOrdersScreen from '../../screens/dashboard/admin/ClearOrdersScreen';
+import SettingsScreen from '../../screens/dashboard/admin/SettingsScreen';
+import ProfileScreen from '../../screens/common/ProfileScreen';
 
 
 const AdminStack = createNativeStackNavigator<RootStackParamList>();
@@ -49,7 +49,6 @@ export default function AdminNavigator() {
             <AdminStack.Screen name="ClearOrdersScreen" component={ClearOrdersScreen} />
 
             {/* Settings & Profile */}
-            <AdminStack.Screen name="SettingsScreen" component={SettingsScreen} />
             <AdminStack.Screen name="ProfileScreen" component={ProfileScreen} />
         </AdminStack.Navigator>
     );

@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Dimensions, 
+  Dimensions,
   Image
 } from 'react-native';
 import {
@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
 import Profile from '../../../../assets/images/profile.png'
+import DashboardHeader from './AdminHeader';
 
 const { width } = Dimensions.get('window');
 
@@ -48,12 +49,12 @@ const members: Member[] = [
 ];
 
 const menuItems: MenuItem[] = [
-  { label: 'Invoice', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'InvoiceScreen' },
+  { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },
   { label: 'Ledger', icon: 'book-outline', iconType: 'Ionicons', navigationScreen: 'LedgerScreen' },
   { label: 'Target', icon: 'target', iconType: 'MaterialCommunityIcons', navigationScreen: 'TargetScreen' },
   { label: 'Pending Orders', icon: 'time-outline', iconType: 'Ionicons', navigationScreen: 'PendingOrdersScreen' },
-  { label: 'Clear Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ClearOrdersScreen' },
-  { label: 'Setting', icon: 'settings-outline', iconType: 'Ionicons', navigationScreen: 'SettingsScreen' },
+  { label: 'Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ClearOrdersScreen' },
+
 ];
 
 // Chart data for the sales breakdown
@@ -84,31 +85,31 @@ const DashboardHome = () => {
     }
   };
 
-// Generic navigation helper function
-const navigateToScreen = (screenName: string) => {
-  try {
-    // Check if the screen exists in RootStackParamList
-    if (screenName in navigation.getState().routeNames || true) {
-      (navigation as any).navigate(screenName);
-    } else {
-      console.log(`Screen ${screenName} not found in navigation stack`);
+  // Generic navigation helper function
+  const navigateToScreen = (screenName: string) => {
+    try {
+      // Check if the screen exists in RootStackParamList
+      if (screenName in navigation.getState().routeNames || true) {
+        (navigation as any).navigate(screenName);
+      } else {
+        console.log(`Screen ${screenName} not found in navigation stack`);
+      }
+    } catch (error) {
+      console.log(`Navigation to ${screenName} not available yet`);
+      // You can show an alert or toast here if needed
     }
-  } catch (error) {
-    console.log(`Navigation to ${screenName} not available yet`);
-    // You can show an alert or toast here if needed
-  }
-};
+  };
 
-// Navigation handler for field members
-const handleMemberPress = (member: Member) => {
-  setSelectedMember(member.id);
-  navigateToScreen(member.navigationScreen);
-};
+  // Navigation handler for field members
+  const handleMemberPress = (member: Member) => {
+    setSelectedMember(member.id);
+    navigateToScreen(member.navigationScreen);
+  };
 
-// Navigation handler for menu items
-const handleMenuPress = (menuItem: MenuItem) => {
-  navigateToScreen(menuItem.navigationScreen);
-};
+  // Navigation handler for menu items
+  const handleMenuPress = (menuItem: MenuItem) => {
+    navigateToScreen(menuItem.navigationScreen);
+  };
 
   // Profile press handler
   const handleProfilePress = () => {
@@ -123,30 +124,17 @@ const handleMenuPress = (menuItem: MenuItem) => {
 
   return (
     <View style={styles.mainContainer}>
+      <DashboardHeader
+        userName="Satish Kumar"
+        userRole="Company Admin"
+        showNotifications={true}
+      />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Section */}
-        <View style={styles.profileSection}>
-          <TouchableOpacity style={styles.profileHeader} onPress={handleProfilePress} activeOpacity={0.8}>
-            <View style={styles.profileImageContainer}>
-              <View style={styles.profileImage}>
-                <Image 
-                  source={Profile} 
-                  style={{ width: 32, height: 32, tintColor: 'white' }}
-                  resizeMode="contain" 
-                />
-              </View>
-              <View style={styles.onlineIndicator} />
-            </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>Satish Kumar</Text>
-              <Text style={styles.profileRole}>Company Admin</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+
 
         {/* Field Members Section */}
         <View style={styles.fieldMembersSection}>
@@ -304,6 +292,7 @@ const styles = StyleSheet.create({
     color: 'black',
   },
   fieldMembersSection: {
+    paddingTop: 20,
     paddingHorizontal: 20,
     marginTop: 5,
     marginBottom: 24,

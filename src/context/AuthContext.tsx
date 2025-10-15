@@ -32,18 +32,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Replace with your actual auth check
       // const token = await AsyncStorage.getItem('authToken');
       // const userData = await AsyncStorage.getItem('userData');
-      
+
       // if (token && userData) {
       //   const parsedUser = JSON.parse(userData);
       //   setUser(parsedUser);
       //   setIsAuthenticated(true);
       // }
-      
+
       // Mock for development
       setTimeout(() => {
         setIsLoading(false);
       }, 1000);
-      
+
     } catch (error) {
       console.error('Auth check failed:', error);
       setIsLoading(false);
@@ -53,10 +53,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string): Promise<void> => {
     try {
       setIsLoading(true);
-      
+
       // Replace with your actual login API call
       // const response = await authAPI.login(email, password);
-      
+
       // Mock login logic based on email
       const mockUser: User = {
         id: generateUserId(),
@@ -64,17 +64,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         role: determineUserRole(email),
         name: extractNameFromEmail(email)
       };
-      
+
       // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
+
       setUser(mockUser);
       setIsAuthenticated(true);
-      
+
       // Store auth data
       // await AsyncStorage.setItem('authToken', response.token);
       // await AsyncStorage.setItem('userData', JSON.stringify(mockUser));
-      
+
     } catch (error) {
       console.error('Login failed:', error);
       throw new Error('Invalid credentials');
@@ -86,17 +86,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async (): Promise<void> => {
     try {
       setIsLoading(true);
-      
+
       // Clear stored auth data
       // await AsyncStorage.removeItem('authToken');
       // await AsyncStorage.removeItem('userData');
-      
+
       // Call logout API if needed
       // await authAPI.logout();
-      
+
       setUser(null);
       setIsAuthenticated(false);
-      
+
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
@@ -108,7 +108,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (user) {
       const updatedUser = { ...user, ...userData };
       setUser(updatedUser);
-      
+
       // Update stored user data
       // AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
     }
@@ -120,6 +120,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const determineUserRole = (email: string): UserRole => {
+    if (email.includes('superadmin')) return UserRole.SUPERADMIN;
     if (email.includes('admin')) return UserRole.ADMIN;
     if (email.includes('zonal')) return UserRole.ZONAL;
     if (email.includes('rsm')) return UserRole.RSM;

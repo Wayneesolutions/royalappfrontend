@@ -2,7 +2,8 @@
 import React from 'react';
 import { UserRole, User } from './types';
 import AuthNavigator from './AuthNavigator';
-import AdminNavigator from './AdminNavigator';
+import AdminNavigator from './rolebasednavigator/AdminNavigator';
+import SuperAdminNavigator from './rolebasednavigator/SuperAdminNavigator';
 import {
   ZonalNavigator,
   RSMNavigator,
@@ -26,6 +27,9 @@ export default function AppNavigator({ user, isAuthenticated }: AppNavigatorProp
 
   // Route to appropriate navigator based on user role
   switch (user.role) {
+    case UserRole.SUPERADMIN:
+      return <SuperAdminNavigator />;
+
     case UserRole.ADMIN:
       return <AdminNavigator />;
     

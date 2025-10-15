@@ -47,8 +47,9 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // Demo credentials for testing different roles (tap to fill)
+// Demo credentials for testing different roles (tap to fill)
   const demoCredentials = [
+    { role: 'SuperAdmin', username: 'superadmin', password: '123456' },
     { role: 'Admin', username: 'admin', password: '123456' },
     { role: 'RSM', username: 'rsm', password: '123456' },
     { role: 'ASM', username: 'asm', password: '123456' },
