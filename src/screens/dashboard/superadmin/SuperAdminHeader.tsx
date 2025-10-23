@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
+import { useAuth } from '../../../context/AuthContext';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
 
@@ -48,16 +49,15 @@ const SuperAdminHeader: React.FC<SuperAdminHeaderProps> = ({
         setShowLogoutModal(true);
     };
 
-    const confirmLogout = () => {
+    const { logout } = useAuth();
+
+    const confirmLogout = async () => {
         setShowLogoutModal(false);
-        // Add your logout logic here
-        // Example: Clear storage, reset auth state, navigate to login
-        setTimeout(() => {
-            navigation.reset({
-                index: 0,
-                routes: [{ name: 'SignInScreen' as any }],
-            });
-        }, 100);
+        try {
+            await logout();
+        } catch (e) {
+            // No-op; state purge will still force auth flow
+        }
     };
 
     const handleProfilePress = () => {

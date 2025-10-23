@@ -1,52 +1,79 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
     TouchableOpacity,
     StyleSheet,
     Modal,
-    Image
+    Image,
+    Alert,
+    ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
 import Profile from '../../../../assets/images/profile.png';
+import { useAuth } from '../../../context/AuthContext';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
 
 interface DashboardHeaderProps {
-    userName?: string;
-    userRole?: string;
     showNotifications?: boolean;
 }
 
 const DashboardHeader: React.FC<DashboardHeaderProps> = ({
-    userName = 'Satish Kumar',
-    userRole = 'Company Admin'
+    showNotifications = false
 }) => {
     const navigation = useNavigation<NavigationProps>();
     const [showMenuDropdown, setShowMenuDropdown] = useState(false);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+    const [isSwitchingCompany, setIsSwitchingCompany] = useState(false);
 
     const handleLogout = () => {
         setShowMenuDropdown(false);
         setShowLogoutModal(true);
     };
 
-    const confirmLogout = () => {
+    const { logout, user, switchCompany } = useAuth();
+    
+    // Get user details from auth context
+    const userName = user?.name || 'Admin User';
+    const userRole = user?.role || 'Admin';
+    const currentCompany = user?.defaultCompany;
+    const availableCompanies = user?.companies || [];
+
+    const confirmLogout = async () => {
         setShowLogoutModal(false);
-        setTimeout(() => {
-            navigation.reset({
-                index: 0,
-                routes: [{ name: 'SignInScreen' as any }],
-            });
-        }, 100);
+        try {
+            await logout();
+        } catch (e) {
+            // No-op; state purge will still force auth flow
+        }
     };
 
     const handleProfilePress = () => {
         setShowMenuDropdown(false);
         navigation.navigate('ProfileScreen');
+    };
+
+    const handleCompanySwitch = async (companyId: string) => {
+        if (companyId === currentCompany?._id) {
+            setShowCompanyDropdown(false);
+            return;
+        }
+
+        setIsSwitchingCompany(true);
+        try {
+            await switchCompany(companyId);
+            setShowCompanyDropdown(false);
+            Alert.alert('Success', 'Company switched successfully!');
+        } catch (error) {
+            Alert.alert('Error', 'Failed to switch company. Please try again.');
+        } finally {
+            setIsSwitchingCompany(false);
+        }
     };
 
 
@@ -76,7 +103,34 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                 </TouchableOpacity>
 
                 {/* Right Section */}
-                <View style={styles.headerRight}>       
+                <View style={styles.headerRight}>
+                    {/* Company Dropdown */}
+                    {availableCompanies.length > 0 && (
+                        <TouchableOpacity
+                            style={styles.companyButton}
+                            onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
+                            activeOpacity={0.7}
+                            disabled={isSwitchingCompany}
+                        >
+                            <View style={styles.companyInfo}>
+                                <Text style={styles.companyName} numberOfLines={1}>
+                                    {currentCompany?.companyName || 'Select Company'}
+                                </Text>
+                                <Text style={styles.companyCode} numberOfLines={1}>
+                                    {currentCompany?.companyCode || ''}
+                                </Text>
+                            </View>
+                            <Ionicons 
+                                name={showCompanyDropdown ? "chevron-up" : "chevron-down"} 
+                                size={16} 
+                                color="#6B7280" 
+                            />
+                            {isSwitchingCompany && (
+                                <ActivityIndicator size="small" color="#0493D2" style={styles.switchLoader} />
+                            )}
+                        </TouchableOpacity>
+                    )}
+                    
                     {/* Three Dot Menu */}
                     <TouchableOpacity
                         style={styles.menuButton}
@@ -87,6 +141,52 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {/* Company Dropdown */}
+            {showCompanyDropdown && availableCompanies.length > 0 && (
+                <View style={styles.companyDropdownContainer}>
+                    <View style={styles.companyDropdown}>
+                        <Text style={styles.companyDropdownTitle}>Switch Company</Text>
+                        <View style={styles.companyDivider} />
+                        {availableCompanies.map((companyData: any, index: number) => {
+                            const company = companyData.companyId;
+                            const isCurrentCompany = company._id === currentCompany?._id;
+                            return (
+                                <TouchableOpacity
+                                    key={company._id}
+                                    style={[
+                                        styles.companyDropdownItem,
+                                        index === availableCompanies.length - 1 && styles.companyDropdownItemLast
+                                    ]}
+                                    onPress={() => handleCompanySwitch(company._id)}
+                                    disabled={isCurrentCompany || isSwitchingCompany}
+                                >
+                                    <View style={styles.companyItemInfo}>
+                                        <Text style={[
+                                            styles.companyItemName,
+                                            isCurrentCompany && styles.currentCompanyText
+                                        ]}>
+                                            {company.companyName}
+                                        </Text>
+                                        <Text style={[
+                                            styles.companyItemCode,
+                                            isCurrentCompany && styles.currentCompanyText
+                                        ]}>
+                                            {company.companyCode}
+                                        </Text>
+                                    </View>
+                                    {isCurrentCompany && (
+                                        <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                                    )}
+                                    {isSwitchingCompany && !isCurrentCompany && (
+                                        <ActivityIndicator size="small" color="#0493D2" />
+                                    )}
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </View>
+            )}
 
             {/* Menu Dropdown */}
             {showMenuDropdown && (
@@ -150,12 +250,15 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                 </View>
             </Modal>
 
-            {/* Backdrop for closing dropdown */}
-            {showMenuDropdown && (
+            {/* Backdrop for closing dropdowns */}
+            {(showMenuDropdown || showCompanyDropdown) && (
                 <TouchableOpacity
                     style={styles.backdrop}
                     activeOpacity={1}
-                    onPress={() => setShowMenuDropdown(false)}
+                    onPress={() => {
+                        setShowMenuDropdown(false);
+                        setShowCompanyDropdown(false);
+                    }}
                 />
             )}
         </>
@@ -226,6 +329,32 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
+    companyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F3F4F6',
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        maxWidth: 150,
+        gap: 8,
+    },
+    companyInfo: {
+        flex: 1,
+    },
+    companyName: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#1F2937',
+    },
+    companyCode: {
+        fontSize: 10,
+        color: '#6B7280',
+        marginTop: 1,
+    },
+    switchLoader: {
+        marginLeft: 4,
+    },
     notificationButton: {
         width: 40,
         height: 40,
@@ -261,6 +390,63 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#F3F4F6',
         borderRadius: 8,
+    },
+    companyDropdownContainer: {
+        position: 'absolute',
+        top: 95,
+        right: 20,
+        zIndex: 1002,
+    },
+    companyDropdown: {
+        backgroundColor: '#FFFFFF',
+        minWidth: 200,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    companyDropdownTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1F2937',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        textAlign: 'center',
+    },
+    companyDivider: {
+        height: 1,
+        backgroundColor: '#F3F4F6',
+    },
+    companyDropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 12,
+    },
+    companyDropdownItemLast: {
+        borderBottomLeftRadius: 12,
+        borderBottomRightRadius: 12,
+    },
+    companyItemInfo: {
+        flex: 1,
+    },
+    companyItemName: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#374151',
+    },
+    companyItemCode: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2,
+    },
+    currentCompanyText: {
+        color: '#10B981',
+        fontWeight: '600',
     },
     menuDropdownContainer: {
         position: 'absolute',

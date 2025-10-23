@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   StyleSheet,
   ScrollView,
   Dimensions,
-  Image
+  Image,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import {
   Ionicons,
@@ -18,6 +20,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
 import Profile from '../../../../assets/images/profile.png'
 import DashboardHeader from './AdminHeader';
+import { useAuth } from '../../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -35,26 +38,31 @@ interface MenuItem {
 interface Member {
   id: string;
   name: string;
+  role: string;
   color: string;
   navigationScreen: keyof RootStackParamList;
+  count: number;
 }
 
-const members: Member[] = [
-  { id: '1', name: 'Zonal', color: '#3B82F6', navigationScreen: 'ZonalScreen' },
-  { id: '2', name: 'RSM', color: '#3B82F6', navigationScreen: 'RSMScreen' },
-  { id: '3', name: 'ASM', color: '#3B82F6', navigationScreen: 'ASMScreen' },
-  { id: '4', name: 'Sales', color: '#3B82F6', navigationScreen: 'SalesScreen' },
-  { id: '5', name: 'Dealer', color: '#3B82F6', navigationScreen: 'DealerScreen' },
-  { id: '6', name: 'Distributors', color: '#3B82F6', navigationScreen: 'DistributorsScreen' },
+const getMembers = (userCounts: {[key: string]: number}): Member[] => [
+  { id: '1', name: 'Zonal', role: 'zonal', color: '#3B82F6', navigationScreen: 'ZonalScreen' as keyof RootStackParamList, count: userCounts.zonal || 0 },
+  { id: '2', name: 'RSM', role: 'rsm', color: '#10B981', navigationScreen: 'RSMScreen' as keyof RootStackParamList, count: userCounts.rsm || 0 },
+  { id: '3', name: 'ASM', role: 'asm', color: '#F59E0B', navigationScreen: 'ASMScreen' as keyof RootStackParamList, count: userCounts.asm || 0 },
+  { id: '4', name: 'Sales', role: 'salesman', color: '#EF4444', navigationScreen: 'SalesScreen' as keyof RootStackParamList, count: userCounts.salesman || 0 },
+  { id: '5', name: 'Dealer', role: 'dealers', color: '#8B5CF6', navigationScreen: 'DealerScreen' as keyof RootStackParamList, count: userCounts.dealers || 0 },
+  { id: '6', name: 'Distributors', role: 'distibutors', color: '#06B6D4', navigationScreen: 'DistributorsScreen' as keyof RootStackParamList, count: userCounts.distibutors || 0 },
 ];
 
 const menuItems: MenuItem[] = [
+  { label: 'User Management', icon: 'people-outline', iconType: 'Ionicons', navigationScreen: 'Users' },
+  { label: 'Order Monitoring', icon: 'eye-outline', iconType: 'Ionicons', navigationScreen: 'SaleOrders' },
+  { label: 'Sales Overview', icon: 'trending-up-outline', iconType: 'Ionicons', navigationScreen: 'Sales' },
   { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },
   { label: 'Ledger', icon: 'book-outline', iconType: 'Ionicons', navigationScreen: 'LedgerScreen' },
-  { label: 'Target', icon: 'target', iconType: 'MaterialCommunityIcons', navigationScreen: 'TargetScreen' },
+  { label: 'Target Management', icon: 'target', iconType: 'MaterialCommunityIcons', navigationScreen: 'TargetScreen' },
   { label: 'Pending Orders', icon: 'time-outline', iconType: 'Ionicons', navigationScreen: 'PendingOrdersScreen' },
-  { label: 'Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ClearOrdersScreen' },
-
+  { label: 'Pending Approvals', icon: 'checkmark-circle-outline', iconType: 'Ionicons', navigationScreen: 'PendingApprovalsScreen' },
+  { label: 'Approved Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ClearOrdersScreen' },
 ];
 
 // Chart data for the sales breakdown
@@ -71,6 +79,93 @@ const chartData = [
 const DashboardHome = () => {
   const navigation = useNavigation<NavigationProps>();
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [companyData, setCompanyData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userCounts, setUserCounts] = useState<{[key: string]: number}>({});
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+
+  const { user, getCompanyData, getUsersByCompany } = useAuth();
+
+  // Helper function to get role colors
+  const getRoleColor = (role: string) => {
+    const colors: { [key: string]: string } = {
+      'zonal': '#3B82F6',
+      'rsm': '#10B981',
+      'asm': '#F59E0B',
+      'salesman': '#EF4444',
+      'dealers': '#8B5CF6',
+      'subdealer': '#06B6D4',
+      'distibutors': '#84CC16',
+    };
+    return colors[role] || '#6B7280';
+  };
+
+  // Fetch user counts for each role
+  const fetchUserCounts = async () => {
+    if (!user?.defaultCompany) return;
+
+    try {
+      const roleCounts: {[key: string]: number} = {};
+      const roles = ['zonal', 'rsm', 'asm', 'salesman', 'dealers', 'distibutors'];
+      
+      for (const role of roles) {
+        try {
+          const result = await getUsersByCompany({ role, limit: 1 });
+          roleCounts[role] = result?.pagination?.totalUsers || 0;
+        } catch (err) {
+          console.error(`Failed to fetch ${role} users:`, err);
+          roleCounts[role] = 0;
+        }
+      }
+      
+      setUserCounts(roleCounts);
+    } catch (err) {
+      console.error('Failed to fetch user counts:', err);
+    }
+  };
+
+  // Fetch recent users
+  const fetchRecentUsers = async () => {
+    if (!user?.defaultCompany) return;
+
+    try {
+      const result = await getUsersByCompany({ limit: 5 });
+      setRecentUsers(result?.users || []);
+    } catch (err) {
+      console.error('Failed to fetch recent users:', err);
+    }
+  };
+
+  // Fetch company data when component mounts or user changes
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.defaultCompany) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await getCompanyData();
+        setCompanyData(data);
+        
+        // Fetch user data in parallel
+        await Promise.all([
+          fetchUserCounts(),
+          fetchRecentUsers()
+        ]);
+      } catch (err) {
+        console.error('Failed to fetch company data:', err);
+        setError('Failed to load company data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user?.defaultCompany, getCompanyData]);
 
   const renderIcon = (name: string, type: IconType, size = 24, color = '#486CD6') => {
     switch (type) {
@@ -103,7 +198,8 @@ const DashboardHome = () => {
   // Navigation handler for field members
   const handleMemberPress = (member: Member) => {
     setSelectedMember(member.id);
-    navigateToScreen(member.navigationScreen);
+    // Navigate to Users screen with role filter
+    navigation.navigate('Users' as any, { role: member.role });
   };
 
   // Navigation handler for menu items
@@ -122,11 +218,57 @@ const DashboardHome = () => {
 
 
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <View style={styles.mainContainer}>
+        <DashboardHeader showNotifications={true} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0493D2" />
+          <Text style={styles.loadingText}>Loading company data...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    const isNoCompaniesError = error.includes('No companies assigned');
+    
+    return (
+      <View style={styles.mainContainer}>
+        <DashboardHeader showNotifications={true} />
+        <View style={styles.errorContainer}>
+          <Ionicons 
+            name={isNoCompaniesError ? "business-outline" : "alert-circle-outline"} 
+            size={48} 
+            color={isNoCompaniesError ? "#F59E0B" : "#EF4444"} 
+          />
+          <Text style={styles.errorText}>{error}</Text>
+          {isNoCompaniesError ? (
+            <Text style={styles.errorSubtext}>
+              Please contact your super admin to assign companies to your account.
+            </Text>
+          ) : (
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={() => {
+                setError(null);
+                setIsLoading(true);
+                // Retry logic will be handled by useEffect
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.mainContainer}>
       <DashboardHeader
-        userName="Satish Kumar"
-        userRole="Company Admin"
         showNotifications={true}
       />
       <ScrollView
@@ -135,6 +277,38 @@ const DashboardHome = () => {
         showsVerticalScrollIndicator={false}
       >
 
+        {/* Company Information Section */}
+        {companyData && (
+          <View style={styles.companyInfoSection}>
+            <Text style={styles.sectionTitle}>Company Overview</Text>
+            <View style={styles.sectionCard}>
+              <View style={styles.companyHeader}>
+                <View style={styles.companyIcon}>
+                  <Ionicons name="business" size={24} color="#0493D2" />
+                </View>
+                <View style={styles.companyDetails}>
+                  <Text style={styles.companyName}>{companyData.company?.companyName}</Text>
+                  <Text style={styles.companyCode}>Code: {companyData.company?.companyCode}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{companyData.statistics?.totalUsers || 0}</Text>
+                  <Text style={styles.statLabel}>Total Users</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{companyData.statistics?.maxUsersAllowed || 0}</Text>
+                  <Text style={styles.statLabel}>Max Users</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{companyData.statistics?.usagePercentage || 0}%</Text>
+                  <Text style={styles.statLabel}>Usage</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Field Members Section */}
         <View style={styles.fieldMembersSection}>
@@ -145,20 +319,104 @@ const DashboardHome = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.membersScrollContainer}
             >
-              {members.map((member) => (
+              {getMembers(userCounts).map((member) => (
                 <TouchableOpacity
                   key={member.id}
                   style={styles.memberItem}
                   onPress={() => handleMemberPress(member)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.memberCircle, { backgroundColor: "white" }]}>
-                    <Ionicons name="person" size={20} color="#486CD6" />
+                  <View style={[styles.memberCircle, { backgroundColor: member.color }]}>
+                    <Ionicons name="person" size={20} color="white" />
                   </View>
                   <Text style={styles.memberName}>{member.name}</Text>
+                  <Text style={styles.memberCount}>{member.count}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+
+        {/* Users Management Section */}
+        <View style={styles.usersSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>User Management</Text>
+            <TouchableOpacity 
+              style={styles.viewAllButton}
+              onPress={() => navigateToScreen('Users')}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+              <Ionicons name="arrow-forward" size={16} color="#0493D2" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.sectionCard}>
+            <View style={styles.usersStatsContainer}>
+              <View style={styles.userStatItem}>
+                <View style={styles.userStatIcon}>
+                  <Ionicons name="people" size={24} color="#3B82F6" />
+                </View>
+                <View style={styles.userStatInfo}>
+                  <Text style={styles.userStatValue}>{companyData?.statistics?.totalUsers || 0}</Text>
+                  <Text style={styles.userStatLabel}>Total Users</Text>
+                </View>
+              </View>
+              <View style={styles.userStatItem}>
+                <View style={styles.userStatIcon}>
+                  <Ionicons name="business" size={24} color="#10B981" />
+                </View>
+                <View style={styles.userStatInfo}>
+                  <Text style={styles.userStatValue}>{companyData?.statistics?.maxUsersAllowed || 0}</Text>
+                  <Text style={styles.userStatLabel}>Max Allowed</Text>
+                </View>
+              </View>
+              <View style={styles.userStatItem}>
+                <View style={styles.userStatIcon}>
+                  <Ionicons name="trending-up" size={24} color="#F59E0B" />
+                </View>
+                <View style={styles.userStatInfo}>
+                  <Text style={styles.userStatValue}>{companyData?.statistics?.usagePercentage || 0}%</Text>
+                  <Text style={styles.userStatLabel}>Usage</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* Quick Role Stats */}
+            {companyData?.statistics?.userByRole && companyData.statistics.userByRole.length > 0 && (
+              <View style={styles.roleStatsContainer}>
+                <Text style={styles.roleStatsTitle}>Users by Role</Text>
+                <View style={styles.roleStatsList}>
+                  {companyData.statistics.userByRole.map((roleStat: any, index: number) => (
+                    <View key={index} style={styles.roleStatItem}>
+                      <View style={[styles.roleStatDot, { backgroundColor: getRoleColor(roleStat._id) }]} />
+                      <Text style={styles.roleStatText}>
+                        {roleStat._id}: {roleStat.count}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+            
+            {/* Recent Users */}
+            {recentUsers.length > 0 && (
+              <View style={styles.recentUsersContainer}>
+                <Text style={styles.recentUsersTitle}>Recent Users</Text>
+                {recentUsers.slice(0, 3).map((user, index) => (
+                  <View key={user._id} style={styles.recentUserItem}>
+                    <View style={[styles.recentUserAvatar, { backgroundColor: getRoleColor(user.role) }]}>
+                      <Text style={styles.recentUserInitial}>{user.name.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.recentUserInfo}>
+                      <Text style={styles.recentUserName}>{user.name}</Text>
+                      <Text style={styles.recentUserRole}>{user.role.toUpperCase()}</Text>
+                    </View>
+                    <View style={[styles.recentUserStatus, { backgroundColor: user.isActive ? '#10B981' : '#EF4444' }]}>
+                      <Text style={styles.recentUserStatusText}>{user.isActive ? 'Active' : 'Inactive'}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </View>
 
@@ -237,6 +495,185 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingBottom: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ecf0fe',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ecf0fe',
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: '#0493D2',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  companyInfoSection: {
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  companyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  companyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  companyDetails: {
+    flex: 1,
+  },
+  companyName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  companyCode: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  usersSection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#0493D2',
+    fontWeight: '600',
+  },
+  usersStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
+  },
+  userStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  userStatIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userStatInfo: {
+    alignItems: 'center',
+  },
+  userStatValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  userStatLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  roleStatsContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 16,
+  },
+  roleStatsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  roleStatsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  roleStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  roleStatDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  roleStatText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   profileSection: {
     paddingTop: 30,
@@ -501,6 +938,68 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // New styles for field members with counts
+  memberCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  // Recent users styles
+  recentUsersContainer: {
+    marginTop: 16,
+  },
+  recentUsersTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  recentUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  recentUserAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  recentUserInitial: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  recentUserInfo: {
+    flex: 1,
+  },
+  recentUserName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  recentUserRole: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  recentUserStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  recentUserStatusText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'white',
   },
 });
 

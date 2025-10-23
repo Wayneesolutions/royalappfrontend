@@ -29,6 +29,7 @@ import {
   Calendar, 
   AlertCircle 
 } from 'lucide-react-native';
+import { apiService } from '../../../services/api';
 
 // ==================== TYPE DEFINITIONS ====================
 interface Company {
@@ -65,59 +66,7 @@ interface Company {
 }
 
 // ==================== MOCK DATA ====================
-const initialCompanies: Company[] = [
-  {
-    id: '1',
-    name: 'Royal Paints Pvt Ltd',
-    code: 'RP001',
-    address: '123 Paint Street, Industrial Area',
-    city: 'Ludhiana',
-    state: 'Punjab',
-    pincode: '141001',
-    phone: '+91 98765 43210',
-    email: 'info@royalpaints.com',
-    gstNumber: '03AABCU9603R1ZM',
-    status: 'active',
-    createdAt: '15 Jan 2024',
-    admin: { name: 'Satish Kumar', phone: '+91 98765 43210', email: 'satish@royalpaints.com' },
-    tally: { server: 'http://192.168.1.100', port: '9000', lastSync: '2 hours ago', status: 'connected' },
-    stats: { totalSales: '₹18.5L', totalOrders: 145, pendingOrders: 12, totalUsers: 45, activeUsers: 38 },
-  },
-  {
-    id: '2',
-    name: 'Elite Coatings',
-    code: 'EC002',
-    address: '456 Industrial Road, Sector 25',
-    city: 'Chandigarh',
-    state: 'Punjab',
-    pincode: '160025',
-    phone: '+91 98765 43211',
-    email: 'info@elitecoatings.com',
-    gstNumber: '03AABCE9603R1ZM',
-    status: 'active',
-    createdAt: '10 Feb 2024',
-    admin: { name: 'Rajesh Sharma', phone: '+91 98765 43211', email: 'rajesh@elitecoatings.com' },
-    tally: { server: 'http://192.168.1.101', port: '9000', lastSync: '5 hours ago', status: 'connected' },
-    stats: { totalSales: '₹15.3L', totalOrders: 120, pendingOrders: 8, totalUsers: 32, activeUsers: 28 },
-  },
-  {
-    id: '3',
-    name: 'Premium Colors Ltd',
-    code: 'PC003',
-    address: '789 Color Avenue, Phase 2',
-    city: 'Amritsar',
-    state: 'Punjab',
-    pincode: '143001',
-    phone: '+91 98765 43212',
-    email: 'info@premiumcolors.com',
-    gstNumber: '03AABCP9603R1ZM',
-    status: 'inactive',
-    createdAt: '05 Mar 2024',
-    admin: { name: 'Amit Verma', phone: '+91 98765 43212', email: 'amit@premiumcolors.com' },
-    tally: { server: 'http://192.168.1.102', port: '9000', lastSync: '1 day ago', status: 'disconnected' },
-    stats: { totalSales: '₹11.4L', totalOrders: 95, pendingOrders: 5, totalUsers: 28, activeUsers: 22 },
-  },
-];
+const initialCompanies: Company[] = [];
 
 // ==================== COMPANIES LIST SCREEN ====================
 const CompaniesListScreen = ({ 
@@ -544,33 +493,67 @@ const CompanyFormScreen = ({
 }: { 
   company: Partial<Company> | null; 
   onBack: () => void;
-  onSave: (data: Partial<Company>) => void;
+  onSave: (data: any) => void;
 }) => {
   const isEdit = !!company?.id;
   const [formData, setFormData] = useState<Partial<Company>>(company || {
     status: 'active',
     admin: { name: '', phone: '', email: '' },
-    tally: { server: '', port: '9000', lastSync: 'Never', status: 'disconnected' },
   });
+  const [maxUsers, setMaxUsers] = useState<string>('100');
+  const [guid, setGuid] = useState<string>(String(Date.now()));
+  const [adminOptions, setAdminOptions] = useState<{label:string; value:string}[]>([]);
+  const [selectedAdminId, setSelectedAdminId] = useState<string>('');
+  const [street, setStreet] = useState<string>('');
+  const [country, setCountry] = useState<string>('India');
+  const [pincode, setPincode] = useState<string>('');
 
   const handleSubmit = () => {
-    if (!formData.name || !formData.code) {
-      Alert.alert('Error', 'Please fill all required fields');
+    if (!formData.name || !formData.code || !formData.phone || !formData.email || !street || !formData.city || !formData.state || !country || !pincode) {
+      Alert.alert('Error', 'Please fill all required fields (Name, Code, Mobile, Email, Street, City, State, Country, Pincode)');
       return;
     }
-    onSave(formData);
+    onSave({
+      ...formData,
+      maxUsers,
+      selectedAdminId,
+      street,
+      country,
+      pincode,
+      guid,
+    });
   };
 
   const updateField = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const updateNestedField = (parent: 'admin' | 'tally', field: string, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [parent]: { ...prev[parent], [field]: value }
-    }));
+  const updateNestedField = (parent: 'admin', field: string, value: any) => {
+    setFormData((prev) => {
+      const admin = {
+        name: prev.admin?.name || '',
+        phone: prev.admin?.phone || '',
+        email: prev.admin?.email || '',
+      };
+      return {
+        ...prev,
+        [parent]: { ...admin, [field]: value },
+      } as Partial<Company>;
+    });
   };
+
+  // Load admins for dropdown
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiService.superadminListAdmins({ page: 1, limit: 100 });
+        if (res.success && res.data) {
+          const opts = res.data.admins.map((a:any) => ({ label: `${a.name} (${a.email})`, value: a._id }));
+          setAdminOptions(opts);
+        }
+      } catch (e) {}
+    })();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -614,12 +597,12 @@ const CompanyFormScreen = ({
               placeholder="e.g., RP001"
               placeholderTextColor="#9ca3af"
             />
-            <Text style={styles.formLabel}>Address *</Text>
+            <Text style={styles.formLabel}>Street *</Text>
             <TextInput
               style={styles.formInput}
-              value={formData.address || ''}
-              onChangeText={(text) => updateField('address', text)}
-              placeholder="Enter full address"
+              value={street}
+              onChangeText={setStreet}
+              placeholder="House/Street"
               placeholderTextColor="#9ca3af"
             />
             <Text style={styles.formLabel}>City *</Text>
@@ -630,7 +613,32 @@ const CompanyFormScreen = ({
               placeholder="City"
               placeholderTextColor="#9ca3af"
             />
-            <Text style={styles.formLabel}>Phone Number *</Text>
+            <Text style={styles.formLabel}>State *</Text>
+            <TextInput
+              style={styles.formInput}
+              value={formData.state || ''}
+              onChangeText={(text) => updateField('state', text)}
+              placeholder="State"
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.formLabel}>Country *</Text>
+            <TextInput
+              style={styles.formInput}
+              value={country}
+              onChangeText={setCountry}
+              placeholder="Country"
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.formLabel}>Pincode *</Text>
+            <TextInput
+              style={styles.formInput}
+              value={pincode}
+              onChangeText={setPincode}
+              placeholder="PIN/ZIP"
+              keyboardType="numeric"
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.formLabel}>Company Mobile *</Text>
             <TextInput
               style={styles.formInput}
               value={formData.phone || ''}
@@ -639,50 +647,67 @@ const CompanyFormScreen = ({
               keyboardType="phone-pad"
               placeholderTextColor="#9ca3af"
             />
+            <Text style={styles.formLabel}>Company Email *</Text>
+            <TextInput
+              style={styles.formInput}
+              value={formData.email || ''}
+              onChangeText={(text) => updateField('email', text)}
+              placeholder="info@company.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholderTextColor="#9ca3af"
+            />
           </View>
 
           {/* Admin Details */}
+          {/* Contact Details */}
           <View style={styles.formSection}>
-            <Text style={styles.formSectionTitle}>Admin Details</Text>
-            <Text style={styles.formLabel}>Admin Name *</Text>
+            <Text style={styles.formSectionTitle}>Contact Details</Text>
+            <Text style={styles.formLabel}>Website</Text>
             <TextInput
               style={styles.formInput}
-              value={formData.admin?.name || ''}
-              onChangeText={(text) => updateNestedField('admin', 'name', text)}
-              placeholder="Admin name"
-              placeholderTextColor="#9ca3af"
-            />
-            <Text style={styles.formLabel}>Admin Phone *</Text>
-            <TextInput
-              style={styles.formInput}
-              value={formData.admin?.phone || ''}
-              onChangeText={(text) => updateNestedField('admin', 'phone', text)}
-              placeholder="+91 XXXXX XXXXX"
-              keyboardType="phone-pad"
+              value={(formData as any).website || ''}
+              onChangeText={(text) => updateField('website' as any, text)}
+              placeholder="https://example.com"
+              autoCapitalize="none"
               placeholderTextColor="#9ca3af"
             />
           </View>
 
-          {/* Tally Configuration */}
+          {/* Additional Fields */}
           <View style={styles.formSection}>
-            <Text style={styles.formSectionTitle}>Tally Integration</Text>
-            <Text style={styles.formLabel}>Tally Server URL *</Text>
+            <Text style={styles.formSectionTitle}>Additional Settings</Text>
+            <Text style={styles.formLabel}>Max Users *</Text>
             <TextInput
               style={styles.formInput}
-              value={formData.tally?.server || ''}
-              onChangeText={(text) => updateNestedField('tally', 'server', text)}
-              placeholder="http://192.168.1.100"
-              placeholderTextColor="#9ca3af"
-            />
-            <Text style={styles.formLabel}>Port *</Text>
-            <TextInput
-              style={styles.formInput}
-              value={formData.tally?.port || ''}
-              onChangeText={(text) => updateNestedField('tally', 'port', text)}
-              placeholder="9000"
+              value={maxUsers}
+              onChangeText={setMaxUsers}
+              placeholder="100"
               keyboardType="numeric"
               placeholderTextColor="#9ca3af"
             />
+            <Text style={styles.formLabel}>GUID *</Text>
+            <TextInput
+              style={styles.formInput}
+              value={guid}
+              onChangeText={setGuid}
+              placeholder="Unique GUID"
+              keyboardType="numeric"
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.formLabel}>Assign Admin (optional)</Text>
+            <View style={styles.formInput}>
+              <ScrollView style={{ maxHeight: 180 }}>
+                {adminOptions.map(opt => (
+                  <TouchableOpacity key={opt.value} style={{ paddingVertical: 8 }} onPress={() => setSelectedAdminId(opt.value)}>
+                    <Text style={{ color: selectedAdminId === opt.value ? '#2563eb' : '#111827', fontWeight: selectedAdminId === opt.value ? '700' : '500' }}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              {!!selectedAdminId && (
+                <Text style={{ color: '#6b7280', marginTop: 8 }}>Selected: {adminOptions.find(a => a.value === selectedAdminId)?.label}</Text>
+              )}
+            </View>
           </View>
 
           {/* Status */}
@@ -737,6 +762,7 @@ const CompanyFormScreen = ({
 // ==================== MAIN APP COMPONENT ====================
 const CompanyManagementSystem = () => {
   const [companies, setCompanies] = useState<Company[]>(initialCompanies);
+  const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState<'list' | 'details' | 'create' | 'edit'>('list');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
 
@@ -744,6 +770,41 @@ const CompanyManagementSystem = () => {
     setSelectedCompany(company);
     setCurrentView('details');
   };
+
+  const loadCompanies = async () => {
+    try {
+      setLoading(true);
+      const res = await apiService.superadminListCompanies({ page: 1, limit: 50, search: '' });
+      if (res.success && res.data) {
+        const mapped: Company[] = res.data.companies.map((c:any) => ({
+          id: c._id,
+          name: c.companyName,
+          code: c.companyCode,
+          address: c.contactDetails?.address?.street || '',
+          city: c.contactDetails?.address?.city || '',
+          state: c.contactDetails?.address?.state || '',
+          pincode: c.contactDetails?.address?.pincode || '',
+          phone: c.companyMobile || '',
+          email: c.companyEmail || '',
+          gstNumber: '',
+          status: c.isActive ? 'active' : 'inactive',
+          createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+          admin: { name: '', phone: '', email: '' },
+          tally: { server: '', port: '9000', lastSync: 'Never', status: 'disconnected' },
+          stats: { totalSales: '₹0', totalOrders: 0, pendingOrders: 0, totalUsers: 0, activeUsers: 0 },
+        }));
+        setCompanies(mapped);
+      }
+    } catch (e) {
+      // noop
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadCompanies();
+  }, []);
 
   const handleCreateNew = () => {
     setSelectedCompany(null);
@@ -760,21 +821,74 @@ const CompanyManagementSystem = () => {
     setSelectedCompany(null);
   };
 
-  const handleSave = (data: Partial<Company>) => {
-    if (currentView === 'create') {
-      const newCompany: Company = {
-        ...data as Company,
-        id: Date.now().toString(),
-        createdAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        stats: { totalSales: '₹0', totalOrders: 0, pendingOrders: 0, totalUsers: 0, activeUsers: 0 },
-      };
-      setCompanies([...companies, newCompany]);
-      Alert.alert('Success', 'Company created successfully!');
-    } else if (currentView === 'edit' && selectedCompany) {
-      setCompanies(companies.map(c => 
-        c.id === selectedCompany.id ? { ...c, ...data } : c
-      ));
-      Alert.alert('Success', 'Company updated successfully!');
+  const handleSave = async (data: any) => {
+    try {
+      if (currentView === 'create') {
+        // Map UI form to backend payload
+        const payload = {
+          companyName: data.name || '',
+          companyState: data.state || '',
+          companyCountry: data.country || 'India',
+          companyMobile: data.phone || '',
+          companyEmail: data.email || '',
+          companyCode: data.code || '',
+          maxUser: Number(data.maxUsers) || 100,
+          guid: Number(data.guid) || Date.now(),
+          contactDetails: {
+            email: data.email,
+            phone: data.phone,
+            address: {
+              street: data.street,
+              city: data.city,
+              state: data.state,
+              country: data.country || 'India',
+              pincode: data.pincode,
+            }
+          }
+        };
+
+        const res = await apiService.superadminCreateCompany(payload as any);
+        if (res.success && res.data) {
+          Alert.alert('Success', 'Company created successfully!');
+          // Optionally refresh list
+          setCompanies([{ 
+            id: res.data._id,
+            name: res.data.companyName,
+            code: res.data.companyCode,
+            address: payload.contactDetails.address.street || '',
+            city: payload.contactDetails.address.city || '',
+            state: payload.contactDetails.address.state || '',
+            pincode: payload.contactDetails.address.pincode || '',
+            phone: payload.contactDetails.phone || '',
+            email: payload.contactDetails.email || '',
+            gstNumber: '',
+            status: 'active',
+            createdAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+            admin: { name: '', phone: '', email: '' },
+            tally: { server: '', port: '9000', lastSync: 'Never', status: 'disconnected' },
+          stats: { totalSales: '₹0', totalOrders: 0, pendingOrders: 0, totalUsers: 0, activeUsers: 0 },
+          }, ...companies]);
+
+          // Assign admin if provided
+          if (data.selectedAdminId) {
+            try {
+              await apiService.superadminAssignCompanyToAdmin(data.selectedAdminId, { companyId: res.data._id, setAsDefault: true });
+            } catch (e) {
+              // assignment failure is non-blocking
+            }
+          }
+        } else {
+          Alert.alert('Failed', res.message || 'Failed to create company');
+        }
+      } else if (currentView === 'edit' && selectedCompany) {
+        // Could integrate update-company here similarly
+        setCompanies(companies.map(c => 
+          c.id === selectedCompany.id ? { ...c, ...data } : c
+        ));
+        Alert.alert('Success', 'Company updated successfully!');
+      }
+    } catch (e:any) {
+      Alert.alert('Error', e.message || 'Failed to save company');
     }
     setCurrentView('list');
     setSelectedCompany(null);

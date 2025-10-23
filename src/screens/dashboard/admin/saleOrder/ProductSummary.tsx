@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { Feather } from '@expo/vector-icons';
-import ProductImage from '../../../../assets/images/image 5.png';
+import ProductImage from '../../../../../assets/images/image 5.png';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
 const ProductSummary = () => {

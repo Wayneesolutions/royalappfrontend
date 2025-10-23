@@ -18,6 +18,8 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
 import SuperAdminHeader from './SuperAdminHeader';
+import { useAuth } from '../../../context/AuthContext';
+import { apiService } from '../../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -53,39 +55,60 @@ interface MenuItem {
 
 const SuperAdminDashboard = () => {
     const navigation = useNavigation<NavigationProps>();
+    const { roleSpecificData } = useAuth();
+    const [totalCompanies, setTotalCompanies] = React.useState<number | undefined>(roleSpecificData?.dashboard?.totalCompanies);
+    const [totalAdmins, setTotalAdmins] = React.useState<number | undefined>(roleSpecificData?.dashboard?.totalAdmins);
+
+    // Fetch live counts from backend to avoid stale values from login payload
+    React.useEffect(() => {
+        (async () => {
+            try {
+                const companiesRes = await apiService.superadminListCompanies({ page: 1, limit: 1 });
+                if (companiesRes?.success && companiesRes.data?.pagination?.totalCompanies !== undefined) {
+                    setTotalCompanies(companiesRes.data.pagination.totalCompanies);
+                }
+            } catch {}
+            try {
+                const adminsRes = await apiService.superadminListAdmins({ page: 1, limit: 1 });
+                if (adminsRes?.success && adminsRes.data?.pagination?.totalAdmins !== undefined) {
+                    setTotalAdmins(adminsRes.data.pagination.totalAdmins);
+                }
+            } catch {}
+        })();
+    }, []);
 
     const stats: StatCard[] = [
         {
             label: 'Total Companies',
-            value: '3',
+            value: typeof totalCompanies === 'number' ? String(totalCompanies) : '--',
             icon: 'business',
             iconType: 'Ionicons',
             color: '#3B82F6',
-            change: '+1 this month',
+            change: '',
         },
         {
             label: 'Active Admins',
-            value: '3',
+            value: typeof totalAdmins === 'number' ? String(totalAdmins) : '--',
             icon: 'people',
             iconType: 'Ionicons',
             color: '#10B981',
-            change: 'All active',
+            change: '',
         },
         {
             label: 'Total Sales',
-            value: '₹45.2L',
+            value: '—',
             icon: 'trending-up',
             iconType: 'Ionicons',
             color: '#8B5CF6',
-            change: '+12% vs last month',
+            change: '',
         },
         {
             label: 'Pending Orders',
-            value: '28',
+            value: '—',
             icon: 'cube-outline',
             iconType: 'Ionicons',
             color: '#F59E0B',
-            change: 'Across all',
+            change: '',
         },
     ];
 

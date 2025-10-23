@@ -6,7 +6,13 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "env:dev": "node scripts/set-env.js development",
+    "env:staging": "node scripts/set-env.js staging",
+    "env:prod": "node scripts/set-env.js production",
+    "start:dev": "npm run env:dev && expo start",
+    "start:staging": "npm run env:staging && expo start",
+    "start:prod": "npm run env:prod && expo start"
   },
   "expo": {
     "doctor": {
@@ -25,6 +31,8 @@
     "@react-native-community/checkbox": "^0.5.20",
     "@react-navigation/native": "^7.1.10",
     "@react-navigation/native-stack": "^7.3.14",
+    "@reduxjs/toolkit": "^2.9.1",
+    "axios": "^1.12.2",
     "esprima": "^4.0.1",
     "expo": "^54.0.0",
     "expo-asset": "^12.0.9",
@@ -38,6 +46,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.4",
+    "react-native-dotenv": "^3.4.11",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
@@ -45,6 +54,8 @@
     "react-native-snap-carousel": "^3.9.1",
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "^0.21.0",
+    "react-redux": "^9.2.0",
+    "redux-persist": "^6.0.0",
     "tailwindcss": "^3.4.17"
   },
   "devDependencies": {

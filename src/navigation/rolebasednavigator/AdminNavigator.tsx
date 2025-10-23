@@ -20,6 +20,22 @@ import PendingOrdersScreen from '../../screens/dashboard/admin/PendingOrdersScre
 import ClearOrdersScreen from '../../screens/dashboard/admin/ClearOrdersScreen';
 import SettingsScreen from '../../screens/dashboard/admin/SettingsScreen';
 import ProfileScreen from '../../screens/common/ProfileScreen';
+import Users from '../../screens/dashboard/admin/saleOrder/Users';
+import Companies from '../../screens/dashboard/admin/saleOrder/Companies';
+import Product from '../../screens/dashboard/admin/saleOrder/Product';
+import ProductSummary from '../../screens/dashboard/admin/saleOrder/ProductSummary';
+import Sales from '../../screens/dashboard/admin/saleOrder/Sales';
+import SalesOrders from '../../screens/dashboard/admin/saleOrder/SalesOrders';
+import SaleOrderStart from '../../screens/dashboard/admin/saleOrder/SaleOrderStart';
+import SaleOrderEntry from '../../screens/dashboard/admin/saleOrder/SaleOrderEntry';
+import SaleOrderItemSelect from '../../screens/dashboard/admin/saleOrder/SaleOrderItemSelect';
+import SaleOrderItemDetail from '../../screens/dashboard/admin/saleOrder/SaleOrderItemDetail';
+import SaleOrderApprove from '../../screens/dashboard/admin/saleOrder/SaleOrderApprove';
+import PendingApprovalsScreen from '../../screens/dashboard/admin/approval/PendingApprovalsScreen';
+// Order Management Screens (Admin can only monitor, not create)
+// import OrderManagement from '../../screens/dashboard/admin/saleOrder/OrderManagement';
+// import ProductManagement from '../../screens/dashboard/admin/saleOrder/ProductManagement';
+import { OutstandingScreen } from '../../screens/dashboard/superadmin/OutstandingScreen';
 
 
 const AdminStack = createNativeStackNavigator<RootStackParamList>();
@@ -46,7 +62,28 @@ export default function AdminNavigator() {
             <AdminStack.Screen name="LedgerScreen" component={LedgerScreen} />
             <AdminStack.Screen name="TargetScreen" component={TargetScreen} />
             <AdminStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
+            <AdminStack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
             <AdminStack.Screen name="ClearOrdersScreen" component={ClearOrdersScreen} />
+            <AdminStack.Screen name="OutstandingScreen" component={OutstandingScreen} />
+
+            {/* Sale Order Screens */}
+            <AdminStack.Screen name="Companies" component={Companies} />
+            <AdminStack.Screen name="Product" component={Product} />
+            <AdminStack.Screen name="ProductSummary" component={ProductSummary} />
+            <AdminStack.Screen name="Sales" component={Sales} />
+            <AdminStack.Screen name="SaleOrders" component={SalesOrders} />
+            <AdminStack.Screen name="SaleOrderStart" component={SaleOrderStart} />
+            <AdminStack.Screen name="SaleOrderEntry" component={SaleOrderEntry} />
+            <AdminStack.Screen name="SaleOrderItemSelect" component={SaleOrderItemSelect} />
+            <AdminStack.Screen name="SaleOrderItemDetail" component={SaleOrderItemDetail} />
+            <AdminStack.Screen name="SaleOrderApprove" component={SaleOrderApprove} />
+            
+            {/* Order Management Screens (Admin can only monitor, not create) */}
+            {/* <AdminStack.Screen name="OrderManagement" component={OrderManagement} />
+            <AdminStack.Screen name="ProductManagement" component={ProductManagement} /> */}
+
+            {/* User Management */}
+            <AdminStack.Screen name="Users" component={Users} />
 
             {/* Settings & Profile */}
             <AdminStack.Screen name="ProfileScreen" component={ProfileScreen} />

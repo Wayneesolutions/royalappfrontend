@@ -22,7 +22,7 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login, error, clearError } = useAuth();
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -30,7 +30,8 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    setIsLoading(true);
+    // Clear any previous errors
+    clearError();
     
     try {
       // Convert username to email format for consistency with your auth system
@@ -42,8 +43,6 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
         'Login Failed', 
         error instanceof Error ? error.message : 'Invalid credentials'
       );
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -102,6 +101,13 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
             {isLoading ? 'Signing in...' : 'Sign in'}
           </Text>
         </TouchableOpacity>
+
+        {/* Error Display */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
         {/* Demo Credentials Section */}
         <View style={styles.demoSection}>
@@ -248,6 +254,21 @@ const styles = StyleSheet.create({
   demoButtonText: {
     fontSize: 11,
     color: '#374151',
+    fontWeight: '500',
+  },
+  // Error styles
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 14,
+    textAlign: 'center',
     fontWeight: '500',
   },
 });

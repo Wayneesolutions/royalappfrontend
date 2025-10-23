@@ -1,123 +1,316 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from 'react-native';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
-import GlobalFAB from './GlobalFAB';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../../../../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+import GlobalFAB from '../GlobalFAB';
 
-const dummyOrders = [
-  { id: '#2589641', status: 'Approved', date: 'Today' },
-  { id: '#2589641', status: 'Rejected', date: '12 Jun 2025' },
-  { id: '#2589641', status: 'Approved', date: 'Today' },
-  { id: '#2589641', status: 'Pending', date: '8 Jun 2025' },
-  { id: '#2589641', status: 'Rejected', date: 'Today' },
-  { id: '#2589641', status: 'Approved', date: 'Today' },
-  { id: '#2589641', status: 'Pending', date: 'Today' },
-];
+interface OrderStats {
+  totalOrders: number;
+  totalAmount: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  processingOrders: number;
+  shippedOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+}
 
-const getStatusIcon = (status) => {
-  switch (status) {
-    case 'Approved':
-      return <MaterialIcons name="check-box" size={18} color="green" />;
-    case 'Rejected':
-      return <MaterialIcons name="cancel" size={18} color="red" />;
-    case 'Pending':
-    default:
-      return (
-        <MaterialIcons name="check-box-outline-blank" size={18} color="gray" />
-      );
-  }
-};
+interface Order {
+  _id: string;
+  orderNumber: string;
+  customerName: string;
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+  finalAmount: number;
+  orderDate: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+}
 
 const Sales = () => {
-  const [filter, setFilter] = useState('All');
+  const { getOrders, getOrderStats } = useAuth();
+  const navigation = useNavigation();
+  const [filter, setFilter] = useState<'All' | 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled'>('All');
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [stats, setStats] = useState<OrderStats | null>(null);
+  
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredOrders =
-    filter === 'All'
-      ? dummyOrders
-      : dummyOrders.filter((order) => order.status === filter);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch orders
+      const ordersParams: any = { page: 1, limit: 20 };
+      if (filter !== 'All') {
+        ordersParams.status = filter;
+      }
+      
+      const ordersResponse = await getOrders(ordersParams);
+      if (ordersResponse?.success) {
+        setOrders(ordersResponse.orders || []);
+      }
+
+      // Fetch stats
+      const statsResponse = await getOrderStats();
+      if (statsResponse?.success) {
+        setStats(statsResponse.stats);
+      }
+    } catch (error) {
+      console.error('Error fetching sales data:', error);
+      Alert.alert('Error', 'Failed to fetch sales data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [filter]);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'confirmed':
+      case 'delivered':
+        return <MaterialIcons name="check-box" size={18} color="#10B981" />;
+      case 'cancelled':
+      case 'returned':
+        return <MaterialIcons name="cancel" size={18} color="#EF4444" />;
+      case 'pending':
+        return <MaterialIcons name="schedule" size={18} color="#F59E0B" />;
+      case 'processing':
+        return <MaterialIcons name="settings" size={18} color="#3B82F6" />;
+      case 'shipped':
+        return <MaterialIcons name="local-shipping" size={18} color="#8B5CF6" />;
+      default:
+        return <MaterialIcons name="check-box-outline-blank" size={18} color="#6B7280" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'confirmed':
+      case 'delivered':
+        return '#10B981';
+      case 'cancelled':
+      case 'returned':
+        return '#EF4444';
+      case 'pending':
+        return '#F59E0B';
+      case 'processing':
+        return '#3B82F6';
+      case 'shipped':
+        return '#8B5CF6';
+      default:
+        return '#6B7280';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return '#EF4444';
+      case 'high': return '#F59E0B';
+      case 'medium': return '#3B82F6';
+      case 'low': return '#10B981';
+      default: return '#6B7280';
+    }
+  };
+
+  const filteredOrders = filter === 'All' ? orders : orders.filter((order) => order.status === filter);
+
+  const StatCard = ({ title, value, icon, color, onPress }: {
+    title: string;
+    value: number | string;
+    icon: string;
+    color: string;
+    onPress?: () => void;
+  }) => (
+    <TouchableOpacity style={[styles.statCard, { borderLeftColor: color }]} onPress={onPress}>
+      <View style={styles.statHeader}>
+        <View style={[styles.statIcon, { backgroundColor: color }]}>
+          <Ionicons name={icon as any} size={24} color="white" />
+        </View>
+        <Text style={styles.statValue}>{value}</Text>
+      </View>
+      <Text style={styles.statTitle}>{title}</Text>
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text style={styles.loadingText}>Loading sales data...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-        {/* Top Bar */}
-        <View style={styles.topBar}>
-          <Feather name="more-vertical" size={24} color="black" />
-          <View style={styles.rightIcons}>
-            <Feather name="search" size={22} color="black" style={{ marginRight: 12 }} />
-            <Feather name="bell" size={22} color="black" />
-          </View>
+      <ScrollView 
+        style={styles.scroll} 
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Sales Overview</Text>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              // Navigate to create order
+              console.log('Navigate to create order');
+            }}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
 
-        {/* Header */}
-        <Text style={styles.title}>Sales Today</Text>
+        {/* Stats Overview */}
+        {stats && (
+          <View style={styles.statsSection}>
+            <Text style={styles.sectionTitle}>Sales Statistics</Text>
+            <View style={styles.statsGrid}>
+              <StatCard
+                title="Total Orders"
+                value={stats.totalOrders}
+                icon="document-text"
+                color="#3B82F6"
+                onPress={() => setFilter('All')}
+              />
+              <StatCard
+                title="Total Revenue"
+                value={`₹${stats.totalAmount.toLocaleString()}`}
+                icon="trending-up"
+                color="#10B981"
+              />
+              <StatCard
+                title="Pending"
+                value={stats.pendingOrders}
+                icon="time"
+                color="#F59E0B"
+                onPress={() => setFilter('pending')}
+              />
+              <StatCard
+                title="Delivered"
+                value={stats.deliveredOrders}
+                icon="checkmark-circle"
+                color="#059669"
+                onPress={() => setFilter('delivered')}
+              />
+            </View>
+          </View>
+        )}
 
         {/* Filter Buttons */}
-        <View style={styles.filterContainer}>
-          {['All', 'Approved', 'Pending', 'Rejected'].map((status) => (
-            <TouchableOpacity
-              key={status}
-              style={[
-                styles.filterBtn,
-                filter === status && styles.filterBtnActive,
-              ]}
-              onPress={() => setFilter(status)}
-            >
-              <Text
+        <View style={styles.filtersSection}>
+          <Text style={styles.sectionTitle}>Filter Orders</Text>
+          <View style={styles.filterButtons}>
+            {['All', 'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => (
+              <TouchableOpacity
+                key={status}
                 style={[
-                  styles.filterText,
-                  filter === status && styles.filterTextActive,
+                  styles.filterButton,
+                  filter === status && styles.activeFilterButton
                 ]}
+                onPress={() => setFilter(status as any)}
               >
-                {status}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text style={[
+                  styles.filterButtonText,
+                  filter === status && styles.activeFilterButtonText
+                ]}>
+                  {status === 'All' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        {/* Table Header */}
-        <ScrollView horizontal>
-          <View style={[styles.row, styles.headerRow, { minWidth: 600 }]}>
-            <Text style={[styles.cell, styles.headerText]}>Orders No</Text>
-            <Text style={[styles.cell, styles.headerText]}>Company Name</Text>
-            <Text style={[styles.cell, styles.headerText]}>Status</Text>
-            <Text style={[styles.cell, styles.headerText]}>Last updates</Text>
+        {/* Recent Orders */}
+        <View style={styles.ordersSection}>
+          <View style={styles.ordersHeader}>
+            <Text style={styles.sectionTitle}>Recent Orders</Text>
+            <TouchableOpacity
+              style={styles.viewAllButton}
+              onPress={() => {
+                // Navigate to all orders
+                console.log('Navigate to all orders');
+              }}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+              <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+            </TouchableOpacity>
           </View>
-        </ScrollView>
 
-        {/* Order Rows */}
-        <ScrollView horizontal>
-          <View style={{ minWidth: 600 }}>
-            {filteredOrders.length > 0 ? (
-              filteredOrders.map((order, index) => (
+          {filteredOrders.length > 0 ? (
+            <View style={styles.ordersList}>
+              {filteredOrders.map((order, index) => (
                 <TouchableOpacity
-                  key={index}
-                  style={[styles.row, index % 2 === 1 && styles.altRow]}
+                  key={order._id}
+                  style={[styles.orderRow, index % 2 === 1 && styles.altRow]}
                   onPress={() => {
-                    // Add navigation or action here
-                    console.log('Order pressed:', order.id);
+                    // Navigate to order details
+                    console.log('Navigate to order details:', order._id);
                   }}
                 >
-                  <View style={styles.cell}>{getStatusIcon(order.status)}</View>
-                  <Text style={styles.cell}>Satish Infotech</Text>
-                  <Text style={[styles.cell, styles[order.status.toLowerCase()]]}>
-                    {order.status}
-                  </Text>
-                  <Text style={styles.cell}>{order.date}</Text>
+                  <View style={styles.orderCell}>
+                    {getStatusIcon(order.status)}
+                  </View>
+                  <View style={styles.orderCell}>
+                    <Text style={styles.customerName}>{order.customerName}</Text>
+                    <Text style={styles.orderNumber}>{order.orderNumber}</Text>
+                  </View>
+                  <View style={styles.orderCell}>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
+                      <Text style={styles.statusText}>{order.status.toUpperCase()}</Text>
+                    </View>
+                    {order.priority !== 'medium' && (
+                      <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(order.priority) }]}>
+                        <Text style={styles.priorityText}>{order.priority.toUpperCase()}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.orderCell}>
+                    <Text style={styles.amountText}>₹{order.finalAmount.toLocaleString()}</Text>
+                    <Text style={styles.dateText}>
+                      {new Date(order.orderDate).toLocaleDateString()}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={{ color: '#777' }}>No orders found.</Text>
-              </View>
-            )}
-          </View>
-        </ScrollView>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="document-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyStateText}>
+                {filter === 'All' ? 'No orders found' : `No ${filter} orders found`}
+              </Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
       <GlobalFAB />
     </View>
@@ -125,75 +318,223 @@ const Sales = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, position: 'relative' },
-  scroll: { backgroundColor: '#fff' },
-  container: { padding: 16, paddingBottom: 100 },
-  topBar: {
+  root: {
+    flex: 1,
+    position: 'relative',
+  },
+  scroll: {
+    flex: 1,
+  },
+  container: {
+    paddingBottom: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  header: {
+    backgroundColor: '#3B82F6',
+    paddingTop: 50,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  addButton: {
+    padding: 8,
+  },
+  statsSection: {
+    padding: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    width: '48%',
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  statTitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  filtersSection: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  filterButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  activeFilterButton: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  activeFilterButtonText: {
+    color: '#fff',
+  },
+  ordersSection: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  ordersHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 10,
+    marginBottom: 16,
   },
-  rightIcons: { flexDirection: 'row', alignItems: 'center' },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  filterContainer: {
+  viewAllButton: {
     flexDirection: 'row',
-    marginBottom: 12,
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  filterBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#007bff',
-  },
-  filterBtnActive: {
-    backgroundColor: '#007bff',
-  },
-  filterText: {
-    fontSize: 12,
-    color: '#007bff',
-  },
-  filterTextActive: {
-    color: '#fff',
-  },
-  row: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#ccc',
     alignItems: 'center',
+    gap: 4,
   },
-  headerRow: {
-    backgroundColor: '#d7ecfd',
+  viewAllText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  ordersList: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  orderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   altRow: {
-    backgroundColor: '#f1f8ff',
+    backgroundColor: '#F9FAFB',
   },
-  cell: {
+  orderCell: {
     flex: 1,
+    alignItems: 'center',
+  },
+  customerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  orderNumber: {
     fontSize: 12,
-    color: '#333',
+    color: '#6B7280',
   },
-  headerText: {
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  statusText: {
+    fontSize: 10,
     fontWeight: 'bold',
-    color: '#555',
+    color: '#fff',
   },
-  approved: { color: 'green' },
-  rejected: { color: 'red' },
-  pending: { color: 'gray' },
+  priorityBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  priorityText: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  amountText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#059669',
+    marginBottom: 2,
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
   emptyState: {
-    padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 40,
+    backgroundColor: 'white',
+    borderRadius: 12,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 12,
   },
 });
 

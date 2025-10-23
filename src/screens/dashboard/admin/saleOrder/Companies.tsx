@@ -10,7 +10,7 @@ import {
   TextInput,
 } from "react-native";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
-import GlobalFAB from "./GlobalFAB";
+import GlobalFAB from "../GlobalFAB";
 
 const Companies = () => {
   const [companies, setCompanies] = useState([

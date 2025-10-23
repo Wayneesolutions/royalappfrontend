@@ -1,0 +1,1178 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  FlatList,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAuth } from '../../../context/AuthContext';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../../navigation/types';
+
+interface Product {
+  _id: string;
+  productCode: string;
+  productName: string;
+  description: string;
+  category: string;
+  unit: string;
+  price: number;
+  stock: {
+    current: number;
+    minimum: number;
+  };
+  images: Array<{
+    url: string;
+    isPrimary: boolean;
+  }>;
+}
+
+interface OrderItem {
+  productId: string;
+  productName: string;
+  productCode: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  taxRate: number;
+  totalPrice: number;
+}
+
+interface Customer {
+  _id: string;
+  name: string;
+  email: string;
+  mobile: string;
+  address: {
+    street: string;
+    city: string;
+    state: string;
+    pincode: string;
+  };
+}
+
+const CreateOrder = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'CreateOrder'>>();
+  const { user, getProducts, createOrder, submitOrderForApproval } = useAuth();
+  
+  // Get pre-selected product from navigation params
+  const selectedProductFromCatalog = route.params?.selectedProduct;
+  
+  // State management
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Order details
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'cheque' | 'bank_transfer' | 'upi' | 'card' | 'credit'>('cash');
+  const [notes, setNotes] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
+
+  // Search and filter
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [categories, setCategories] = useState<string[]>([]);
+
+  // Fetch products
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching products with params:', {
+        page: 1,
+        limit: 100,
+        search: productSearchQuery,
+        category: selectedCategory === 'all' ? undefined : selectedCategory,
+      });
+      
+      const result = await getProducts({
+        page: 1,
+        limit: 100,
+        search: productSearchQuery,
+        category: selectedCategory === 'all' ? undefined : selectedCategory,
+      });
+      
+      console.log('Products result:', result);
+      
+      if (result?.success && result.products) {
+        setProducts(result.products || []);
+        // Extract unique categories
+        const categories = result.products?.map((p: Product) => p.category).filter(Boolean) || [];
+        const uniqueCategories = [...new Set(categories as string[])];
+        setCategories(['all', ...uniqueCategories]);
+        console.log('Products loaded:', result.products?.length || 0);
+      } else {
+        console.log('No products data received');
+        setProducts([]);
+        setCategories(['all']);
+      }
+    } catch (error) {
+      console.error('Failed to fetch products:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Error', `Failed to load products: ${errorMessage}`);
+      setProducts([]);
+      setCategories(['all']);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log('CreateOrder component mounted, fetching products...');
+    fetchProducts();
+  }, [productSearchQuery, selectedCategory]);
+
+  useEffect(() => {
+    console.log('Products state updated:', products.length, 'products');
+  }, [products]);
+
+  // Auto-add pre-selected product from ProductCatalog
+  useEffect(() => {
+    if (selectedProductFromCatalog && orderItems.length === 0) {
+      console.log('Auto-adding pre-selected product:', selectedProductFromCatalog.productName);
+      addProductToOrder(selectedProductFromCatalog);
+    }
+  }, [selectedProductFromCatalog]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchProducts();
+    setRefreshing(false);
+  };
+
+  // Add product to order
+  const addProductToOrder = (product: Product) => {
+    const existingItem = orderItems.find(item => item.productId === product._id);
+    
+    if (existingItem) {
+      // Update quantity
+      const updatedItems = orderItems.map(item =>
+        item.productId === product._id
+          ? {
+              ...item,
+              quantity: item.quantity + 1,
+              totalPrice: (item.quantity + 1) * item.unitPrice - item.discount + (item.quantity + 1) * item.unitPrice * (item.taxRate / 100)
+            }
+          : item
+      );
+      setOrderItems(updatedItems);
+    } else {
+      // Add new item
+      const newItem: OrderItem = {
+        productId: product._id,
+        productName: product.productName,
+        productCode: product.productCode,
+        quantity: 1,
+        unitPrice: product.price,
+        discount: 0,
+        taxRate: 0,
+        totalPrice: product.price,
+      };
+      setOrderItems([...orderItems, newItem]);
+    }
+    
+    setShowProductModal(false);
+  };
+
+  // Update order item
+  const updateOrderItem = (productId: string, field: keyof OrderItem, value: any) => {
+    const updatedItems = orderItems.map(item => {
+      if (item.productId === productId) {
+        const updatedItem = { ...item, [field]: value };
+        
+        // Recalculate total price
+        if (field === 'quantity' || field === 'unitPrice' || field === 'discount' || field === 'taxRate') {
+          const subtotal = updatedItem.quantity * updatedItem.unitPrice;
+          const discountAmount = updatedItem.discount;
+          const taxAmount = subtotal * (updatedItem.taxRate / 100);
+          updatedItem.totalPrice = subtotal - discountAmount + taxAmount;
+        }
+        
+        return updatedItem;
+      }
+      return item;
+    });
+    setOrderItems(updatedItems);
+  };
+
+  // Remove order item
+  const removeOrderItem = (productId: string) => {
+    setOrderItems(orderItems.filter(item => item.productId !== productId));
+  };
+
+  // Calculate totals
+  const subtotal = orderItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  const totalDiscount = orderItems.reduce((sum, item) => sum + item.discount, 0);
+  const totalTax = orderItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (item.taxRate / 100)), 0);
+  const finalTotal = subtotal - totalDiscount + totalTax;
+
+  // Create order as draft
+  const handleCreateOrder = async () => {
+    if (!selectedCustomer) {
+      Alert.alert('Error', 'Please select a customer');
+      return;
+    }
+
+    if (orderItems.length === 0) {
+      Alert.alert('Error', 'Please add at least one product to the order');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const orderData = {
+        customerId: selectedCustomer._id,
+        customerName: selectedCustomer.name,
+        customerEmail: selectedCustomer.email,
+        customerMobile: selectedCustomer.mobile,
+        customerAddress: selectedCustomer.address,
+        items: orderItems.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discount: item.discount,
+          taxRate: item.taxRate,
+          totalPrice: item.totalPrice,
+        })),
+        totalAmount: finalTotal,
+        totalDiscount,
+        totalTax,
+        deliveryDate: deliveryDate ? new Date(deliveryDate).toISOString() : undefined,
+        priority,
+        paymentMethod,
+        notes,
+        shippingAddress: shippingAddress || selectedCustomer.address,
+        status: 'draft', // Create as draft first
+      };
+
+      const result = await createOrder(orderData);
+      
+      if (result?.success) {
+        Alert.alert(
+          'Success',
+          'Order created as draft! Would you like to submit it for approval?',
+          [
+            {
+              text: 'Save Draft',
+              onPress: () => {
+                resetForm();
+                navigation.navigate('OrderList');
+              }
+            },
+            {
+              text: 'Submit for Approval',
+              onPress: () => handleSubmitForApproval(result.data._id)
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result?.message || 'Failed to create order');
+      }
+    } catch (error) {
+      console.error('Error creating order:', error);
+      Alert.alert('Error', 'Failed to create order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit order for approval
+  const handleSubmitForApproval = async (orderId: string) => {
+    try {
+      setLoading(true);
+      
+      const result = await submitOrderForApproval(orderId);
+      
+      if (result?.success) {
+        Alert.alert(
+          'Success',
+          'Order submitted for approval successfully!',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                resetForm();
+                navigation.navigate('OrderList');
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result?.message || 'Failed to submit order for approval');
+      }
+    } catch (error) {
+      console.error('Error submitting order for approval:', error);
+      Alert.alert('Error', 'Failed to submit order for approval');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset form
+  const resetForm = () => {
+    setOrderItems([]);
+    setSelectedCustomer(null);
+    setDeliveryDate('');
+    setPriority('medium');
+    setPaymentMethod('cash');
+    setNotes('');
+    setShippingAddress('');
+    // Close any open modals
+    setShowCustomerModal(false);
+    setShowProductModal(false);
+  };
+
+  // Render product item
+  const renderProductItem = ({ item }: { item: Product }) => (
+    <TouchableOpacity
+      style={styles.productItem}
+      onPress={() => addProductToOrder(item)}
+    >
+      <View style={styles.productInfo}>
+        <Text style={styles.productName}>{item.productName}</Text>
+        <Text style={styles.productCode}>Code: {item.productCode}</Text>
+        <Text style={styles.productPrice}>₹{item.price} / {item.unit}</Text>
+        <Text style={styles.productStock}>
+          Stock: {item.stock.current} {item.stock.current <= item.stock.minimum ? '(Low Stock)' : ''}
+        </Text>
+      </View>
+      <Ionicons name="add-circle" size={24} color="#3B82F6" />
+    </TouchableOpacity>
+  );
+
+  // Render order item
+  const renderOrderItem = (item: OrderItem, index: number) => (
+    <View key={item.productId} style={styles.orderItem}>
+      <View style={styles.orderItemHeader}>
+        <Text style={styles.orderItemName}>{item.productName}</Text>
+        <TouchableOpacity onPress={() => removeOrderItem(item.productId)}>
+          <Ionicons name="trash-outline" size={20} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.orderItemDetails}>
+        <View style={styles.inputRow}>
+          <Text style={styles.inputLabel}>Quantity:</Text>
+          <TextInput
+            style={styles.quantityInput}
+            value={item.quantity.toString()}
+            onChangeText={(text) => updateOrderItem(item.productId, 'quantity', parseInt(text) || 0)}
+            keyboardType="numeric"
+          />
+        </View>
+        
+        <View style={styles.inputRow}>
+          <Text style={styles.inputLabel}>Unit Price:</Text>
+          <TextInput
+            style={styles.priceInput}
+            value={item.unitPrice.toString()}
+            onChangeText={(text) => updateOrderItem(item.productId, 'unitPrice', parseFloat(text) || 0)}
+            keyboardType="numeric"
+          />
+        </View>
+        
+        <View style={styles.inputRow}>
+          <Text style={styles.inputLabel}>Discount:</Text>
+          <TextInput
+            style={styles.discountInput}
+            value={item.discount.toString()}
+            onChangeText={(text) => updateOrderItem(item.productId, 'discount', parseFloat(text) || 0)}
+            keyboardType="numeric"
+          />
+        </View>
+        
+        <View style={styles.inputRow}>
+          <Text style={styles.inputLabel}>Tax Rate (%):</Text>
+          <TextInput
+            style={styles.taxInput}
+            value={item.taxRate.toString()}
+            onChangeText={(text) => updateOrderItem(item.productId, 'taxRate', parseFloat(text) || 0)}
+            keyboardType="numeric"
+          />
+        </View>
+        
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total:</Text>
+          <Text style={styles.totalValue}>₹{item.totalPrice.toFixed(2)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Create Order</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Customer Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Customer</Text>
+          <TouchableOpacity
+            style={styles.customerSelector}
+            onPress={() => setShowCustomerModal(true)}
+          >
+            {selectedCustomer ? (
+              <View>
+                <Text style={styles.customerName}>{selectedCustomer.name}</Text>
+                <Text style={styles.customerDetails}>
+                  {selectedCustomer.mobile} • {selectedCustomer.email}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.placeholderText}>Select Customer</Text>
+            )}
+            <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Order Items */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Order Items</Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                console.log('Add Product button pressed');
+                console.log('Current products count:', products.length);
+                setShowProductModal(true);
+              }}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+              <Text style={styles.addButtonText}>Add Product</Text>
+            </TouchableOpacity>
+          </View>
+
+          {orderItems.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="cube-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyText}>No products added</Text>
+              <Text style={styles.emptySubtext}>Tap "Add Product" to start building your order</Text>
+            </View>
+          ) : (
+            orderItems.map((item, index) => renderOrderItem(item, index))
+          )}
+        </View>
+
+        {/* Order Summary */}
+        {orderItems.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Order Summary</Text>
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal:</Text>
+                <Text style={styles.summaryValue}>₹{subtotal.toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Discount:</Text>
+                <Text style={styles.summaryValue}>-₹{totalDiscount.toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tax:</Text>
+                <Text style={styles.summaryValue}>₹{totalTax.toFixed(2)}</Text>
+              </View>
+              <View style={[styles.summaryRow, styles.finalTotalRow]}>
+                <Text style={styles.finalTotalLabel}>Total:</Text>
+                <Text style={styles.finalTotalValue}>₹{finalTotal.toFixed(2)}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Order Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Order Details</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Delivery Date</Text>
+            <TextInput
+              style={styles.textInput}
+              value={deliveryDate}
+              onChangeText={setDeliveryDate}
+              placeholder="YYYY-MM-DD"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Priority</Text>
+            <View style={styles.priorityButtons}>
+              {(['low', 'medium', 'high', 'urgent'] as const).map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[
+                    styles.priorityButton,
+                    priority === p && styles.priorityButtonSelected
+                  ]}
+                  onPress={() => setPriority(p)}
+                >
+                  <Text style={[
+                    styles.priorityButtonText,
+                    priority === p && styles.priorityButtonTextSelected
+                  ]}>
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Payment Method</Text>
+            <View style={styles.paymentButtons}>
+              {(['cash', 'cheque', 'bank_transfer', 'upi', 'card', 'credit'] as const).map((method) => (
+                <TouchableOpacity
+                  key={method}
+                  style={[
+                    styles.paymentButton,
+                    paymentMethod === method && styles.paymentButtonSelected
+                  ]}
+                  onPress={() => setPaymentMethod(method)}
+                >
+                  <Text style={[
+                    styles.paymentButtonText,
+                    paymentMethod === method && styles.paymentButtonTextSelected
+                  ]}>
+                    {method.replace('_', ' ').toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Notes</Text>
+            <TextInput
+              style={[styles.textInput, styles.textArea]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Additional notes..."
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Shipping Address</Text>
+            <TextInput
+              style={[styles.textInput, styles.textArea]}
+              value={shippingAddress}
+              onChangeText={setShippingAddress}
+              placeholder="Shipping address (optional)"
+              multiline
+              numberOfLines={2}
+            />
+          </View>
+        </View>
+
+        {/* Create Order Button */}
+        <TouchableOpacity
+          style={[styles.createButton, (!selectedCustomer || orderItems.length === 0) && styles.createButtonDisabled]}
+          onPress={handleCreateOrder}
+          disabled={!selectedCustomer || orderItems.length === 0 || loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.createButtonText}>Create Order</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Customer Selection Modal */}
+      <Modal
+        visible={showCustomerModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowCustomerModal(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Select Customer</Text>
+            <View style={styles.modalSpacer} />
+          </View>
+          
+          <View style={styles.modalContent}>
+            <Text style={styles.modalSubtext}>
+              For now, you can create orders for any customer. In a full implementation, 
+              this would show your assigned customers.
+            </Text>
+            
+            <TouchableOpacity
+              style={styles.customerOption}
+              onPress={() => {
+                setSelectedCustomer({
+                  _id: 'temp-customer',
+                  name: 'Sample Customer',
+                  email: 'customer@example.com',
+                  mobile: '+91 98765 43210',
+                  address: {
+                    street: '123 Main Street',
+                    city: 'Mumbai',
+                    state: 'Maharashtra',
+                    pincode: '400001'
+                  }
+                });
+                setShowCustomerModal(false);
+              }}
+            >
+              <View style={styles.customerOptionInfo}>
+                <Text style={styles.customerOptionName}>Sample Customer</Text>
+                <Text style={styles.customerOptionDetails}>
+                  +91 98765 43210 • customer@example.com
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Product Selection Modal */}
+      <Modal
+        visible={showProductModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          console.log('Product modal closed');
+          setShowProductModal(false);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowProductModal(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Select Products</Text>
+            <View style={styles.modalSpacer} />
+          </View>
+          
+          <View style={styles.modalContent}>
+            {/* Search and Filter */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                value={productSearchQuery}
+                onChangeText={setProductSearchQuery}
+                placeholder="Search products..."
+              />
+              <Ionicons name="search" size={20} color="#6B7280" />
+            </View>
+            
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  style={[
+                    styles.categoryButton,
+                    selectedCategory === category && styles.categoryButtonSelected
+                  ]}
+                  onPress={() => setSelectedCategory(category)}
+                >
+                  <Text style={[
+                    styles.categoryButtonText,
+                    selectedCategory === category && styles.categoryButtonTextSelected
+                  ]}>
+                    {category.charAt(0).toUpperCase() + category.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
+            {/* Products List */}
+            <FlatList
+              data={products}
+              renderItem={renderProductItem}
+              keyExtractor={(item) => item._id}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyProducts}>
+                  <Ionicons name="cube-outline" size={48} color="#9CA3AF" />
+                  <Text style={styles.emptyProductsText}>No products found</Text>
+                  <Text style={styles.emptyProductsText}>Products count: {products.length}</Text>
+                  <Text style={styles.emptyProductsText}>Loading: {loading ? 'Yes' : 'No'}</Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  header: {
+    backgroundColor: '#3B82F6',
+    paddingTop: 50,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  section: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  customerSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  customerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  customerDetails: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  placeholderText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  emptyState: {
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  orderItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  orderItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    flex: 1,
+  },
+  orderItemDetails: {
+    gap: 8,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    minWidth: 80,
+  },
+  quantityInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    padding: 8,
+    width: 80,
+    textAlign: 'center',
+  },
+  priceInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    padding: 8,
+    width: 100,
+    textAlign: 'center',
+  },
+  discountInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    padding: 8,
+    width: 80,
+    textAlign: 'center',
+  },
+  taxInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    padding: 8,
+    width: 80,
+    textAlign: 'center',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  summaryContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 16,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  finalTotalRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  finalTotalLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  finalTotalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  priorityButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  priorityButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#fff',
+  },
+  priorityButtonSelected: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  priorityButtonText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  priorityButtonTextSelected: {
+    color: '#fff',
+  },
+  paymentButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  paymentButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#fff',
+  },
+  paymentButtonSelected: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  paymentButtonText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  paymentButtonTextSelected: {
+    color: '#fff',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 32,
+    gap: 8,
+  },
+  createButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: '#3B82F6',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  modalSpacer: {
+    width: 60,
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  modalSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  customerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  customerOptionInfo: {
+    flex: 1,
+  },
+  customerOptionName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  customerOptionDetails: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  searchInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 16,
+  },
+  categoryScroll: {
+    marginBottom: 16,
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+  },
+  categoryButtonSelected: {
+    backgroundColor: '#3B82F6',
+  },
+  categoryButtonText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  categoryButtonTextSelected: {
+    color: '#fff',
+  },
+  productItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  productCode: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  productPrice: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#059669',
+    marginTop: 2,
+  },
+  productStock: {
+    fontSize: 12,
+    color: '#F59E0B',
+    marginTop: 2,
+  },
+  emptyProducts: {
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyProductsText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 8,
+  },
+});
+
+export default CreateOrder;

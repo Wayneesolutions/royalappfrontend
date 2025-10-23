@@ -34,14 +34,12 @@ const GlobalFAB = () => {
             {menuOpen && (
                 <View style={styles.fabMenu}>
                     <MenuOption label="Dashboard" icon="dashboard" onPress={() => navigation.navigate('DashboardAdmin')} />
+                    <MenuOption label="User Management" icon="team" onPress={() => navigation.navigate('Users')} />
+                    <MenuOption label="Order Monitoring" icon="eye" onPress={() => navigation.navigate('SaleOrders')} />
+                    <MenuOption label="Sales Overview" icon="line-chart" onPress={() => navigation.navigate('Sales')} />
                     <MenuOption label="Companies" icon="bank" onPress={() => navigation.navigate('Companies')} />
-                    <MenuOption label="Product" icon="appstore-o" onPress={() => navigation.navigate('Product')} />
-                    <MenuOption label="Target" icon="flag" onPress={() => navigation.navigate('Sales')} />
-                    <MenuOption label="Orders" icon="shoppingcart" onPress={() => navigation.navigate('ProductSummary')} />
-                    <MenuOption label="Report" icon="linechart" />
-                    <MenuOption label="Users" icon="team" onPress={() => navigation.navigate('Users')} />
-                    <MenuOption label="Ledger" icon="book" />
-                    <MenuOption label="Zone" icon="enviromento" />
+                    <MenuOption label="Ledger" icon="book" onPress={() => navigation.navigate('LedgerScreen')} />
+                    <MenuOption label="Zone" icon="environment" onPress={() => navigation.navigate('ZonalScreen')} />
                 </View>
             )}
             <TouchableOpacity style={styles.fab} onPress={() => setMenuOpen(!menuOpen)}>

@@ -11,11 +11,11 @@ import {
     Dimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import GlobalFAB from './GlobalFAB';
-import ProductImage from "../../../../assets/images/image 5.png"
+import GlobalFAB from '../GlobalFAB';
+import ProductImage from "../../../../../assets/images/image 5.png"
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../navigation/types';
+import { RootStackParamList } from '../../../../navigation/types';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
 

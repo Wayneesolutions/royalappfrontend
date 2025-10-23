@@ -63,6 +63,10 @@ export const ROLE_HIERARCHY: Record<UserRole, RoleScreenAccess> = {
       'SaleOrderItemDetail',
       'SaleOrderApprove',
       
+      // Order Management (Admin can only monitor, not create)
+      // 'OrderManagement',
+      // 'ProductManagement',
+      
       // Hierarchy Management
       'ZonalScreen',
       'RSMScreen',

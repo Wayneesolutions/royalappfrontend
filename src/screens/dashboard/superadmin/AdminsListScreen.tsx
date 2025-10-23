@@ -1,5 +1,5 @@
 // src/screens/dashboard/superadmin/AdminsListScreen.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
+import { apiService } from '../../../services/api';
+import { Alert } from 'react-native';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
 
@@ -40,45 +42,12 @@ const AdminsListScreen = () => {
     name: '',
     email: '',
     phone: '',
-    company: '',
-    companyCode: '',
   });
+  const [companiesOptions, setCompaniesOptions] = useState<{ label: string; value: string; code?: string }[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
 
-  const [admins, setAdmins] = useState<Admin[]>([
-    {
-      id: '1',
-      name: 'Satish Kumar',
-      email: 'satish@royalpaints.com',
-      phone: '+91 98765 43210',
-      company: 'Royal Paints Pvt Ltd',
-      companyCode: 'RP001',
-      status: 'active',
-      lastLogin: '2 hours ago',
-      createdAt: '15 Jan 2024',
-    },
-    {
-      id: '2',
-      name: 'Rajesh Sharma',
-      email: 'rajesh@elitecoatings.com',
-      phone: '+91 98765 43211',
-      company: 'Elite Coatings',
-      companyCode: 'EC002',
-      status: 'active',
-      lastLogin: '5 hours ago',
-      createdAt: '10 Feb 2024',
-    },
-    {
-      id: '3',
-      name: 'Amit Verma',
-      email: 'amit@premiumcolors.com',
-      phone: '+91 98765 43212',
-      company: 'Premium Colors Ltd',
-      companyCode: 'PC003',
-      status: 'active',
-      lastLogin: '1 day ago',
-      createdAt: '05 Mar 2024',
-    },
-  ]);
+  const [admins, setAdmins] = useState<Admin[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const filteredAdmins = admins.filter(admin =>
     admin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -86,35 +55,70 @@ const AdminsListScreen = () => {
     admin.company.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateAdmin = () => {
-    if (!formData.name || !formData.email || !formData.phone || !formData.company || !formData.companyCode) {
-      alert('Please fill all fields');
-      return;
+  const loadAdmins = async () => {
+    try {
+      setLoading(true);
+      const res = await apiService.superadminListAdmins({ page: 1, limit: 25, search: searchQuery });
+      if (res.success && res.data) {
+        const mapped: Admin[] = res.data.admins.map((a:any) => ({
+          id: a._id,
+          name: a.name,
+          email: a.email,
+          phone: a.mobile || '',
+          company: a.defaultCompany?.companyName || '',
+          companyCode: a.defaultCompany?.companyCode || '',
+          status: a.isActive ? 'active' as const : 'inactive' as const,
+          lastLogin: a.lastLogin ? new Date(a.lastLogin).toLocaleString() : 'Never',
+          createdAt: a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+        }));
+        setAdmins(mapped);
+      }
+    } catch (e) {
+      // noop
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const newAdmin: Admin = {
-      id: String(admins.length + 1),
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      company: formData.company,
-      companyCode: formData.companyCode,
-      status: 'active',
-      lastLogin: 'Never',
-      createdAt: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-    };
+  useEffect(() => {
+    loadAdmins();
+    (async () => {
+      try {
+        const res = await apiService.superadminListCompanies({ page: 1, limit: 100 });
+        if (res.success && res.data) {
+          setCompaniesOptions(res.data.companies.map((c:any) => ({ label: `${c.companyName} (${c.companyCode})`, value: c._id, code: c.companyCode }))
+          );
+        }
+      } catch {}
+    })();
+  }, []);
 
-    setAdmins([...admins, newAdmin]);
-    setModalVisible(false);
-    
-    // Reset form
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      company: '',
-      companyCode: '',
-    });
+  const handleCreateAdmin = async () => {
+    try {
+      if (!formData.name || !formData.email || !formData.phone || !selectedCompanyId) {
+        Alert.alert('Validation', 'Please fill Name, Email, Phone and select a Company');
+        return;
+      }
+
+      const res = await apiService.superadminCreateAdmin({
+        email: formData.email,
+        password: 'Admin@123',
+        name: formData.name,
+        mobile: formData.phone,
+        companyId: selectedCompanyId,
+      });
+
+      if (res.success) {
+        Alert.alert('Success', 'Admin created successfully');
+        setModalVisible(false);
+        setFormData({ name: '', email: '', phone: '' });
+        setSelectedCompanyId('');
+      } else {
+        Alert.alert('Failed', res.message || 'Failed to create admin');
+      }
+    } catch (e:any) {
+      Alert.alert('Error', e.message || 'Failed to create admin');
+    }
   };
 
   return (
@@ -275,34 +279,22 @@ const AdminsListScreen = () => {
                 </View>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Company Name</Text>
-                <View style={styles.inputContainer}>
-                  <Ionicons name="business-outline" size={20} color="#9CA3AF" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter company name"
-                    value={formData.company}
-                    onChangeText={(text) => setFormData({ ...formData, company: text })}
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Assign to Company *</Text>
+              <View style={[styles.inputContainer, { paddingVertical: 8 }]}> 
+                <Ionicons name="business-outline" size={20} color="#9CA3AF" />
+                <ScrollView style={{ maxHeight: 160 }}>
+                  {companiesOptions.map(opt => (
+                    <TouchableOpacity key={opt.value} style={{ paddingVertical: 8 }} onPress={() => setSelectedCompanyId(opt.value)}>
+                      <Text style={{ color: selectedCompanyId === opt.value ? '#2563eb' : '#111827', fontWeight: selectedCompanyId === opt.value ? '700' : '500' }}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Company Code</Text>
-                <View style={styles.inputContainer}>
-                  <Ionicons name="code-outline" size={20} color="#9CA3AF" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g., RP001"
-                    value={formData.companyCode}
-                    onChangeText={(text) => setFormData({ ...formData, companyCode: text })}
-                    autoCapitalize="characters"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-              </View>
+              {!!selectedCompanyId && (
+                <Text style={{ color: '#6B7280', marginTop: 6 }}>Selected: {companiesOptions.find(c => c.value === selectedCompanyId)?.label}</Text>
+              )}
+            </View>
             </ScrollView>
 
             {/* Action Buttons */}
