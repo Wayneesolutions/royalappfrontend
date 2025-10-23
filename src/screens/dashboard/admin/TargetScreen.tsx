@@ -1,24 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import TargetManagementScreen from './TargetManagementScreen';
 
 const TargetScreen = () => {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to TargetScreen</Text>
-    </View>
-  );
+  return <TargetManagementScreen />;
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-});
 
 export default TargetScreen;

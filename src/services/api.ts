@@ -659,6 +659,265 @@ class ApiService {
       this.handleApiError(error as AxiosError);
     }
   }
+
+  // ==================== TARGET MANAGEMENT ====================
+
+  async getMyTargets(params?: { period?: string; year?: number; month?: number }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/targets/my-targets', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getUsersForTargetAssignment(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/targets/users-for-assignment');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async assignTargets(targets: any[]): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/targets/assign', { targets });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getTargetPerformanceReport(params?: { year?: number; month?: number; role?: string; hierarchyLevel?: number }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/targets/performance-report', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async updateTarget(targetId: string, data: { targetAmount?: number; targetQuantity?: number; notes?: string; status?: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/targets/${targetId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async calculateTargetAchievements(params?: { companyId?: string; year?: number; month?: number }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/targets/calculate-achievements', params);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== OUTSTANDING MANAGEMENT ====================
+
+  async getOutstandingSummary(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/outstanding/summary', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getOutstandingList(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/outstanding/list', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getOutstandingDetails(outstandingId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/outstanding/${outstandingId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async updateOutstanding(outstandingId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/outstanding/${outstandingId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async addCollectionNote(outstandingId: string, data: { note: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/outstanding/${outstandingId}/notes`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async assignOutstanding(outstandingId: string, data: { assignedTo: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/outstanding/${outstandingId}/assign`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getUsersForAssignment(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/outstanding/users/for-assignment');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== LEDGER MANAGEMENT ====================
+  async getLedgers(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/ledger', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getLedgerDetails(ledgerId: string, params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/ledger/${ledgerId}`, { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async createLedger(data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/ledger', data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async updateLedger(ledgerId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/ledger/${ledgerId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async addLedgerTransaction(ledgerId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/ledger/${ledgerId}/transactions`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getLedgerSummary(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/ledger/summary', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getUsersForLedger(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/ledger/users', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== STOCK MANAGEMENT ====================
+  async getStockSummary(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/stock/summary', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getStocks(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/stock', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getStockDetails(stockId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/stock/${stockId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async createOrUpdateStock(data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/stock', data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async updateStockQuantity(stockId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/stock/${stockId}/quantity`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getLowStockAlerts(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/stock/alerts');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== ZONAL MANAGEMENT ====================
+  async getZonalDashboardData(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/zonal/dashboard');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getZonalTeamMembers(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/zonal/team', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
 }
 
 // Create and export a singleton instance

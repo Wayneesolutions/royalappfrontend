@@ -32,6 +32,9 @@ import SaleOrderItemSelect from '../../screens/dashboard/admin/saleOrder/SaleOrd
 import SaleOrderItemDetail from '../../screens/dashboard/admin/saleOrder/SaleOrderItemDetail';
 import SaleOrderApprove from '../../screens/dashboard/admin/saleOrder/SaleOrderApprove';
 import PendingApprovalsScreen from '../../screens/dashboard/admin/approval/PendingApprovalsScreen';
+import TargetAssignmentScreen from '../../screens/dashboard/admin/target/TargetAssignmentScreen';
+import MyTargetsScreen from '../../screens/dashboard/common/MyTargetsScreen';
+import ApprovedOrdersScreen from '../../screens/dashboard/admin/ApprovedOrdersScreen';
 // Order Management Screens (Admin can only monitor, not create)
 // import OrderManagement from '../../screens/dashboard/admin/saleOrder/OrderManagement';
 // import ProductManagement from '../../screens/dashboard/admin/saleOrder/ProductManagement';
@@ -63,6 +66,9 @@ export default function AdminNavigator() {
             <AdminStack.Screen name="TargetScreen" component={TargetScreen} />
             <AdminStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
             <AdminStack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+        <AdminStack.Screen name="TargetAssignmentScreen" component={TargetAssignmentScreen} />
+        <AdminStack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
+        <AdminStack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
             <AdminStack.Screen name="ClearOrdersScreen" component={ClearOrdersScreen} />
             <AdminStack.Screen name="OutstandingScreen" component={OutstandingScreen} />
 

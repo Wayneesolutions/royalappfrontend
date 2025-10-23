@@ -41,6 +41,7 @@ type CommonStackParamList = {
   SignIn: undefined;
   ProfileScreen: undefined;
   SettingsScreen: undefined;
+  MyTargetsScreen: undefined;
 };
 
 // ==================== SUPER ADMIN SCREENS ====================
@@ -83,13 +84,19 @@ type AdminStackParamList = {
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
   PendingApprovalsScreen: undefined;
+  ApprovedOrdersScreen: undefined;
   ClearOrdersScreen: undefined;
   OutstandingScreen: undefined;
+  TargetAssignmentScreen: undefined;
 } & CommonStackParamList;
 
 // ==================== ZONAL SCREENS ====================
 type ZonalStackParamList = {
   DashboardZonal: undefined;
+  TeamManagementScreen: undefined;
+  SalesReportScreen: undefined;
+  OrderManagementScreen: undefined;
+  TargetManagementScreen: undefined;
   RSMScreen: undefined;
   ASMScreen: undefined;
   SalesScreen: undefined;

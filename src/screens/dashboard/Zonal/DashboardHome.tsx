@@ -26,7 +26,7 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, getUsersByCompany, logout } = useAuth();
+  const { user, getUsersByCompany, logout, getZonalDashboardData } = useAuth();
   const navigation = useNavigation();
   const [stats, setStats] = useState<DashboardStats>({
     totalRSMs: 0,
@@ -41,6 +41,9 @@ const DashboardHome = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [topPerformers, setTopPerformers] = useState<any[]>([]);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
   const fetchDashboardData = async () => {
     if (!user?.defaultCompany) {
@@ -51,30 +54,29 @@ const DashboardHome = () => {
     try {
       setLoading(true);
       
-      // Fetch user counts for each role under Zonal
-      const roles = ['rsm', 'asm', 'salesman', 'dealers', 'distibutors'];
-      const roleCounts: {[key: string]: number} = {};
+      // Fetch Zonal dashboard data
+      const result = await getZonalDashboardData();
       
-      for (const role of roles) {
-        try {
-          const result = await getUsersByCompany({ role, limit: 1 });
-          roleCounts[role] = result?.pagination?.totalUsers || 0;
-        } catch (err) {
-          console.error(`Failed to fetch ${role} users:`, err);
-          roleCounts[role] = 0;
-        }
+      if (result?.success && result?.data) {
+        const data = result.data;
+        setDashboardData(data);
+        
+        // Update stats with real data
+        setStats({
+          totalRSMs: data.teamOverview.roleCounts.rsm || 0,
+          totalASMs: data.teamOverview.roleCounts.asm || 0,
+          totalSalesmen: data.teamOverview.roleCounts.salesman || 0,
+          totalDealers: data.teamOverview.roleCounts.dealers || 0,
+          totalDistributors: data.teamOverview.roleCounts.distibutors || 0,
+          totalSales: data.salesSummary.totalSales || 0,
+          pendingOrders: data.salesSummary.pendingOrders || 0,
+          completedOrders: data.salesSummary.completedOrders || 0,
+        });
+        
+        // Set additional data
+        setTopPerformers(data.topPerformers || []);
+        setRecentOrders(data.recentOrders || []);
       }
-
-      setStats({
-        totalRSMs: roleCounts.rsm || 0,
-        totalASMs: roleCounts.asm || 0,
-        totalSalesmen: roleCounts.salesman || 0,
-        totalDealers: roleCounts.dealers || 0,
-        totalDistributors: roleCounts.distibutors || 0,
-        totalSales: 125000, // Mock data - replace with actual API
-        pendingOrders: 15, // Mock data - replace with actual API
-        completedOrders: 45, // Mock data - replace with actual API
-      });
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
@@ -240,21 +242,21 @@ const DashboardHome = () => {
               description="Manage your team members"
               icon="people-outline"
               color="#3B82F6"
-              onPress={() => Alert.alert('Coming Soon', 'Team management feature will be available soon')}
+              onPress={() => navigation.navigate('TeamManagementScreen')}
             />
             <QuickActionCard
               title="Sales Report"
               description="View sales performance"
               icon="bar-chart-outline"
               color="#10B981"
-              onPress={() => Alert.alert('Coming Soon', 'Sales report feature will be available soon')}
+              onPress={() => navigation.navigate('SalesReportScreen')}
             />
             <QuickActionCard
               title="Orders"
               description="Manage orders"
               icon="list-outline"
               color="#F59E0B"
-              onPress={() => Alert.alert('Coming Soon', 'Order management feature will be available soon')}
+              onPress={() => navigation.navigate('OrderManagementScreen')}
             />
             <QuickActionCard
               title="Pending Approvals"
@@ -268,10 +270,55 @@ const DashboardHome = () => {
               description="Set and track targets"
               icon="target-outline"
               color="#EF4444"
-              onPress={() => Alert.alert('Coming Soon', 'Target management feature will be available soon')}
+              onPress={() => navigation.navigate('TargetManagementScreen')}
             />
           </View>
         </View>
+
+        {/* Top Performers */}
+        {topPerformers.length > 0 && (
+          <View style={styles.performersSection}>
+            <Text style={styles.sectionTitle}>Top Performers</Text>
+            <View style={styles.performersCard}>
+              {topPerformers.slice(0, 3).map((performer, index) => (
+                <View key={performer.userId} style={styles.performerItem}>
+                  <View style={styles.performerRank}>
+                    <Text style={styles.rankNumber}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.performerInfo}>
+                    <Text style={styles.performerName}>{performer.userName}</Text>
+                    <Text style={styles.performerRole}>{performer.userRole}</Text>
+                  </View>
+                  <View style={styles.performerStats}>
+                    <Text style={styles.performerSales}>₹{performer.totalSales.toLocaleString()}</Text>
+                    <Text style={styles.performerOrders}>{performer.orderCount} orders</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Recent Orders */}
+        {recentOrders.length > 0 && (
+          <View style={styles.ordersSection}>
+            <Text style={styles.sectionTitle}>Recent Orders</Text>
+            <View style={styles.ordersCard}>
+              {recentOrders.slice(0, 3).map((order) => (
+                <View key={order._id} style={styles.orderItem}>
+                  <View style={styles.orderInfo}>
+                    <Text style={styles.orderNumber}>{order.orderNumber}</Text>
+                    <Text style={styles.orderCreator}>{order.createdBy.name}</Text>
+                  </View>
+                  <View style={styles.orderDetails}>
+                    <Text style={styles.orderAmount}>₹{order.finalAmount.toLocaleString()}</Text>
+                    <Text style={styles.orderStatus}>{order.status}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Recent Activity */}
         <View style={styles.activitySection}>
@@ -572,6 +619,117 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 10,
     color: '#9CA3AF',
+  },
+  // Top Performers styles
+  performersSection: {
+    marginBottom: 24,
+  },
+  performersCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  performerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  performerRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  rankNumber: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  performerInfo: {
+    flex: 1,
+  },
+  performerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  performerRole: {
+    fontSize: 12,
+    color: '#6B7280',
+    textTransform: 'capitalize',
+  },
+  performerStats: {
+    alignItems: 'flex-end',
+  },
+  performerSales: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 2,
+  },
+  performerOrders: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  // Recent Orders styles
+  ordersSection: {
+    marginBottom: 24,
+  },
+  ordersCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  orderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  orderInfo: {
+    flex: 1,
+  },
+  orderNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  orderCreator: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  orderDetails: {
+    alignItems: 'flex-end',
+  },
+  orderAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 2,
+  },
+  orderStatus: {
+    fontSize: 12,
+    color: '#6B7280',
+    textTransform: 'capitalize',
   },
   // Modal styles
   modalOverlay: {

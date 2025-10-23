@@ -31,7 +31,7 @@ const GlobalFAB = () => {
                 <View style={styles.fabMenu}>
                     <MenuOption label="Dashboard" icon="dashboard" />
                     <MenuOption label="My Orders" icon="shopping-cart" />
-                    <MenuOption label="My Target" icon="linechart" />
+                    <MenuOption label="My Target" icon="linechart" onPress={() => navigation.navigate('MyTargetsScreen')} />
                     <MenuOption label="Ledger" icon="book" />
                     <MenuOption label="Report" icon="barchart" onPress={() => navigation.navigate('SalesReportScreen')} />
                     <MenuOption label="Products" icon="appstore-o" />

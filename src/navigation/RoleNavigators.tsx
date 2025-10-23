@@ -5,6 +5,10 @@ import { RootStackParamList } from './types';
 
 // Dashboard Screens
 import DashboardZonal from '../screens/dashboard/Zonal/DashboardHome';
+import TeamManagementScreen from '../screens/dashboard/Zonal/TeamManagementScreen';
+import SalesReportScreen from '../screens/dashboard/Zonal/SalesReportScreen';
+import OrderManagementScreen from '../screens/dashboard/Zonal/OrderManagementScreen';
+import TargetManagementScreen from '../screens/dashboard/Zonal/TargetManagementScreen';
 import DashboardRSM from '../screens/dashboard/RSM/DashboardHome';
 import DashboardASM from '../screens/dashboard/ASM/DashboardHome';
 import DashboardDistributor from '../screens/dashboard/Distributor/DashboardHome';
@@ -13,8 +17,10 @@ import ProductCatalog from '../screens/dashboard/Dealer/ProductCatalog';
 import ProductManagement from '../screens/dashboard/Dealer/ProductManagement';
 import CreateOrder from '../screens/dashboard/Dealer/CreateOrder';
 import OrderList from '../screens/dashboard/Dealer/OrderList';
-import SalesReportScreen from '../screens/dashboard/Dealer/SalesReportScreen';
+import DealerSalesReportScreen from '../screens/dashboard/Dealer/SalesReportScreen';
 import PendingApprovalsScreen from '../screens/dashboard/admin/approval/PendingApprovalsScreen';
+import TargetAssignmentScreen from '../screens/dashboard/admin/target/TargetAssignmentScreen';
+import MyTargetsScreen from '../screens/dashboard/common/MyTargetsScreen';
 import DashboardSubDealer from '../screens/dashboard/SubDealer/DashboardHome';
 import DashboardSalesman from '../screens/dashboard/Salesman/DashboardHome';
 import ProductCatalogSalesman from '../screens/dashboard/Salesman/ProductCatalog';
@@ -44,7 +50,12 @@ export function ZonalNavigator() {
   return (
     <Stack.Navigator initialRouteName="DashboardZonal" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardZonal" component={DashboardZonal} />
+      <Stack.Screen name="TeamManagementScreen" component={TeamManagementScreen} />
+      <Stack.Screen name="SalesReportScreen" component={SalesReportScreen} />
+      <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
+      <Stack.Screen name="TargetManagementScreen" component={TargetManagementScreen} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="RSMScreen" component={RSMScreen} />
       <Stack.Screen name="ASMScreen" component={ASMScreen} />
       <Stack.Screen name="SalesScreen" component={SalesScreen} />
@@ -67,6 +78,7 @@ export function RSMNavigator() {
     <Stack.Navigator initialRouteName="DashboardRSM" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardRSM" component={DashboardRSM} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="ASMScreen" component={ASMScreen} />
       <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="DealerScreen" component={DealerScreen} />
@@ -88,6 +100,7 @@ export function ASMNavigator() {
     <Stack.Navigator initialRouteName="DashboardASM" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardASM" component={DashboardASM} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="DistributorsScreen" component={DistributorsScreen} />
@@ -108,6 +121,7 @@ export function DistributorNavigator() {
     <Stack.Navigator initialRouteName="DashboardDistributor" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardDistributor" component={DashboardDistributor} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
@@ -130,7 +144,8 @@ export function DealerNavigator() {
       <Stack.Screen name="ProductManagement" component={ProductManagement} />
       <Stack.Screen name="CreateOrder" component={CreateOrder} />
       <Stack.Screen name="OrderList" component={OrderList} />
-      <Stack.Screen name="SalesReportScreen" component={SalesReportScreen} />
+      <Stack.Screen name="SalesReportScreen" component={DealerSalesReportScreen} />
+      <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
       <Stack.Screen name="LedgerScreen" component={LedgerScreen} />
@@ -149,6 +164,7 @@ export function SubDealerNavigator() {
     <Stack.Navigator initialRouteName="DashboardSubDealer" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardSubDealer" component={DashboardSubDealer} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
       <Stack.Screen name="LedgerScreen" component={LedgerScreen} />
@@ -170,6 +186,7 @@ export function SalesmanNavigator() {
       <Stack.Screen name="CreateOrder" component={CreateOrderSalesman} />
       <Stack.Screen name="OrderList" component={OrderListSalesman} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
       <Stack.Screen name="LedgerScreen" component={LedgerScreen} />

@@ -45,6 +45,39 @@ interface AuthContextType {
   getProductCategories: () => Promise<any>;
   updateProductStock: (productId: string, data: any) => Promise<any>;
   getLowStockProducts: () => Promise<any>;
+  // Target Management
+  getMyTargets: (params?: any) => Promise<any>;
+  getUsersForTargetAssignment: () => Promise<any>;
+  assignTargets: (targets: any[]) => Promise<any>;
+  getTargetPerformanceReport: (params?: any) => Promise<any>;
+  updateTarget: (targetId: string, data: any) => Promise<any>;
+  calculateTargetAchievements: (params?: any) => Promise<any>;
+  // Outstanding Management
+  getOutstandingSummary: (params?: any) => Promise<any>;
+  getOutstandingList: (params?: any) => Promise<any>;
+  getOutstandingDetails: (outstandingId: string) => Promise<any>;
+  updateOutstanding: (outstandingId: string, data: any) => Promise<any>;
+  addCollectionNote: (outstandingId: string, data: { note: string }) => Promise<any>;
+  assignOutstanding: (outstandingId: string, data: { assignedTo: string }) => Promise<any>;
+  getUsersForAssignment: () => Promise<any>;
+  // Ledger Management
+  getLedgers: (params?: any) => Promise<any>;
+  getLedgerDetails: (ledgerId: string, params?: any) => Promise<any>;
+  createLedger: (data: any) => Promise<any>;
+  updateLedger: (ledgerId: string, data: any) => Promise<any>;
+  addLedgerTransaction: (ledgerId: string, data: any) => Promise<any>;
+  getLedgerSummary: (params?: any) => Promise<any>;
+  getUsersForLedger: (params?: any) => Promise<any>;
+  // Stock Management
+  getStockSummary: (params?: any) => Promise<any>;
+  getStocks: (params?: any) => Promise<any>;
+  getStockDetails: (stockId: string) => Promise<any>;
+  createOrUpdateStock: (data: any) => Promise<any>;
+  updateStockQuantity: (stockId: string, data: any) => Promise<any>;
+  getLowStockAlerts: () => Promise<any>;
+  // Zonal Management
+  getZonalDashboardData: () => Promise<any>;
+  getZonalTeamMembers: (params?: any) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -220,7 +253,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const getOrders = async (params?: any): Promise<any> => {
     try {
       const result = await apiService.getOrders(params);
-      console.log('AuthContext getOrders result:', result);
       return result; // apiService already returns the response data
     } catch (error) {
       console.error('Failed to get orders:', error);
@@ -411,6 +443,293 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // ==================== TARGET MANAGEMENT ====================
+
+  const getMyTargets = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getMyTargets(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get my targets:', error);
+      throw error;
+    }
+  };
+
+  const getUsersForTargetAssignment = async (): Promise<any> => {
+    try {
+      const result = await apiService.getUsersForTargetAssignment();
+      return result;
+    } catch (error) {
+      console.error('Failed to get users for target assignment:', error);
+      throw error;
+    }
+  };
+
+  const assignTargets = async (targets: any[]): Promise<any> => {
+    try {
+      const result = await apiService.assignTargets(targets);
+      return result;
+    } catch (error) {
+      console.error('Failed to assign targets:', error);
+      throw error;
+    }
+  };
+
+  const getTargetPerformanceReport = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getTargetPerformanceReport(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get target performance report:', error);
+      throw error;
+    }
+  };
+
+  const updateTarget = async (targetId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.updateTarget(targetId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update target:', error);
+      throw error;
+    }
+  };
+
+  const calculateTargetAchievements = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.calculateTargetAchievements(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to calculate target achievements:', error);
+      throw error;
+    }
+  };
+
+  // ==================== OUTSTANDING MANAGEMENT ====================
+
+  const getOutstandingSummary = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getOutstandingSummary(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get outstanding summary:', error);
+      throw error;
+    }
+  };
+
+  const getOutstandingList = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getOutstandingList(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get outstanding list:', error);
+      throw error;
+    }
+  };
+
+  const getOutstandingDetails = async (outstandingId: string): Promise<any> => {
+    try {
+      const result = await apiService.getOutstandingDetails(outstandingId);
+      return result;
+    } catch (error) {
+      console.error('Failed to get outstanding details:', error);
+      throw error;
+    }
+  };
+
+  const updateOutstanding = async (outstandingId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.updateOutstanding(outstandingId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update outstanding:', error);
+      throw error;
+    }
+  };
+
+  const addCollectionNote = async (outstandingId: string, data: { note: string }): Promise<any> => {
+    try {
+      const result = await apiService.addCollectionNote(outstandingId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to add collection note:', error);
+      throw error;
+    }
+  };
+
+  const assignOutstanding = async (outstandingId: string, data: { assignedTo: string }): Promise<any> => {
+    try {
+      const result = await apiService.assignOutstanding(outstandingId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to assign outstanding:', error);
+      throw error;
+    }
+  };
+
+  const getUsersForAssignment = async (): Promise<any> => {
+    try {
+      const result = await apiService.getUsersForAssignment();
+      return result;
+    } catch (error) {
+      console.error('Failed to get users for assignment:', error);
+      throw error;
+    }
+  };
+
+  // ==================== LEDGER MANAGEMENT ====================
+  const getLedgers = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getLedgers(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get ledgers:', error);
+      throw error;
+    }
+  };
+
+  const getLedgerDetails = async (ledgerId: string, params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getLedgerDetails(ledgerId, params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get ledger details:', error);
+      throw error;
+    }
+  };
+
+  const createLedger = async (data: any): Promise<any> => {
+    try {
+      const result = await apiService.createLedger(data);
+      return result;
+    } catch (error) {
+      console.error('Failed to create ledger:', error);
+      throw error;
+    }
+  };
+
+  const updateLedger = async (ledgerId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.updateLedger(ledgerId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update ledger:', error);
+      throw error;
+    }
+  };
+
+  const addLedgerTransaction = async (ledgerId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.addLedgerTransaction(ledgerId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to add ledger transaction:', error);
+      throw error;
+    }
+  };
+
+  const getLedgerSummary = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getLedgerSummary(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get ledger summary:', error);
+      throw error;
+    }
+  };
+
+  const getUsersForLedger = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getUsersForLedger(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get users for ledger:', error);
+      throw error;
+    }
+  };
+
+  // ==================== STOCK MANAGEMENT ====================
+  const getStockSummary = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getStockSummary(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get stock summary:', error);
+      throw error;
+    }
+  };
+
+  const getStocks = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getStocks(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get stocks:', error);
+      throw error;
+    }
+  };
+
+  const getStockDetails = async (stockId: string): Promise<any> => {
+    try {
+      const result = await apiService.getStockDetails(stockId);
+      return result;
+    } catch (error) {
+      console.error('Failed to get stock details:', error);
+      throw error;
+    }
+  };
+
+  const createOrUpdateStock = async (data: any): Promise<any> => {
+    try {
+      const result = await apiService.createOrUpdateStock(data);
+      return result;
+    } catch (error) {
+      console.error('Failed to create/update stock:', error);
+      throw error;
+    }
+  };
+
+  const updateStockQuantity = async (stockId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.updateStockQuantity(stockId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update stock quantity:', error);
+      throw error;
+    }
+  };
+
+  const getLowStockAlerts = async (): Promise<any> => {
+    try {
+      const result = await apiService.getLowStockAlerts();
+      return result;
+    } catch (error) {
+      console.error('Failed to get low stock alerts:', error);
+      throw error;
+    }
+  };
+
+  // ==================== ZONAL MANAGEMENT ====================
+  const getZonalDashboardData = async (): Promise<any> => {
+    try {
+      const result = await apiService.getZonalDashboardData();
+      return result;
+    } catch (error) {
+      console.error('Failed to get Zonal dashboard data:', error);
+      throw error;
+    }
+  };
+
+  const getZonalTeamMembers = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getZonalTeamMembers(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get Zonal team members:', error);
+      throw error;
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isAuthenticated,
@@ -450,7 +769,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     deleteProduct,
     getProductCategories,
     updateProductStock,
-    getLowStockProducts
+    getLowStockProducts,
+    // Target Management
+    getMyTargets,
+    getUsersForTargetAssignment,
+    assignTargets,
+    getTargetPerformanceReport,
+    updateTarget,
+    calculateTargetAchievements,
+    // Outstanding Management
+    getOutstandingSummary,
+    getOutstandingList,
+    getOutstandingDetails,
+    updateOutstanding,
+    addCollectionNote,
+    assignOutstanding,
+    getUsersForAssignment,
+    // Ledger Management
+    getLedgers,
+    getLedgerDetails,
+    createLedger,
+    updateLedger,
+    addLedgerTransaction,
+    getLedgerSummary,
+    getUsersForLedger,
+    // Stock Management
+    getStockSummary,
+    getStocks,
+    getStockDetails,
+    createOrUpdateStock,
+    updateStockQuantity,
+    getLowStockAlerts,
+    // Zonal Management
+    getZonalDashboardData,
+    getZonalTeamMembers
   };
 
   return (

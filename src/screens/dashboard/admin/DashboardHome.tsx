@@ -60,21 +60,13 @@ const menuItems: MenuItem[] = [
   { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },
   { label: 'Ledger', icon: 'book-outline', iconType: 'Ionicons', navigationScreen: 'LedgerScreen' },
   { label: 'Target Management', icon: 'target', iconType: 'MaterialCommunityIcons', navigationScreen: 'TargetScreen' },
+  { label: 'Assign Targets', icon: 'add-circle-outline', iconType: 'Ionicons', navigationScreen: 'TargetAssignmentScreen' },
   { label: 'Pending Orders', icon: 'time-outline', iconType: 'Ionicons', navigationScreen: 'PendingOrdersScreen' },
   { label: 'Pending Approvals', icon: 'checkmark-circle-outline', iconType: 'Ionicons', navigationScreen: 'PendingApprovalsScreen' },
-  { label: 'Approved Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ClearOrdersScreen' },
+  { label: 'Approved Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ApprovedOrdersScreen' },
 ];
 
-// Chart data for the sales breakdown
-const chartData = [
-  { day: 'Mon', safe: 45, pending: 25 },
-  { day: 'Tue', safe: 55, pending: 35 },
-  { day: 'Wed', safe: 65, pending: 45 },
-  { day: 'Thu', safe: 50, pending: 30 },
-  { day: 'Fri', safe: 35, pending: 20 },
-  { day: 'Sat', safe: 60, pending: 40 },
-  { day: 'Sun', safe: 40, pending: 25 },
-];
+// Chart data will be fetched from API
 
 const DashboardHome = () => {
   const navigation = useNavigation<NavigationProps>();
@@ -84,8 +76,10 @@ const DashboardHome = () => {
   const [error, setError] = useState<string | null>(null);
   const [userCounts, setUserCounts] = useState<{[key: string]: number}>({});
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [stockData, setStockData] = useState<any>(null);
+  const [chartData, setChartData] = useState<any[]>([]);
 
-  const { user, getCompanyData, getUsersByCompany } = useAuth();
+  const { user, getCompanyData, getUsersByCompany, getStockSummary } = useAuth();
 
   // Helper function to get role colors
   const getRoleColor = (role: string) => {
@@ -137,6 +131,21 @@ const DashboardHome = () => {
     }
   };
 
+  // Fetch stock data
+  const fetchStockData = async () => {
+    if (!user?.defaultCompany) return;
+
+    try {
+      const result = await getStockSummary();
+      if (result?.success && result?.data) {
+        setStockData(result.data);
+        setChartData(result.data.chartData || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch stock data:', err);
+    }
+  };
+
   // Fetch company data when component mounts or user changes
   useEffect(() => {
     const fetchData = async () => {
@@ -151,10 +160,11 @@ const DashboardHome = () => {
         const data = await getCompanyData();
         setCompanyData(data);
         
-        // Fetch user data in parallel
+        // Fetch user data and stock data in parallel
         await Promise.all([
           fetchUserCounts(),
-          fetchRecentUsers()
+          fetchRecentUsers(),
+          fetchStockData()
         ]);
       } catch (err) {
         console.error('Failed to fetch company data:', err);
@@ -472,11 +482,15 @@ const DashboardHome = () => {
             <View style={styles.chartLegend}>
               <View style={[styles.legendItem, { backgroundColor: '#10B981' }]}>
                 <View style={[styles.legendColor, { backgroundColor: '#fff' }]} />
-                <Text style={styles.legendText}>Safe Stocks 78.5%</Text>
+                <Text style={styles.legendText}>
+                  Safe Stocks {stockData?.percentages?.safe || 0}%
+                </Text>
               </View>
               <View style={[styles.legendItem, { backgroundColor: '#3B82F6' }]}>
                 <View style={[styles.legendColor, { backgroundColor: '#fff' }]} />
-                <Text style={styles.legendText}>Pending Stocks 75.5%</Text>
+                <Text style={styles.legendText}>
+                  Pending Stocks {stockData?.percentages?.pending || 0}%
+                </Text>
               </View>
             </View>
           </View>
