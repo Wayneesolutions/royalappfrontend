@@ -5,7 +5,7 @@
 const getDevIP = (): string => {
   // You can set this manually or use the update-ip.ps1 script
   // Current IP: 192.168.31.247
-  return '192.168.31.247';
+  return '192.168.194.212';
 };
 
 // Environment configuration with fallback values

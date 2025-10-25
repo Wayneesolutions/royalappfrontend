@@ -42,7 +42,9 @@ const AdminsListScreen = () => {
     name: '',
     email: '',
     phone: '',
+    password: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [companiesOptions, setCompaniesOptions] = useState<{ label: string; value: string; code?: string }[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
 
@@ -95,14 +97,20 @@ const AdminsListScreen = () => {
 
   const handleCreateAdmin = async () => {
     try {
-      if (!formData.name || !formData.email || !formData.phone || !selectedCompanyId) {
-        Alert.alert('Validation', 'Please fill Name, Email, Phone and select a Company');
+      if (!formData.name || !formData.email || !formData.phone || !formData.password || !selectedCompanyId) {
+        Alert.alert('Validation', 'Please fill all required fields: Name, Email, Phone, Password and select a Company');
+        return;
+      }
+
+      // Password validation
+      if (formData.password.length < 8) {
+        Alert.alert('Validation Error', 'Password must be at least 8 characters long');
         return;
       }
 
       const res = await apiService.superadminCreateAdmin({
         email: formData.email,
-        password: 'Admin@123',
+        password: formData.password,
         name: formData.name,
         mobile: formData.phone,
         companyId: selectedCompanyId,
@@ -111,7 +119,7 @@ const AdminsListScreen = () => {
       if (res.success) {
         Alert.alert('Success', 'Admin created successfully');
         setModalVisible(false);
-        setFormData({ name: '', email: '', phone: '' });
+        setFormData({ name: '', email: '', phone: '', password: '' });
         setSelectedCompanyId('');
       } else {
         Alert.alert('Failed', res.message || 'Failed to create admin');
@@ -277,6 +285,30 @@ const AdminsListScreen = () => {
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password *</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter password (min 8 characters)"
+                    value={formData.password}
+                    onChangeText={(text) => setFormData({ ...formData, password: text })}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    <Ionicons 
+                      name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                      size={20} 
+                      color="#9CA3AF" 
+                    />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.hintText}>Minimum 8 characters required</Text>
               </View>
 
             <View style={styles.inputGroup}>
@@ -567,6 +599,12 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 14,
     color: '#1F2937',
+  },
+  hintText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 6,
+    fontStyle: 'italic',
   },
   modalActions: {
     flexDirection: 'row',
