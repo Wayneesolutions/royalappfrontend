@@ -1,9 +1,16 @@
 // src/config/env.ts
 // Custom environment configuration to avoid @env module resolution issues
 
+// Helper function to get the development IP
+const getDevIP = (): string => {
+  // You can set this manually or use the update-ip.ps1 script
+  // Current IP: 192.168.31.247
+  return '192.168.31.247';
+};
+
 // Environment configuration with fallback values
 export const ENV = {
-  API_BASE_URL: 'http://localhost:5000/api/v1',
+  API_BASE_URL: `http://${getDevIP()}:5000/api/v1`,
   API_TIMEOUT: '10000',
   APP_NAME: 'Royal Software',
   APP_VERSION: '1.0.0',
@@ -14,10 +21,10 @@ export const ENV = {
 // Dynamically resolve host for web to avoid localhost/IPv6 issues
 const resolveDevBaseUrl = (): string => {
   try {
-    // window is available on web; fallback to localhost in native
+    // window is available on web; fallback to your machine's IP in native
     const host = typeof window !== 'undefined' && window.location && window.location.hostname
       ? window.location.hostname
-      : 'localhost';
+      : getDevIP(); // Use the helper function
     const protocol = typeof window !== 'undefined' && window.location && window.location.protocol
       ? window.location.protocol.replace(':', '')
       : 'http';
@@ -25,7 +32,7 @@ const resolveDevBaseUrl = (): string => {
     const devProtocol = 'http';
     return `${devProtocol}://${host}:5000/api/v1`;
   } catch (e) {
-    return 'http://localhost:5000/api/v1';
+    return `http://${getDevIP()}:5000/api/v1`; // Use the helper function
   }
 };
 

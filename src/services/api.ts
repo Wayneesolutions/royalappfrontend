@@ -140,12 +140,31 @@ class ApiService {
     if (error.response) {
       // Server responded with error status
       const message = (error.response.data as any)?.message || error.message;
+      console.error('API Error Response:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        url: error.config?.url,
+        baseURL: error.config?.baseURL
+      });
       throw new Error(message);
     } else if (error.request) {
       // Request was made but no response received
-      throw new Error('Network error. Please check your connection.');
+      console.error('Network Error - No Response:', {
+        message: error.message,
+        code: error.code,
+        url: error.config?.url,
+        baseURL: error.config?.baseURL,
+        timeout: error.config?.timeout
+      });
+      throw new Error(`Network error. Please check your connection and ensure the backend server is running at ${API_BASE_URL}`);
     } else {
       // Something else happened
+      console.error('API Setup Error:', {
+        message: error.message,
+        url: error.config?.url,
+        baseURL: error.config?.baseURL
+      });
       throw new Error(error.message);
     }
   }
