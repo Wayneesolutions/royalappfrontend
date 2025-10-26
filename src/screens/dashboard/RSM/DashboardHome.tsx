@@ -13,6 +13,8 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import { RSMStackParamList } from '../../../navigation/types';
 import GlobalFAB from './GlobalFAB';
 
 interface DashboardStats {
@@ -27,8 +29,8 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, getUsersByCompany, logout } = useAuth();
-  const navigation = useNavigation();
+  const { user, getUsersByCompany, logout, getRSMDashboardData, getRSMTeamMembers, getRSMRecentActivity } = useAuth();
+  const navigation = useNavigation<StackNavigationProp<RSMStackParamList>>();
   const [stats, setStats] = useState<DashboardStats>({
     totalASMs: 0,
     totalSalesmen: 0,
@@ -42,6 +44,12 @@ const DashboardHome = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [topPerformers, setTopPerformers] = useState<any[]>([]);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [teamPerformance, setTeamPerformance] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   const fetchDashboardData = async () => {
     if (!user?.defaultCompany) {
@@ -52,30 +60,52 @@ const DashboardHome = () => {
     try {
       setLoading(true);
       
-      // Fetch user counts for each role under RSM
-      const roles = ['asm', 'salesman', 'dealers', 'distibutors'];
-      const roleCounts: {[key: string]: number} = {};
+      // Fetch RSM dashboard data
+      const result = await getRSMDashboardData();
       
-      for (const role of roles) {
-        try {
-          const result = await getUsersByCompany({ role, limit: 1 });
-          roleCounts[role] = result?.pagination?.totalUsers || 0;
-        } catch (err) {
-          console.error(`Failed to fetch ${role} users:`, err);
-          roleCounts[role] = 0;
-        }
+      if (result?.success && result?.data) {
+        const data = result.data;
+        setDashboardData(data);
+        
+        // Update stats with real data
+        setStats({
+          totalASMs: data.teamOverview.roleCounts.asm || 0,
+          totalSalesmen: data.teamOverview.roleCounts.salesman || 0,
+          totalDealers: data.teamOverview.roleCounts.dealers || 0,
+          totalDistributors: data.teamOverview.roleCounts.distibutors || 0,
+          totalSales: data.salesSummary.totalSales || 0,
+          pendingOrders: data.salesSummary.pendingOrders || 0,
+          completedOrders: data.salesSummary.completedOrders || 0,
+          targetAchievement: 78, // TODO: Calculate from actual target data
+        });
+        
+        // Set additional data
+        setTopPerformers(data.topPerformers || []);
+        setRecentOrders(data.recentOrders || []);
+        setTeamPerformance(data.teamPerformance || []);
       }
 
-      setStats({
-        totalASMs: roleCounts.asm || 0,
-        totalSalesmen: roleCounts.salesman || 0,
-        totalDealers: roleCounts.dealers || 0,
-        totalDistributors: roleCounts.distibutors || 0,
-        totalSales: 85000, // Mock data - replace with actual API
-        pendingOrders: 8, // Mock data - replace with actual API
-        completedOrders: 32, // Mock data - replace with actual API
-        targetAchievement: 78, // Mock data - replace with actual API
-      });
+      // Fetch team members for detailed view
+      try {
+        const teamResult = await getRSMTeamMembers({ limit: 10 });
+        if (teamResult?.success && teamResult?.data?.teamMembers) {
+          setTeamMembers(teamResult.data.teamMembers);
+        }
+      } catch (teamError) {
+        console.error('Failed to fetch team members:', teamError);
+        setTeamMembers([]);
+      }
+
+      // Fetch recent activity
+      try {
+        const activityResult = await getRSMRecentActivity({ limit: 10, days: 7 });
+        if (activityResult?.success && activityResult?.data?.activities) {
+          setRecentActivity(activityResult.data.activities);
+        }
+      } catch (activityError) {
+        console.error('Failed to fetch recent activity:', activityError);
+        setRecentActivity([]);
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
@@ -111,6 +141,40 @@ const DashboardHome = () => {
 
   const cancelLogout = () => {
     setShowLogoutModal(false);
+  };
+
+  // Helper functions for team overview
+  const getRoleColor = (role: string) => {
+    const colorMap = {
+      'asm': '#F59E0B',
+      'salesman': '#EF4444',
+      'dealers': '#8B5CF6',
+      'distibutors': '#06B6D4',
+      'subdealer': '#10B981'
+    };
+    return colorMap[role] || '#6B7280';
+  };
+
+  const getRoleDisplayName = (role: string) => {
+    const displayMap = {
+      'asm': 'Area Sales Manager',
+      'salesman': 'Salesman',
+      'dealers': 'Dealer',
+      'distibutors': 'Distributor',
+      'subdealer': 'Sub Dealer'
+    };
+    return displayMap[role] || role;
+  };
+
+  const formatTimeAgo = (timestamp: string | Date) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
   const StatCard = ({ title, value, icon, color, onPress }: {
@@ -236,21 +300,21 @@ const DashboardHome = () => {
               description="Manage your team members"
               icon="people-outline"
               color="#10B981"
-              onPress={() => Alert.alert('Coming Soon', 'Team management feature will be available soon')}
+              onPress={() => navigation.navigate('TeamManagementScreen')}
             />
             <QuickActionCard
               title="Sales Report"
               description="View sales performance"
               icon="bar-chart-outline"
               color="#3B82F6"
-              onPress={() => Alert.alert('Coming Soon', 'Sales report feature will be available soon')}
+              onPress={() => navigation.navigate('SalesReportScreen')}
             />
             <QuickActionCard
               title="Orders"
               description="Manage orders"
               icon="list-outline"
               color="#F59E0B"
-              onPress={() => Alert.alert('Coming Soon', 'Order management feature will be available soon')}
+              onPress={() => navigation.navigate('OrderManagementScreen')}
             />
             <QuickActionCard
               title="Pending Approvals"
@@ -264,47 +328,136 @@ const DashboardHome = () => {
               description="Set and track targets"
               icon="target-outline"
               color="#EF4444"
-              onPress={() => Alert.alert('Coming Soon', 'Target management feature will be available soon')}
+              onPress={() => navigation.navigate('TargetManagementScreen')}
             />
           </View>
         </View>
+
+        {/* Team Performance Overview */}
+        {teamMembers.length > 0 && (
+          <View style={styles.teamSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Team Performance</Text>
+              <TouchableOpacity 
+                style={styles.viewAllButton}
+                onPress={() => navigation.navigate('TeamManagementScreen')}
+              >
+                <Text style={styles.viewAllText}>View All</Text>
+                <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.teamCard}>
+              {teamMembers.slice(0, 5).map((member, index) => (
+                <View key={member._id} style={styles.teamMemberItem}>
+                  <View style={styles.memberInfo}>
+                    <View style={[styles.memberAvatar, { backgroundColor: getRoleColor(member.role) }]}>
+                      <Text style={styles.memberInitial}>
+                        {member.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.memberDetails}>
+                      <Text style={styles.memberName}>{member.name}</Text>
+                      <Text style={styles.memberRole}>{getRoleDisplayName(member.role)}</Text>
+                      <View style={styles.memberStatus}>
+                        <View style={[
+                          styles.statusDot, 
+                          { backgroundColor: member.isActive ? '#10B981' : '#6B7280' }
+                        ]} />
+                        <Text style={styles.statusText}>
+                          {member.isActive ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.memberStats}>
+                    <Text style={styles.memberSales}>
+                      ₹{member.salesData?.totalSales?.toLocaleString() || '0'}
+                    </Text>
+                    <Text style={styles.memberOrders}>
+                      {member.salesData?.orderCount || 0} orders
+                    </Text>
+                    <Text style={styles.memberMonthly}>
+                      ₹{member.salesData?.monthlySales?.toLocaleString() || '0'} this month
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Top Performers */}
+        {topPerformers.length > 0 && (
+          <View style={styles.performersSection}>
+            <Text style={styles.sectionTitle}>Top Performers</Text>
+            <View style={styles.performersCard}>
+              {topPerformers.slice(0, 3).map((performer, index) => (
+                <View key={performer.userId} style={styles.performerItem}>
+                  <View style={styles.performerRank}>
+                    <Text style={styles.rankNumber}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.performerInfo}>
+                    <Text style={styles.performerName}>{performer.userName}</Text>
+                    <Text style={styles.performerRole}>{getRoleDisplayName(performer.userRole)}</Text>
+                  </View>
+                  <View style={styles.performerStats}>
+                    <Text style={styles.performerSales}>₹{performer.totalSales.toLocaleString()}</Text>
+                    <Text style={styles.performerOrders}>{performer.orderCount} orders</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Recent Orders */}
+        {recentOrders.length > 0 && (
+          <View style={styles.ordersSection}>
+            <Text style={styles.sectionTitle}>Recent Orders</Text>
+            <View style={styles.ordersCard}>
+              {recentOrders.slice(0, 3).map((order) => (
+                <View key={order._id} style={styles.orderItem}>
+                  <View style={styles.orderInfo}>
+                    <Text style={styles.orderNumber}>{order.orderNumber}</Text>
+                    <Text style={styles.orderCreator}>{order.createdBy.name}</Text>
+                  </View>
+                  <View style={styles.orderDetails}>
+                    <Text style={styles.orderAmount}>₹{order.finalAmount.toLocaleString()}</Text>
+                    <Text style={styles.orderStatus}>{order.status}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Recent Activity */}
         <View style={styles.activitySection}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityCard}>
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#10B981' }]}>
-                <Ionicons name="checkmark" size={16} color="white" />
+            {recentActivity.length > 0 ? (
+              recentActivity.slice(0, 5).map((activity) => (
+                <View key={activity.id} style={styles.activityItem}>
+                  <View style={[styles.activityIcon, { backgroundColor: activity.color }]}>
+                    <Ionicons name={activity.icon as any} size={16} color="white" />
+                  </View>
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityTitle}>{activity.title}</Text>
+                    <Text style={styles.activityDescription}>{activity.description}</Text>
+                    <Text style={styles.activityTime}>
+                      {formatTimeAgo(activity.timestamp)}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.noActivityContainer}>
+                <Ionicons name="time-outline" size={32} color="#9CA3AF" />
+                <Text style={styles.noActivityText}>No recent activity</Text>
+                <Text style={styles.noActivitySubtext}>Activity from your team will appear here</Text>
               </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Order Completed</Text>
-                <Text style={styles.activityDescription}>Order #12345 has been completed</Text>
-                <Text style={styles.activityTime}>2 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#F59E0B' }]}>
-                <Ionicons name="person-add" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>New Team Member</Text>
-                <Text style={styles.activityDescription}>Jane Smith joined as ASM</Text>
-                <Text style={styles.activityTime}>4 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#3B82F6' }]}>
-                <Ionicons name="trending-up" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Sales Target Met</Text>
-                <Text style={styles.activityDescription}>Weekly target achieved</Text>
-                <Text style={styles.activityTime}>1 day ago</Text>
-              </View>
-            </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -519,6 +672,226 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.8)',
   },
+  // Team Performance styles
+  teamSection: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  teamCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  teamMemberItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  memberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  memberInitial: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  memberDetails: {
+    flex: 1,
+  },
+  memberName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  memberRole: {
+    fontSize: 12,
+    color: '#6B7280',
+    textTransform: 'capitalize',
+    marginBottom: 4,
+  },
+  memberStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 10,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  memberStats: {
+    alignItems: 'flex-end',
+  },
+  memberSales: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 2,
+  },
+  memberOrders: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  memberMonthly: {
+    fontSize: 10,
+    color: '#9CA3AF',
+  },
+  // Top Performers styles
+  performersSection: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  performersCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  performerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  performerRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  rankNumber: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  performerInfo: {
+    flex: 1,
+  },
+  performerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  performerRole: {
+    fontSize: 12,
+    color: '#6B7280',
+    textTransform: 'capitalize',
+  },
+  performerStats: {
+    alignItems: 'flex-end',
+  },
+  performerSales: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 2,
+  },
+  performerOrders: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  // Recent Orders styles
+  ordersSection: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  ordersCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  orderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  orderInfo: {
+    flex: 1,
+  },
+  orderNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  orderCreator: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  orderDetails: {
+    alignItems: 'flex-end',
+  },
+  orderAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 2,
+  },
+  orderStatus: {
+    fontSize: 12,
+    color: '#6B7280',
+    textTransform: 'capitalize',
+  },
   activitySection: {
     padding: 20,
     paddingTop: 0,
@@ -564,6 +937,22 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 10,
     color: '#9CA3AF',
+  },
+  noActivityContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  noActivityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  noActivitySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
   },
   // Modal styles
   modalOverlay: {

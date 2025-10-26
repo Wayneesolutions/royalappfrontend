@@ -78,6 +78,17 @@ interface AuthContextType {
   // Zonal Management
   getZonalDashboardData: () => Promise<any>;
   getZonalTeamMembers: (params?: any) => Promise<any>;
+  getZonalRecentActivity: (params?: { limit?: number; days?: number }) => Promise<any>;
+  // RSM Management
+  getRSMDashboardData: () => Promise<any>;
+  getRSMTeamMembers: (params?: any) => Promise<any>;
+  getRSMTeamPerformance: (params?: { period?: string }) => Promise<any>;
+  getRSMRecentActivity: (params?: { limit?: number; days?: number }) => Promise<any>;
+  // ASM Management
+  getASMDashboardData: () => Promise<any>;
+  getASMTeamMembers: (params?: any) => Promise<any>;
+  getASMTeamPerformance: (params?: { period?: string }) => Promise<any>;
+  getASMRecentActivity: (params?: { limit?: number; days?: number }) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -730,6 +741,98 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const getZonalRecentActivity = async (params?: { limit?: number; days?: number }): Promise<any> => {
+    try {
+      const result = await apiService.getZonalRecentActivity(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get Zonal recent activity:', error);
+      throw error;
+    }
+  };
+
+  // ==================== RSM MANAGEMENT ====================
+  const getRSMDashboardData = async (): Promise<any> => {
+    try {
+      const result = await apiService.getRSMDashboardData();
+      return result;
+    } catch (error) {
+      console.error('Failed to get RSM dashboard data:', error);
+      throw error;
+    }
+  };
+
+  const getRSMTeamMembers = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getRSMTeamMembers(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get RSM team members:', error);
+      throw error;
+    }
+  };
+
+  const getRSMTeamPerformance = async (params?: { period?: string }): Promise<any> => {
+    try {
+      const result = await apiService.getRSMTeamPerformance(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get RSM team performance:', error);
+      throw error;
+    }
+  };
+
+  const getRSMRecentActivity = async (params?: { limit?: number; days?: number }): Promise<any> => {
+    try {
+      const result = await apiService.getRSMRecentActivity(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get RSM recent activity:', error);
+      throw error;
+    }
+  };
+
+  // ==================== ASM MANAGEMENT ====================
+  const getASMDashboardData = async (): Promise<any> => {
+    try {
+      const result = await apiService.getASMDashboardData();
+      return result;
+    } catch (error) {
+      console.error('Failed to get ASM dashboard data:', error);
+      throw error;
+    }
+  };
+
+  const getASMTeamMembers = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getASMTeamMembers(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get ASM team members:', error);
+      throw error;
+    }
+  };
+
+  const getASMTeamPerformance = async (params?: { period?: string }): Promise<any> => {
+    try {
+      const result = await apiService.getASMTeamPerformance(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get ASM team performance:', error);
+      throw error;
+    }
+  };
+
+  const getASMRecentActivity = async (params?: { limit?: number; days?: number }): Promise<any> => {
+    try {
+      const result = await apiService.getASMRecentActivity(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get ASM recent activity:', error);
+      throw error;
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isAuthenticated,
@@ -802,7 +905,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getLowStockAlerts,
     // Zonal Management
     getZonalDashboardData,
-    getZonalTeamMembers
+    getZonalTeamMembers,
+    getZonalRecentActivity,
+    // RSM Management
+    getRSMDashboardData,
+    getRSMTeamMembers,
+    getRSMTeamPerformance,
+    getRSMRecentActivity,
+    // ASM Management
+    getASMDashboardData,
+    getASMTeamMembers,
+    getASMTeamPerformance,
+    getASMRecentActivity
   };
 
   return (

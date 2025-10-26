@@ -26,7 +26,7 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, getUsersByCompany, logout, getZonalDashboardData } = useAuth();
+  const { user, getUsersByCompany, logout, getZonalDashboardData, getZonalRecentActivity } = useAuth();
   const navigation = useNavigation();
   const [stats, setStats] = useState<DashboardStats>({
     totalRSMs: 0,
@@ -44,6 +44,7 @@ const DashboardHome = () => {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [topPerformers, setTopPerformers] = useState<any[]>([]);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   const fetchDashboardData = async () => {
     if (!user?.defaultCompany) {
@@ -76,6 +77,18 @@ const DashboardHome = () => {
         // Set additional data
         setTopPerformers(data.topPerformers || []);
         setRecentOrders(data.recentOrders || []);
+      }
+
+      // Fetch recent activity
+      try {
+        const activityResult = await getZonalRecentActivity({ limit: 10, days: 7 });
+        if (activityResult?.success && activityResult?.data?.activities) {
+          setRecentActivity(activityResult.data.activities);
+        }
+      } catch (activityError) {
+        console.error('Failed to fetch recent activity:', activityError);
+        // Don't show error for activity, just use empty array
+        setRecentActivity([]);
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
@@ -112,6 +125,26 @@ const DashboardHome = () => {
 
   const cancelLogout = () => {
     setShowLogoutModal(false);
+  };
+
+  // Helper function to format time ago
+  const formatTimeAgo = (timestamp: string | Date) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInSeconds = Math.floor((now.getTime() - time.getTime()) / 1000);
+
+    if (diffInSeconds < 60) {
+      return 'Just now';
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `${days} day${days > 1 ? 's' : ''} ago`;
+    }
   };
 
   const StatCard = ({ title, value, icon, color, onPress }: {
@@ -324,38 +357,28 @@ const DashboardHome = () => {
         <View style={styles.activitySection}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityCard}>
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#10B981' }]}>
-                <Ionicons name="checkmark" size={16} color="white" />
+            {recentActivity.length > 0 ? (
+              recentActivity.slice(0, 5).map((activity) => (
+                <View key={activity.id} style={styles.activityItem}>
+                  <View style={[styles.activityIcon, { backgroundColor: activity.color }]}>
+                    <Ionicons name={activity.icon as any} size={16} color="white" />
+                  </View>
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityTitle}>{activity.title}</Text>
+                    <Text style={styles.activityDescription}>{activity.description}</Text>
+                    <Text style={styles.activityTime}>
+                      {formatTimeAgo(activity.timestamp)}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.noActivityContainer}>
+                <Ionicons name="time-outline" size={32} color="#9CA3AF" />
+                <Text style={styles.noActivityText}>No recent activity</Text>
+                <Text style={styles.noActivitySubtext}>Activity from your team will appear here</Text>
               </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Order Completed</Text>
-                <Text style={styles.activityDescription}>Order #12345 has been completed</Text>
-                <Text style={styles.activityTime}>2 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#F59E0B' }]}>
-                <Ionicons name="person-add" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>New Team Member</Text>
-                <Text style={styles.activityDescription}>John Doe joined as ASM</Text>
-                <Text style={styles.activityTime}>4 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#3B82F6' }]}>
-                <Ionicons name="trending-up" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Sales Target Met</Text>
-                <Text style={styles.activityDescription}>Monthly target achieved</Text>
-                <Text style={styles.activityTime}>1 day ago</Text>
-              </View>
-            </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -797,6 +820,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  // No Activity styles
+  noActivityContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  noActivityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  noActivitySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
 });
 

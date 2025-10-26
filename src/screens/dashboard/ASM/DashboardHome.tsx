@@ -13,6 +13,8 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import { ASMStackParamList } from '../../../navigation/types';
 import GlobalFAB from './GlobalFAB';
 
 interface DashboardStats {
@@ -27,8 +29,8 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, getUsersByCompany, logout } = useAuth();
-  const navigation = useNavigation();
+  const { user, getUsersByCompany, logout, getASMDashboardData, getASMRecentActivity } = useAuth();
+  const navigation = useNavigation<StackNavigationProp<ASMStackParamList>>();
   const [stats, setStats] = useState<DashboardStats>({
     totalSalesmen: 0,
     totalDealers: 0,
@@ -42,6 +44,8 @@ const DashboardHome = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   const fetchDashboardData = async () => {
     if (!user?.defaultCompany) {
@@ -52,30 +56,36 @@ const DashboardHome = () => {
     try {
       setLoading(true);
       
-      // Fetch user counts for each role under ASM
-      const roles = ['salesman', 'dealers', 'distibutors'];
-      const roleCounts: {[key: string]: number} = {};
+      // Fetch ASM dashboard data
+      const result = await getASMDashboardData();
       
-      for (const role of roles) {
-        try {
-          const result = await getUsersByCompany({ role, limit: 1 });
-          roleCounts[role] = result?.pagination?.totalUsers || 0;
-        } catch (err) {
-          console.error(`Failed to fetch ${role} users:`, err);
-          roleCounts[role] = 0;
-        }
+      if (result?.success && result?.data) {
+        const data = result.data;
+        setDashboardData(data);
+        
+        // Update stats with real data
+        setStats({
+          totalSalesmen: data.teamOverview.roleCounts.salesman || 0,
+          totalDealers: data.teamOverview.roleCounts.dealers || 0,
+          totalDistributors: data.teamOverview.roleCounts.distibutors || 0,
+          totalSales: data.salesSummary.totalSales || 0,
+          pendingOrders: data.salesSummary.pendingOrders || 0,
+          completedOrders: data.salesSummary.completedOrders || 0,
+          targetAchievement: 78, // TODO: Calculate from actual target data
+          activeCustomers: data.teamOverview.activeMembers || 0,
+        });
       }
 
-      setStats({
-        totalSalesmen: roleCounts.salesman || 0,
-        totalDealers: roleCounts.dealers || 0,
-        totalDistributors: roleCounts.distibutors || 0,
-        totalSales: 45000, // Mock data - replace with actual API
-        pendingOrders: 5, // Mock data - replace with actual API
-        completedOrders: 18, // Mock data - replace with actual API
-        targetAchievement: 85, // Mock data - replace with actual API
-        activeCustomers: 25, // Mock data - replace with actual API
-      });
+      // Fetch recent activity
+      try {
+        const activityResult = await getASMRecentActivity({ limit: 10, days: 7 });
+        if (activityResult?.success && activityResult?.data?.activities) {
+          setRecentActivity(activityResult.data.activities);
+        }
+      } catch (activityError) {
+        console.error('Failed to fetch recent activity:', activityError);
+        setRecentActivity([]);
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
@@ -111,6 +121,17 @@ const DashboardHome = () => {
 
   const cancelLogout = () => {
     setShowLogoutModal(false);
+  };
+
+  const formatTimeAgo = (timestamp: string | Date) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
   const StatCard = ({ title, value, icon, color, onPress }: {
@@ -236,21 +257,21 @@ const DashboardHome = () => {
               description="Manage your team members"
               icon="people-outline"
               color="#F59E0B"
-              onPress={() => Alert.alert('Coming Soon', 'Team management feature will be available soon')}
+              onPress={() => navigation.navigate('TeamManagementScreen')}
             />
             <QuickActionCard
               title="Sales Report"
               description="View sales performance"
               icon="bar-chart-outline"
               color="#3B82F6"
-              onPress={() => Alert.alert('Coming Soon', 'Sales report feature will be available soon')}
+              onPress={() => navigation.navigate('SalesReportScreen')}
             />
             <QuickActionCard
               title="Orders"
               description="Manage orders"
               icon="list-outline"
               color="#EF4444"
-              onPress={() => Alert.alert('Coming Soon', 'Order management feature will be available soon')}
+              onPress={() => navigation.navigate('OrderManagementScreen')}
             />
             <QuickActionCard
               title="Pending Approvals"
@@ -260,11 +281,11 @@ const DashboardHome = () => {
               onPress={() => navigation.navigate('PendingApprovalsScreen')}
             />
             <QuickActionCard
-              title="Customers"
-              description="Manage customers"
-              icon="person-outline"
-              color="#8B5CF6"
-              onPress={() => Alert.alert('Coming Soon', 'Customer management feature will be available soon')}
+              title="Targets"
+              description="Set and track targets"
+              icon="target-outline"
+              color="#10B981"
+              onPress={() => navigation.navigate('TargetManagementScreen')}
             />
           </View>
         </View>
@@ -273,38 +294,28 @@ const DashboardHome = () => {
         <View style={styles.activitySection}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityCard}>
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#F59E0B' }]}>
-                <Ionicons name="checkmark" size={16} color="white" />
+            {recentActivity.length > 0 ? (
+              recentActivity.slice(0, 5).map((activity) => (
+                <View key={activity.id} style={styles.activityItem}>
+                  <View style={[styles.activityIcon, { backgroundColor: activity.color }]}>
+                    <Ionicons name={activity.icon as any} size={16} color="white" />
+                  </View>
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityTitle}>{activity.title}</Text>
+                    <Text style={styles.activityDescription}>{activity.description}</Text>
+                    <Text style={styles.activityTime}>
+                      {formatTimeAgo(activity.timestamp)}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.noActivityContainer}>
+                <Ionicons name="time-outline" size={32} color="#9CA3AF" />
+                <Text style={styles.noActivityText}>No recent activity</Text>
+                <Text style={styles.noActivitySubtext}>Activity from your team will appear here</Text>
               </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Order Completed</Text>
-                <Text style={styles.activityDescription}>Order #12345 has been completed</Text>
-                <Text style={styles.activityTime}>2 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#3B82F6' }]}>
-                <Ionicons name="person-add" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>New Customer</Text>
-                <Text style={styles.activityDescription}>ABC Store joined as dealer</Text>
-                <Text style={styles.activityTime}>4 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#10B981' }]}>
-                <Ionicons name="trending-up" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Sales Target Met</Text>
-                <Text style={styles.activityDescription}>Daily target achieved</Text>
-                <Text style={styles.activityTime}>1 day ago</Text>
-              </View>
-            </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -564,6 +575,22 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 10,
     color: '#9CA3AF',
+  },
+  noActivityContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  noActivityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  noActivitySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
   },
   // Modal styles
   modalOverlay: {

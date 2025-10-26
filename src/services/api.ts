@@ -937,6 +937,89 @@ class ApiService {
       this.handleApiError(error as AxiosError);
     }
   }
+
+  async getZonalRecentActivity(params?: { limit?: number; days?: number }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/zonal/recent-activity', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== RSM MANAGEMENT ====================
+  async getRSMDashboardData(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/rsm/dashboard');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getRSMTeamMembers(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/rsm/team', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getRSMTeamPerformance(params?: { period?: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/rsm/team-performance', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getRSMRecentActivity(params?: { limit?: number; days?: number }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/rsm/recent-activity', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== ASM MANAGEMENT ====================
+  async getASMDashboardData(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/asm/dashboard');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getASMTeamMembers(params?: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/asm/team', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getASMTeamPerformance(params?: { period?: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/asm/team-performance', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getASMRecentActivity(params?: { limit?: number; days?: number }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/asm/recent-activity', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
 }
 
 // Create and export a singleton instance

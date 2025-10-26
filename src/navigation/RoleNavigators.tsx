@@ -77,6 +77,10 @@ export function RSMNavigator() {
   return (
     <Stack.Navigator initialRouteName="DashboardRSM" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardRSM" component={DashboardRSM} />
+      <Stack.Screen name="TeamManagementScreen" component={TeamManagementScreen} />
+      <Stack.Screen name="SalesReportScreen" component={SalesReportScreen} />
+      <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
+      <Stack.Screen name="TargetManagementScreen" component={TargetManagementScreen} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="ASMScreen" component={ASMScreen} />
@@ -99,6 +103,10 @@ export function ASMNavigator() {
   return (
     <Stack.Navigator initialRouteName="DashboardASM" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardASM" component={DashboardASM} />
+      <Stack.Screen name="TeamManagementScreen" component={TeamManagementScreen} />
+      <Stack.Screen name="SalesReportScreen" component={SalesReportScreen} />
+      <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
+      <Stack.Screen name="TargetManagementScreen" component={TargetManagementScreen} />
       <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />

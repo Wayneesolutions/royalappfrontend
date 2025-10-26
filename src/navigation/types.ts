@@ -111,8 +111,12 @@ type ZonalStackParamList = {
 } & CommonStackParamList;
 
 // ==================== RSM SCREENS ====================
-type RSMStackParamList = {
+export type RSMStackParamList = {
   DashboardRSM: undefined;
+  TeamManagementScreen: undefined;
+  SalesReportScreen: undefined;
+  OrderManagementScreen: undefined;
+  TargetManagementScreen: undefined;
   ASMScreen: undefined;
   SalesScreen: undefined;
   DealerScreen: undefined;
@@ -126,8 +130,12 @@ type RSMStackParamList = {
 } & CommonStackParamList;
 
 // ==================== ASM SCREENS ====================
-type ASMStackParamList = {
+export type ASMStackParamList = {
   DashboardASM: undefined;
+  TeamManagementScreen: undefined;
+  SalesReportScreen: undefined;
+  OrderManagementScreen: undefined;
+  TargetManagementScreen: undefined;
   SalesScreen: undefined;
   DealerScreen: undefined;
   DistributorsScreen: undefined;
