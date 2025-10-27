@@ -9,41 +9,67 @@ import {
   Alert,
   RefreshControl,
   TextInput,
-  Modal,
   FlatList,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import OrderDetailsModal from '../../../components/OrderDetailsModal';
 
 interface Order {
   _id: string;
   orderNumber: string;
   customerName: string;
-  customerEmail: string;
-  customerMobile: string;
+  customerEmail?: string;
+  customerMobile?: string;
+  customerAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
   status: string;
   priority: string;
   totalAmount: number;
+  discountAmount?: number;
+  taxAmount?: number;
   finalAmount: number;
   orderDate: string;
-  deliveryDate: string;
+  deliveryDate?: string;
   paymentStatus: string;
-  paymentMethod: string;
+  paymentMethod?: string;
+  notes?: string;
   createdBy: {
     _id: string;
     name: string;
     role: string;
   };
+  approvedBy?: {
+    _id: string;
+    name: string;
+    role: string;
+  };
   items: Array<{
-    productId: string;
+    productId: {
+      _id: string;
+      productName: string;
+      productCode: string;
+      sellingPrice: number;
+      specifications?: string;
+      description?: string;
+      category?: string;
+      brand?: string;
+    };
     productName: string;
     productCode: string;
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    discount?: number;
+    tax?: number;
   }>;
-  approvalHistory: Array<{
+  approvalHistory?: Array<{
     approverId: string;
     approverName: string;
     approverRole: string;
@@ -51,6 +77,16 @@ interface Order {
     notes: string;
     timestamp: string;
   }>;
+  shippingAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
+  trackingNumber?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface OrderStats {
@@ -65,7 +101,7 @@ interface OrderStats {
 }
 
 const OrderManagementScreen = () => {
-  const { user, getOrders } = useAuth();
+  const { user, getOrders, getOrderById, updateOrderStatus } = useAuth();
   const navigation = useNavigation();
   
   const [orders, setOrders] = useState<Order[]>([]);
@@ -87,6 +123,7 @@ const OrderManagementScreen = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
@@ -129,8 +166,13 @@ const OrderManagementScreen = () => {
 
       const result = await getOrders(params);
       
+      console.log('🔍 Zonal: Orders API response:', result);
+      
       if (result?.success) {
         const newOrders = result.orders || [];
+        
+        console.log('📦 Zonal: Orders data:', newOrders);
+        console.log('📊 Zonal: Stats data:', result.stats);
         
         if (reset || page === 1) {
           setOrders(newOrders);
@@ -142,6 +184,7 @@ const OrderManagementScreen = () => {
         
         // Update stats from the result
         if (result.stats) {
+          console.log('✅ Zonal: Updating stats with:', result.stats);
           setOrderStats({
             totalOrders: result.stats.totalOrders || 0,
             pendingOrders: result.stats.pendingOrders || 0,
@@ -152,7 +195,11 @@ const OrderManagementScreen = () => {
             cancelledOrders: result.stats.cancelledOrders || 0,
             totalAmount: result.stats.totalAmount || 0,
           });
+        } else {
+          console.log('❌ Zonal: No stats data in response');
         }
+      } else {
+        console.log('❌ Zonal: API call failed:', result);
       }
     } catch (error) {
       console.error('Failed to fetch orders:', error);
@@ -164,8 +211,14 @@ const OrderManagementScreen = () => {
   };
 
   useEffect(() => {
+    console.log('🔍 Zonal: Component mounted, current orderStats:', orderStats);
     fetchOrders(1, true);
   }, [user?.defaultCompany, selectedStatus, selectedPriority, searchQuery]);
+
+  // Debug log for orderStats changes
+  useEffect(() => {
+    console.log('📊 Zonal: OrderStats updated:', orderStats);
+  }, [orderStats]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -198,9 +251,49 @@ const OrderManagementScreen = () => {
     setCurrentPage(1);
   };
 
-  const handleViewOrderDetails = (order: Order) => {
-    setSelectedOrder(order);
-    setShowOrderDetails(true);
+  const handleViewOrderDetails = async (order: Order) => {
+    try {
+      setLoadingOrderDetails(order._id);
+      console.log('🔍 Zonal: Fetching order details for ID:', order._id);
+      const response = await getOrderById(order._id);
+      console.log('📦 Zonal: Order details response:', response);
+      
+      if (response?.success && response?.order) {
+        console.log('✅ Zonal: Order details loaded successfully:', response.order._id);
+        setSelectedOrder(response.order);
+        setShowOrderDetails(true);
+      } else {
+        console.error('❌ Zonal: Failed to load order details - invalid response:', response);
+        Alert.alert('Error', 'Failed to load order details');
+      }
+    } catch (error) {
+      console.error('❌ Zonal: Error fetching order details:', error);
+      Alert.alert('Error', 'Failed to load order details');
+    } finally {
+      setLoadingOrderDetails(null);
+    }
+  };
+
+  const handleOrderStatusUpdate = async (orderId: string, newStatus: string) => {
+    try {
+      const response = await updateOrderStatus(orderId, {
+        status: newStatus,
+        notes: `Status updated by Zonal Manager`
+      });
+      
+      if (response?.success) {
+        Alert.alert('Success', 'Order status updated successfully');
+        // Refresh the orders list
+        fetchOrders(1, true);
+        setShowOrderDetails(false);
+        setSelectedOrder(null);
+      } else {
+        Alert.alert('Error', 'Failed to update order status');
+      }
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      Alert.alert('Error', 'Failed to update order status');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -237,20 +330,23 @@ const OrderManagementScreen = () => {
     });
   };
 
-  const renderStatCard = (title: string, value: string | number, icon: string, color: string, subtitle?: string) => (
-    <View style={[styles.statCard, { borderLeftColor: color }]}>
-      <View style={styles.statContent}>
-        <View style={[styles.statIcon, { backgroundColor: color }]}>
-          <Ionicons name={icon as any} size={20} color="white" />
-        </View>
-        <View style={styles.statInfo}>
-          <Text style={styles.statValue}>{value}</Text>
-          <Text style={styles.statTitle}>{title}</Text>
-          {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+  const renderStatCard = (title: string, value: string | number, icon: string, color: string, subtitle?: string) => {
+    console.log(`📊 Zonal: Rendering stat card - ${title}: ${value}`);
+    return (
+      <View style={[styles.statCard, { borderLeftColor: color }]}>
+        <View style={styles.statContent}>
+          <View style={[styles.statIcon, { backgroundColor: color }]}>
+            <Ionicons name={icon as any} size={20} color="white" />
+          </View>
+          <View style={styles.statInfo}>
+            <Text style={styles.statValue}>{value}</Text>
+            <Text style={styles.statTitle}>{title}</Text>
+            {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderOrderCard = ({ item }: { item: Order }) => (
     <TouchableOpacity
@@ -301,137 +397,28 @@ const OrderManagementScreen = () => {
           <Ionicons name="cube-outline" size={16} color="#6B7280" />
           <Text style={styles.orderItemsText}>{item.items.length} items</Text>
         </View>
-        <TouchableOpacity style={styles.viewDetailsBtn}>
-          <Text style={styles.viewDetailsText}>View Details</Text>
-          <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+        <TouchableOpacity 
+          style={styles.viewDetailsBtn}
+          onPress={() => handleViewOrderDetails(item)}
+          disabled={loadingOrderDetails === item._id}
+        >
+          {loadingOrderDetails === item._id ? (
+            <>
+              <ActivityIndicator size="small" color="#3B82F6" />
+              <Text style={styles.viewDetailsText}>Loading...</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.viewDetailsText}>View Details</Text>
+              <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 
-  const renderOrderDetails = () => (
-    <Modal
-      visible={showOrderDetails}
-      animationType="slide"
-      presentationStyle="pageSheet"
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Order Details</Text>
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={() => setShowOrderDetails(false)}
-          >
-            <Ionicons name="close" size={24} color="#6B7280" />
-          </TouchableOpacity>
-        </View>
-        
-        {selectedOrder && (
-          <ScrollView style={styles.modalContent}>
-            {/* Order Header */}
-            <View style={styles.detailCard}>
-              <View style={styles.detailHeader}>
-                <Text style={styles.detailOrderNumber}>{selectedOrder.orderNumber}</Text>
-                <View style={[styles.detailStatusBadge, { backgroundColor: getStatusColor(selectedOrder.status) }]}>
-                  <Text style={styles.detailStatusText}>{selectedOrder.status.toUpperCase()}</Text>
-                </View>
-              </View>
-              <Text style={styles.detailAmount}>{formatCurrency(selectedOrder.finalAmount)}</Text>
-            </View>
-
-            {/* Customer Information */}
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Customer Information</Text>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailInfoLabel}>Name</Text>
-                <Text style={styles.detailInfoValue}>{selectedOrder.customerName}</Text>
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailInfoLabel}>Email</Text>
-                <Text style={styles.detailInfoValue}>{selectedOrder.customerEmail}</Text>
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailInfoLabel}>Mobile</Text>
-                <Text style={styles.detailInfoValue}>{selectedOrder.customerMobile}</Text>
-              </View>
-            </View>
-
-            {/* Order Information */}
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Order Information</Text>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailInfoLabel}>Order Date</Text>
-                <Text style={styles.detailInfoValue}>{formatDate(selectedOrder.orderDate)}</Text>
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailInfoLabel}>Delivery Date</Text>
-                <Text style={styles.detailInfoValue}>{formatDate(selectedOrder.deliveryDate)}</Text>
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailInfoLabel}>Priority</Text>
-                <Text style={[styles.detailInfoValue, { color: getPriorityColor(selectedOrder.priority) }]}>
-                  {selectedOrder.priority.toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailInfoLabel}>Payment Status</Text>
-                <Text style={styles.detailInfoValue}>{selectedOrder.paymentStatus}</Text>
-              </View>
-            </View>
-
-            {/* Items */}
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Order Items</Text>
-              {selectedOrder.items.map((item, index) => (
-                <View key={index} style={styles.itemCard}>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.productName}</Text>
-                    <Text style={styles.itemCode}>{item.productCode}</Text>
-                  </View>
-                  <View style={styles.itemDetails}>
-                    <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
-                    <Text style={styles.itemPrice}>{formatCurrency(item.totalPrice)}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            {/* Created By */}
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Created By</Text>
-              <View style={styles.creatorCard}>
-                <View style={[styles.creatorAvatar, { backgroundColor: getRoleColor(selectedOrder.createdBy.role) }]}>
-                  <Text style={styles.creatorInitial}>{selectedOrder.createdBy.name.charAt(0)}</Text>
-                </View>
-                <View style={styles.creatorDetails}>
-                  <Text style={styles.creatorName}>{selectedOrder.createdBy.name}</Text>
-                  <Text style={styles.creatorRole}>{selectedOrder.createdBy.role}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Approval History */}
-            {selectedOrder.approvalHistory && selectedOrder.approvalHistory.length > 0 && (
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Approval History</Text>
-                {selectedOrder.approvalHistory.map((approval, index) => (
-                  <View key={index} style={styles.approvalCard}>
-                    <View style={styles.approvalHeader}>
-                      <Text style={styles.approvalApprover}>{approval.approverName}</Text>
-                      <Text style={styles.approvalAction}>{approval.action}</Text>
-                    </View>
-                    <Text style={styles.approvalRole}>{approval.approverRole}</Text>
-                    <Text style={styles.approvalNotes}>{approval.notes}</Text>
-                    <Text style={styles.approvalTime}>{formatDate(approval.timestamp)}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
-        )}
-      </View>
-    </Modal>
-  );
+  // Removed custom modal - now using OrderDetailsModal component
 
   if (loading && orders.length === 0) {
     return (
@@ -591,7 +578,16 @@ const OrderManagementScreen = () => {
         />
       </View>
 
-      {renderOrderDetails()}
+      <OrderDetailsModal
+        visible={showOrderDetails}
+        order={selectedOrder}
+        onClose={() => {
+          setShowOrderDetails(false);
+          setSelectedOrder(null);
+        }}
+        onStatusUpdate={handleOrderStatusUpdate}
+        canUpdateStatus={true}
+      />
     </View>
   );
 };
@@ -951,181 +947,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#6B7280',
-  },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  closeBtn: {
-    padding: 8,
-  },
-  modalContent: {
-    flex: 1,
-    padding: 20,
-  },
-  detailCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  detailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  detailOrderNumber: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  detailStatusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  detailStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'white',
-  },
-  detailAmount: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  detailSection: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  detailSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 16,
-  },
-  detailInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  detailInfoLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  detailInfoValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  itemCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  itemCode: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  itemDetails: {
-    alignItems: 'flex-end',
-  },
-  itemQuantity: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  creatorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  creatorDetails: {
-    marginLeft: 12,
-  },
-  approvalCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  approvalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  approvalApprover: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  approvalAction: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#3B82F6',
-  },
-  approvalRole: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  approvalNotes: {
-    fontSize: 12,
-    color: '#374151',
-    marginBottom: 4,
-  },
-  approvalTime: {
-    fontSize: 10,
-    color: '#9CA3AF',
   },
 });
 

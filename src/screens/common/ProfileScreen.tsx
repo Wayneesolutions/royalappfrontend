@@ -10,7 +10,6 @@ import {
   SafeAreaView,
   Alert,
   StatusBar,
-  Switch,
   Image
 } from 'react-native';
 import {
@@ -19,10 +18,6 @@ import {
   Phone,
   MapPin,
   Building2,
-  Lock,
-  Bell,
-  Globe,
-  Moon,
   LogOut,
   Edit2,
   Camera,
@@ -31,8 +26,7 @@ import {
   ChevronRight,
   Shield,
   HelpCircle,
-  Info,
-  Trash2
+  Info
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../navigation/types';
@@ -52,19 +46,6 @@ interface UserProfile {
   joinedDate: string;
 }
 
-interface Settings {
-  notifications: {
-    orderUpdates: boolean;
-    emailNotifications: boolean;
-    smsAlerts: boolean;
-    pushNotifications: boolean;
-  };
-  preferences: {
-    darkMode: boolean;
-    language: string;
-    currency: string;
-  };
-}
 
 // ==================== ROLE DISPLAY MAPPING ====================
 const ROLE_DISPLAY: Record<UserRole, string> = {
@@ -135,20 +116,6 @@ const ProfileScreen = () => {
     joinedDate: user?.joinedDate || '15 Jan 2024'
   });
 
-  const [settings, setSettings] = useState<Settings>({
-    notifications: {
-      orderUpdates: true,
-      emailNotifications: true,
-      smsAlerts: false,
-      pushNotifications: true
-    },
-    preferences: {
-      darkMode: false,
-      language: 'English',
-      currency: 'INR (₹)'
-    }
-  });
-
   const roleBasedStats = getRoleBasedStats(user?.role || UserRole.ADMIN);
 
   const handleLogout = () => {
@@ -168,21 +135,6 @@ const ProfileScreen = () => {
     );
   };
 
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => Alert.alert('Account Deleted', 'Your account has been deleted.')
-        }
-      ]
-    );
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -190,11 +142,8 @@ const ProfileScreen = () => {
       {currentView === 'main' && (
         <MainProfileView
           profile={profile}
-          settings={settings}
           roleBasedStats={roleBasedStats}
           onEdit={() => setCurrentView('edit')}
-          onSettings={() => setCurrentView('settings')}
-          onSecurity={() => setCurrentView('security')}
           onLogout={handleLogout}
         />
       )}
@@ -210,24 +159,6 @@ const ProfileScreen = () => {
           }}
         />
       )}
-
-      {currentView === 'settings' && (
-        <SettingsView
-          settings={settings}
-          onBack={() => setCurrentView('main')}
-          onUpdate={(updatedSettings:any) => {
-            setSettings(updatedSettings);
-            Alert.alert('Success', 'Settings updated successfully!');
-          }}
-        />
-      )}
-
-      {currentView === 'security' && (
-        <SecurityView
-          onBack={() => setCurrentView('main')}
-          onDeleteAccount={handleDeleteAccount}
-        />
-      )}
     </SafeAreaView>
   );
 };
@@ -235,19 +166,13 @@ const ProfileScreen = () => {
 // ==================== MAIN PROFILE VIEW ====================
 const MainProfileView = ({
   profile,
-  settings,
   roleBasedStats,
   onEdit,
-  onSettings,
-  onSecurity,
   onLogout
 }: {
   profile: UserProfile;
-  settings: Settings;
   roleBasedStats: Array<{ label: string; value: string }>;
   onEdit: () => void;
-  onSettings: () => void;
-  onSecurity: () => void;
   onLogout: () => void;
 }) => {
   return (
@@ -304,37 +229,6 @@ const MainProfileView = ({
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Settings</Text>
-          <View style={styles.menuCard}>
-            <MenuButton
-              icon={Bell}
-              title="Notifications"
-              subtitle="Manage notification preferences"
-              onPress={onSettings}
-            />
-            <MenuButton
-              icon={Lock}
-              title="Security"
-              subtitle="Password and authentication"
-              onPress={onSecurity}
-            />
-            <MenuButton
-              icon={Globe}
-              title="Language & Region"
-              subtitle={settings.preferences.language}
-              onPress={onSettings}
-            />
-            <MenuButton
-              icon={Moon}
-              title="Dark Mode"
-              subtitle={settings.preferences.darkMode ? 'Enabled' : 'Disabled'}
-              onPress={onSettings}
-              isLast
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           <View style={styles.menuCard}>
             <MenuButton
@@ -372,23 +266,212 @@ const MainProfileView = ({
 // [Keep the same styles]
 
 const EditProfileView = ({ profile, onBack, onSave }: any) => {
-  const [formData, setFormData] = useState(profile);
-  const handleSave = () => {
+  const [formData, setFormData] = useState({
+    name: profile.name,
+    email: profile.email,
+    phone: profile.phone,
+    address: profile.address,
+    city: profile.city,
+    state: profile.state,
+    pincode: profile.pincode,
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSave = async () => {
     if (!formData.name || !formData.email || !formData.phone) {
       Alert.alert('Error', 'Please fill all required fields');
       return;
     }
-    onSave(formData);
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    // Phone validation
+    const phoneRegex = /^[\+]?[0-9\s\-\(\)]{10,}$/;
+    if (!phoneRegex.test(formData.phone)) {
+      Alert.alert('Error', 'Please enter a valid phone number');
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const updatedProfile = {
+        ...profile,
+        ...formData,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&size=200&background=2563eb&color=fff`
+      };
+      
+      onSave(updatedProfile);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-  return <View style={styles.mainContainer}><Text>Edit Profile View</Text></View>;
-};
 
-const SettingsView = ({ settings, onBack, onUpdate }: any) => {
-  return <View style={styles.mainContainer}><Text>Settings View</Text></View>;
-};
+  return (
+    <View style={styles.mainContainer}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <ChevronRight size={20} color="#111827" style={{ transform: [{ rotate: '180deg' }] }} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <TouchableOpacity 
+          style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]} 
+          onPress={handleSave}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.saveButtonText}>
+            {isSubmitting ? 'Saving...' : 'Save'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-const SecurityView = ({ onBack, onDeleteAccount }: any) => {
-  return <View style={styles.mainContainer}><Text>Security View</Text></View>;
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Profile Picture Section */}
+        <View style={styles.editProfileCard}>
+          <View style={styles.editAvatarContainer}>
+            <Image source={{ uri: profile.avatar }} style={styles.editAvatar} />
+            <TouchableOpacity style={styles.editCameraButton}>
+              <Camera size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.editProfileName}>{profile.name}</Text>
+          <Text style={styles.editProfileRole}>{profile.role}</Text>
+        </View>
+
+        {/* Form Fields */}
+        <View style={styles.formSection}>
+          <Text style={styles.formSectionTitle}>Personal Information</Text>
+          
+          <View style={styles.formCard}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Full Name *</Text>
+              <View style={styles.inputContainer}>
+                <User size={20} color="#9ca3af" />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter your full name"
+                  value={formData.name}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Email Address *</Text>
+              <View style={styles.inputContainer}>
+                <Mail size={20} color="#9ca3af" />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter your email"
+                  value={formData.email}
+                  onChangeText={(text) => setFormData({ ...formData, email: text })}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Phone Number *</Text>
+              <View style={styles.inputContainer}>
+                <Phone size={20} color="#9ca3af" />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter your phone number"
+                  value={formData.phone}
+                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.formSection}>
+          <Text style={styles.formSectionTitle}>Address Information</Text>
+          
+          <View style={styles.formCard}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Address</Text>
+              <View style={styles.inputContainer}>
+                <MapPin size={20} color="#9ca3af" />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter your address"
+                  value={formData.address}
+                  onChangeText={(text) => setFormData({ ...formData, address: text })}
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, styles.inputGroupHalf]}>
+                <Text style={styles.inputLabel}>City</Text>
+                <View style={styles.inputContainer}>
+                  <MapPin size={20} color="#9ca3af" />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="City"
+                    value={formData.city}
+                    onChangeText={(text) => setFormData({ ...formData, city: text })}
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.inputGroup, styles.inputGroupHalf]}>
+                <Text style={styles.inputLabel}>State</Text>
+                <View style={styles.inputContainer}>
+                  <MapPin size={20} color="#9ca3af" />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="State"
+                    value={formData.state}
+                    onChangeText={(text) => setFormData({ ...formData, state: text })}
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Pincode</Text>
+              <View style={styles.inputContainer}>
+                <MapPin size={20} color="#9ca3af" />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter pincode"
+                  value={formData.pincode}
+                  onChangeText={(text) => setFormData({ ...formData, pincode: text })}
+                  keyboardType="numeric"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>* Required fields</Text>
+        </View>
+      </ScrollView>
+    </View>
+  );
 };
 
 const InfoRow = ({ icon: Icon, label, value, isLast = false }: any) => (
@@ -538,6 +621,117 @@ const styles = StyleSheet.create({
   logoutText: { fontSize: 15, fontWeight: '600', color: '#dc2626' },
   footer: { alignItems: 'center', paddingBottom: 32 },
   footerText: { fontSize: 12, color: '#9ca3af' },
+  
+  // Edit Profile Styles
+  backButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  saveButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  editProfileCard: {
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  editAvatarContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  editAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#e5e7eb',
+  },
+  editCameraButton: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#2563eb',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  editProfileName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  editProfileRole: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  formSection: {
+    marginBottom: 12,
+  },
+  formSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  formCard: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputGroupHalf: {
+    flex: 1,
+    marginRight: 8,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+    marginLeft: 8,
+  },
 });
 
 export default ProfileScreen;

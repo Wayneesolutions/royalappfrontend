@@ -196,23 +196,23 @@ const Users = () => {
   const handleDeleteUser = (userToDelete: User) => {
     Alert.alert(
       "Delete User",
-      `Are you sure you want to remove ${userToDelete.name} from your company?`,
+      `Are you sure you want to permanently delete ${userToDelete.name}?\n\nThis action cannot be undone and will:\n• Remove the user from all companies\n• Delete all user data\n• Remove access to the system\n\nUser Details:\n• Name: ${userToDelete.name}\n• Email: ${userToDelete.email || 'N/A'}\n• Role: ${userToDelete.role.toUpperCase()}\n• Company: ${userToDelete.companies[0]?.companyId?.companyName || 'N/A'}`,
       [
         {
           text: "Cancel",
           style: "cancel"
         },
         {
-          text: "Delete",
+          text: "Delete User",
           style: "destructive",
           onPress: async () => {
             try {
               await deleteUser(userToDelete._id);
-              Alert.alert("Success", "User removed from company successfully!");
+              Alert.alert("Success", `${userToDelete.name} has been deleted successfully!`);
               fetchUsers(); // Refresh the list
-            } catch (err) {
+            } catch (err: any) {
               console.error('Failed to delete user:', err);
-              Alert.alert("Error", "Failed to delete user. Please try again.");
+              Alert.alert("Error", err.message || "Failed to delete user. Please try again.");
             }
           }
         }

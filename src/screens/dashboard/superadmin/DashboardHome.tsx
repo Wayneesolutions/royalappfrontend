@@ -55,25 +55,39 @@ interface MenuItem {
 
 const SuperAdminDashboard = () => {
     const navigation = useNavigation<NavigationProps>();
-    const { roleSpecificData } = useAuth();
+    const { roleSpecificData, superadminGetSystemStats } = useAuth();
     const [totalCompanies, setTotalCompanies] = React.useState<number | undefined>(roleSpecificData?.dashboard?.totalCompanies);
     const [totalAdmins, setTotalAdmins] = React.useState<number | undefined>(roleSpecificData?.dashboard?.totalAdmins);
+    const [totalSales, setTotalSales] = React.useState<number | undefined>(undefined);
+    const [totalOrders, setTotalOrders] = React.useState<number | undefined>(undefined);
 
     // Fetch live counts from backend to avoid stale values from login payload
     React.useEffect(() => {
         (async () => {
             try {
-                const companiesRes = await apiService.superadminListCompanies({ page: 1, limit: 1 });
-                if (companiesRes?.success && companiesRes.data?.pagination?.totalCompanies !== undefined) {
-                    setTotalCompanies(companiesRes.data.pagination.totalCompanies);
+                const systemStatsRes = await superadminGetSystemStats();
+                if (systemStatsRes?.success && systemStatsRes.data) {
+                    setTotalCompanies(systemStatsRes.data.totalCompanies);
+                    setTotalAdmins(systemStatsRes.data.totalAdmins);
+                    setTotalSales(systemStatsRes.data.totalSales);
+                    setTotalOrders(systemStatsRes.data.totalOrders);
                 }
-            } catch {}
-            try {
-                const adminsRes = await apiService.superadminListAdmins({ page: 1, limit: 1 });
-                if (adminsRes?.success && adminsRes.data?.pagination?.totalAdmins !== undefined) {
-                    setTotalAdmins(adminsRes.data.pagination.totalAdmins);
-                }
-            } catch {}
+            } catch (error) {
+                console.error('Failed to fetch system stats:', error);
+                // Fallback to individual API calls
+                try {
+                    const companiesRes = await apiService.superadminListCompanies({ page: 1, limit: 1 });
+                    if (companiesRes?.success && companiesRes.data?.pagination?.totalCompanies !== undefined) {
+                        setTotalCompanies(companiesRes.data.pagination.totalCompanies);
+                    }
+                } catch {}
+                try {
+                    const adminsRes = await apiService.superadminListAdmins({ page: 1, limit: 1 });
+                    if (adminsRes?.success && adminsRes.data?.pagination?.totalAdmins !== undefined) {
+                        setTotalAdmins(adminsRes.data.pagination.totalAdmins);
+                    }
+                } catch {}
+            }
         })();
     }, []);
 
@@ -96,15 +110,15 @@ const SuperAdminDashboard = () => {
         },
         {
             label: 'Total Sales',
-            value: '—',
+            value: typeof totalSales === 'number' ? `₹${totalSales.toLocaleString()}` : '--',
             icon: 'trending-up',
             iconType: 'Ionicons',
             color: '#8B5CF6',
             change: '',
         },
         {
-            label: 'Pending Orders',
-            value: '—',
+            label: 'Total Orders',
+            value: typeof totalOrders === 'number' ? String(totalOrders) : '--',
             icon: 'cube-outline',
             iconType: 'Ionicons',
             color: '#F59E0B',
@@ -237,7 +251,11 @@ const SuperAdminDashboard = () => {
     );
 
     const renderCompanyCard = ({ item }: { item: Company }) => (
-        <View style={styles.companyCard}>
+        <TouchableOpacity 
+            style={styles.companyCard}
+            onPress={() => navigation.navigate('CompaniesListScreen')}
+            activeOpacity={0.7}
+        >
             <View style={styles.companyHeader}>
                 <View style={styles.companyIconContainer}>
                     <Ionicons name="business" size={20} color="#3B82F6" />
@@ -262,6 +280,8 @@ const SuperAdminDashboard = () => {
                     <Text style={styles.detailValue}>{item.phone}</Text>
                 </View>
                 <View style={styles.divider} />
+                
+                {/* Enhanced Metrics Row */}
                 <View style={styles.metricsRow}>
                     <View style={styles.metric}>
                         <Ionicons name="trending-up" size={16} color="#10B981" />
@@ -279,12 +299,58 @@ const SuperAdminDashboard = () => {
                         <Text style={styles.metricLabel}>Users</Text>
                     </View>
                 </View>
+
+                {/* Additional Metrics Row */}
+                <View style={styles.metricsRow}>
+                    <View style={styles.metric}>
+                        <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
+                        <Text style={styles.metricValue}>{Math.floor(item.orders * 0.2)}</Text>
+                        <Text style={styles.metricLabel}>Pending</Text>
+                    </View>
+                    <View style={styles.metric}>
+                        <Ionicons name="checkmark-circle-outline" size={16} color="#10B981" />
+                        <Text style={styles.metricValue}>{Math.floor(item.orders * 0.8)}</Text>
+                        <Text style={styles.metricLabel}>Completed</Text>
+                    </View>
+                    <View style={styles.metric}>
+                        <Ionicons name="person-outline" size={16} color="#8B5CF6" />
+                        <Text style={styles.metricValue}>{Math.floor(item.users * 0.7)}/{item.users}</Text>
+                        <Text style={styles.metricLabel}>Active</Text>
+                    </View>
+                </View>
+
+                {/* Performance Indicator */}
+                <View style={styles.performanceContainer}>
+                    <View style={styles.performanceHeader}>
+                        <Ionicons name="analytics-outline" size={14} color="#6B7280" />
+                        <Text style={styles.performanceLabel}>Performance</Text>
+                    </View>
+                    <View style={styles.performanceBar}>
+                        <View style={[
+                            styles.performanceFill, 
+                            { 
+                                width: `${Math.min(100, Math.max(0, 
+                                    (Math.floor(item.users * 0.7) / Math.max(1, item.users)) * 50 +
+                                    (Math.floor(item.orders * 0.8) / Math.max(1, item.orders)) * 50
+                                ))}%`,
+                                backgroundColor: item.orders > 0 ? '#10B981' : '#6B7280'
+                            }
+                        ]} />
+                    </View>
+                    <Text style={styles.performanceScore}>
+                        {Math.round(
+                            (Math.floor(item.users * 0.7) / Math.max(1, item.users)) * 50 +
+                            (Math.floor(item.orders * 0.8) / Math.max(1, item.orders)) * 50
+                        )}%
+                    </Text>
+                </View>
+
                 <View style={styles.syncInfo}>
                     <MaterialCommunityIcons name="database-sync" size={14} color="#8B5CF6" />
                     <Text style={styles.syncText}>Last sync: {item.lastSync}</Text>
                 </View>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 
     const renderMenuItem = ({ item }: { item: MenuItem }) => (
@@ -361,19 +427,6 @@ const SuperAdminDashboard = () => {
                     </View>
                 </View>
 
-                {/* Companies Overview */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Companies Overview</Text>
-                        <Text style={styles.sectionCount}>{companyData.length} Companies</Text>
-                    </View>
-                    <FlatList
-                        data={companyData}
-                        renderItem={renderCompanyCard}
-                        keyExtractor={(item) => item.id}
-                        scrollEnabled={false}
-                    />
-                </View>
             </ScrollView>
         </View>
     );
@@ -641,6 +694,41 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#7C3AED',
         marginLeft: 6,
+    },
+    performanceContainer: {
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        padding: 12,
+        marginTop: 12,
+        marginBottom: 8,
+    },
+    performanceHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+        gap: 6,
+    },
+    performanceLabel: {
+        fontSize: 11,
+        color: '#6B7280',
+        fontWeight: '500',
+    },
+    performanceBar: {
+        height: 4,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 2,
+        overflow: 'hidden',
+        marginBottom: 6,
+    },
+    performanceFill: {
+        height: '100%',
+        borderRadius: 2,
+    },
+    performanceScore: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#111827',
+        textAlign: 'center',
     },
 });
 

@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../../context/AuthContext";
 import { useNavigation } from "@react-navigation/native";
+import OrderDetailsModal from "../../../../components/OrderDetailsModal";
 
 interface Order {
   _id: string;
@@ -21,21 +22,63 @@ interface Order {
   customerName: string;
   customerEmail: string;
   customerMobile: string;
+  customerAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
   status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
   finalAmount: number;
+  totalAmount?: number;
+  discountAmount?: number;
+  taxAmount?: number;
   orderDate: string;
+  deliveryDate?: string;
   items: Array<{
+    productId: string | {
+      _id: string;
+      productName: string;
+      productCode: string;
+      sellingPrice: number;
+      specifications?: any;
+      description?: string;
+      category?: string;
+      brand?: string;
+    };
     productName: string;
+    productCode?: string;
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    discount?: number;
+    tax?: number;
   }>;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   paymentStatus: 'pending' | 'partial' | 'paid' | 'refunded';
+  paymentMethod?: string;
+  notes?: string;
+  createdBy?: {
+    name: string;
+    role: string;
+  };
+  approvedBy?: {
+    name: string;
+    role: string;
+  };
+  trackingNumber?: string;
+  shippingAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
 }
 
 const SalesOrders = () => {
-  const { getOrders, updateOrderStatus } = useAuth(); // Removed deleteOrder for admin monitoring
+  const { getOrders, updateOrderStatus, getOrderById } = useAuth(); // Added getOrderById
   const navigation = useNavigation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +89,9 @@ const SalesOrders = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [newStatus, setNewStatus] = useState('');
   const [statusNotes, setStatusNotes] = useState('');
+  const [showOrderDetails, setShowOrderDetails] = useState(false);
+  const [orderForDetails, setOrderForDetails] = useState<Order | null>(null);
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     try {
@@ -145,6 +191,47 @@ const SalesOrders = () => {
     }
   };
 
+  const handleViewDetails = async (order: Order) => {
+    try {
+      setLoadingOrderDetails(order._id);
+      console.log('🔍 Fetching order details for ID:', order._id);
+      const response = await getOrderById(order._id);
+      console.log('📦 Order details response:', response);
+      
+      if (response?.success && response?.order) {
+        console.log('✅ Order details loaded successfully:', response.order._id);
+        setOrderForDetails(response.order);
+        setShowOrderDetails(true);
+      } else {
+        console.error('❌ Failed to load order details - invalid response:', response);
+        Alert.alert('Error', 'Failed to load order details');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching order details:', error);
+      Alert.alert('Error', 'Failed to load order details');
+    } finally {
+      setLoadingOrderDetails(null);
+    }
+  };
+
+  const handleOrderStatusUpdate = async (orderId: string, newStatus: string) => {
+    try {
+      const response = await updateOrderStatus(orderId, {
+        status: newStatus,
+        notes: ''
+      });
+      if (response?.success) {
+        Alert.alert('Success', 'Order status updated successfully');
+        fetchOrders(); // Refresh orders
+      } else {
+        Alert.alert('Error', response?.message || 'Failed to update order status');
+      }
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      Alert.alert('Error', 'Failed to update order status');
+    }
+  };
+
   // Admin can only monitor orders, not delete them
 
   const renderOrderItem = ({ item }: { item: Order }) => (
@@ -201,6 +288,21 @@ const SalesOrders = () => {
       </View>
 
       <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.viewButton]}
+          onPress={() => handleViewDetails(item)}
+          disabled={loadingOrderDetails === item._id}
+        >
+          {loadingOrderDetails === item._id ? (
+            <ActivityIndicator size="small" color="#10B981" />
+          ) : (
+            <Ionicons name="eye-outline" size={16} color="#10B981" />
+          )}
+          <Text style={styles.actionButtonText}>
+            {loadingOrderDetails === item._id ? 'Loading...' : 'View Details'}
+          </Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity
           style={[styles.actionButton, styles.statusButton]}
           onPress={() => {
@@ -361,6 +463,18 @@ const SalesOrders = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        visible={showOrderDetails}
+        order={orderForDetails}
+        onClose={() => {
+          setShowOrderDetails(false);
+          setOrderForDetails(null);
+        }}
+        onStatusUpdate={handleOrderStatusUpdate}
+        canUpdateStatus={true}
+      />
     </View>
   );
 };
@@ -559,6 +673,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#EBF4FF',
     borderWidth: 1,
     borderColor: '#3B82F6',
+  },
+  viewButton: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#10B981',
   },
   deleteButton: {
     backgroundColor: '#FEF2F2',

@@ -64,15 +64,31 @@ const DashboardHome = () => {
         setDashboardData(data);
         
         // Update stats with real data
+        const teamOverview = data.teamOverview || {};
+        const salesSummary = data.salesSummary || {};
+        const roleCounts = teamOverview.roleCounts || {};
+        
         setStats({
-          totalSalesmen: data.teamOverview.roleCounts.salesman || 0,
-          totalDealers: data.teamOverview.roleCounts.dealers || 0,
-          totalDistributors: data.teamOverview.roleCounts.distibutors || 0,
-          totalSales: data.salesSummary.totalSales || 0,
-          pendingOrders: data.salesSummary.pendingOrders || 0,
-          completedOrders: data.salesSummary.completedOrders || 0,
+          totalSalesmen: roleCounts.salesman || 0,
+          totalDealers: roleCounts.dealers || 0,
+          totalDistributors: roleCounts.distibutors || 0,
+          totalSales: salesSummary.totalSales || 0,
+          pendingOrders: salesSummary.pendingOrders || 0,
+          completedOrders: salesSummary.completedOrders || 0,
           targetAchievement: 78, // TODO: Calculate from actual target data
-          activeCustomers: data.teamOverview.activeMembers || 0,
+          activeCustomers: teamOverview.activeMembers || 0,
+        });
+      } else {
+        // Fallback to basic stats if API fails
+        setStats({
+          totalSalesmen: 0,
+          totalDealers: 0,
+          totalDistributors: 0,
+          totalSales: 0,
+          pendingOrders: 0,
+          completedOrders: 0,
+          targetAchievement: 0,
+          activeCustomers: 0,
         });
       }
 
@@ -88,7 +104,20 @@ const DashboardHome = () => {
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      Alert.alert('Error', 'Failed to load dashboard data');
+      
+      // Set fallback stats on error
+      setStats({
+        totalSalesmen: 0,
+        totalDealers: 0,
+        totalDistributors: 0,
+        totalSales: 0,
+        pendingOrders: 0,
+        completedOrders: 0,
+        targetAchievement: 0,
+        activeCustomers: 0,
+      });
+      
+      Alert.alert('Error', 'Failed to load dashboard data. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -195,9 +224,11 @@ const DashboardHome = () => {
               <Text style={styles.userName}>{user?.name || 'ASM'}</Text>
               <Text style={styles.userRole}>Area Sales Manager</Text>
             </View>
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={24} color="#EF4444" />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <Ionicons name="log-out-outline" size={24} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.companyInfo}>
             <Text style={styles.companyName}>{user?.defaultCompany?.companyName || 'Company'}</Text>
@@ -208,6 +239,29 @@ const DashboardHome = () => {
         {/* Stats Overview */}
         <View style={styles.statsSection}>
           <Text style={styles.sectionTitle}>Area Overview</Text>
+          
+          {/* Show message if no team members */}
+          {stats.totalSalesmen === 0 && stats.totalDealers === 0 && stats.totalDistributors === 0 && (
+            <View style={styles.emptyTeamContainer}>
+              <Ionicons name="people-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyTeamTitle}>No Team Members Assigned</Text>
+              <Text style={styles.emptyTeamSubtitle}>
+                Contact your administrator to assign team members to your area, or check if team members are properly linked to your account.
+              </Text>
+              <TouchableOpacity 
+                style={styles.contactAdminButton}
+                onPress={() => Alert.alert(
+                  'Contact Administrator', 
+                  'Please contact your system administrator to:\n\n1. Assign team members to your area\n2. Set up proper reporting relationships\n3. Configure user roles and permissions',
+                  [{ text: 'OK' }]
+                )}
+              >
+                <Ionicons name="mail-outline" size={16} color="#F59E0B" />
+                <Text style={styles.contactAdminText}>Contact Administrator</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
           <View style={styles.statsGrid}>
             <StatCard
               title="Salesmen"
@@ -401,11 +455,14 @@ const styles = StyleSheet.create({
   welcomeSection: {
     flex: 1,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   logoutButton: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    marginLeft: 16,
   },
   welcomeText: {
     fontSize: 16,
@@ -450,6 +507,46 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1F2937',
     marginBottom: 16,
+  },
+  emptyTeamContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  emptyTeamTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  emptyTeamSubtitle: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  contactAdminButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  contactAdminText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F59E0B',
+    marginLeft: 6,
   },
   statsGrid: {
     flexDirection: 'row',

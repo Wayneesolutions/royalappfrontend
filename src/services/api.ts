@@ -207,6 +207,33 @@ class ApiService {
     }
   }
 
+  async superadminGetCompanyDetails(companyId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/superadmin/company/${companyId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminUpdateCompany(companyId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/superadmin/update-company/${companyId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminGetSystemStats(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/superadmin/system-stats`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   async superadminCreateAdmin(data: CreateAdminRequest): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/superadmin/create-admin', data);
@@ -225,9 +252,104 @@ class ApiService {
     }
   }
 
+  async superadminUpdateAdmin(adminId: string, data: { name: string; email: string; mobile: string; password?: string; companyId?: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/superadmin/update-admin/${adminId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   async superadminAssignCompanyToAdmin(adminId: string, data: { companyId: string; setAsDefault?: boolean }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/superadmin/assign-company/${adminId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminGetSalesReport(params?: { 
+    period?: string; 
+    companyId?: string; 
+    startDate?: string; 
+    endDate?: string 
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/superadmin/sales-report', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminExportSalesReport(params?: { 
+    format?: string; 
+    period?: string 
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/superadmin/sales-report/export', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // Super Admin Outstanding Management
+  async superadminGetOutstandingSummary(params?: {
+    companyId?: string;
+    status?: string;
+    riskLevel?: string;
+    daysOverdue?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/superadmin/outstanding-summary', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminGetOutstandingList(params?: {
+    page?: number;
+    limit?: number;
+    companyId?: string;
+    status?: string;
+    riskLevel?: string;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/superadmin/outstanding-list', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminGetOutstandingDetails(outstandingId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/superadmin/outstanding/${outstandingId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminUpdateOutstanding(outstandingId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/superadmin/outstanding/${outstandingId}/update`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminAddCollectionNote(outstandingId: string, note: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/superadmin/outstanding/${outstandingId}/add-note`, { note });
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -308,6 +430,15 @@ class ApiService {
   }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put('/user/profile', userData);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async deleteUser(userId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.delete(`/user/delete/${userId}`);
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);

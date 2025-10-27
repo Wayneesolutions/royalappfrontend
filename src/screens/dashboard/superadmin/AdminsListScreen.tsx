@@ -10,13 +10,15 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
 import { apiService } from '../../../services/api';
-import { Alert } from 'react-native';
+import { useAuth } from '../../../context/AuthContext';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
 
@@ -34,8 +36,12 @@ interface Admin {
 
 const AdminsListScreen = () => {
   const navigation = useNavigation<NavigationProps>();
+  const { superadminUpdateAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -47,6 +53,8 @@ const AdminsListScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [companiesOptions, setCompaniesOptions] = useState<{ label: string; value: string; code?: string }[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [companySearchQuery, setCompanySearchQuery] = useState('');
 
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,6 +63,10 @@ const AdminsListScreen = () => {
     admin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     admin.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     admin.company.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredCompanies = companiesOptions.filter(company =>
+    company.label.toLowerCase().includes(companySearchQuery.toLowerCase())
   );
 
   const loadAdmins = async () => {
@@ -121,12 +133,101 @@ const AdminsListScreen = () => {
         setModalVisible(false);
         setFormData({ name: '', email: '', phone: '', password: '' });
         setSelectedCompanyId('');
+        setShowCompanyDropdown(false);
+        loadAdmins(); // Refresh the list
       } else {
         Alert.alert('Failed', res.message || 'Failed to create admin');
       }
     } catch (e:any) {
       Alert.alert('Error', e.message || 'Failed to create admin');
     }
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setFormData({ name: '', email: '', phone: '', password: '' });
+    setSelectedCompanyId('');
+    setShowCompanyDropdown(false);
+    setCompanySearchQuery('');
+  };
+
+  const handleEditAdmin = (admin: Admin) => {
+    setEditingAdmin(admin);
+    setFormData({
+      name: admin.name,
+      email: admin.email,
+      phone: admin.phone,
+      password: '', // Don't pre-fill password
+    });
+    // Find and set the company ID
+    const company = companiesOptions.find(c => c.label.includes(admin.company));
+    if (company) {
+      setSelectedCompanyId(company.value);
+    }
+    setEditModalVisible(true);
+  };
+
+  const handleUpdateAdmin = async () => {
+    if (!editingAdmin) return;
+
+    try {
+      setIsSubmitting(true);
+      
+      if (!formData.name || !formData.email || !formData.phone) {
+        Alert.alert('Validation', 'Please fill all required fields: Name, Email, Phone');
+        return;
+      }
+
+      // Password validation (only if provided)
+      if (formData.password && formData.password.length < 8) {
+        Alert.alert('Validation Error', 'Password must be at least 8 characters long');
+        return;
+      }
+
+      const updateData: any = {
+        name: formData.name,
+        email: formData.email,
+        mobile: formData.phone,
+      };
+
+      // Only include password if provided
+      if (formData.password.trim() !== '') {
+        updateData.password = formData.password;
+      }
+
+      // Only include companyId if changed
+      if (selectedCompanyId) {
+        updateData.companyId = selectedCompanyId;
+      }
+
+      const res = await superadminUpdateAdmin(editingAdmin.id, updateData);
+
+      if (res.success) {
+        Alert.alert('Success', 'Admin updated successfully');
+        setEditModalVisible(false);
+        setEditingAdmin(null);
+        setFormData({ name: '', email: '', phone: '', password: '' });
+        setSelectedCompanyId('');
+        setShowCompanyDropdown(false);
+        setCompanySearchQuery('');
+        loadAdmins(); // Refresh the list
+      } else {
+        Alert.alert('Failed', res.message || 'Failed to update admin');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update admin');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const closeEditModal = () => {
+    setEditModalVisible(false);
+    setEditingAdmin(null);
+    setFormData({ name: '', email: '', phone: '', password: '' });
+    setSelectedCompanyId('');
+    setShowCompanyDropdown(false);
+    setCompanySearchQuery('');
   };
 
   return (
@@ -216,6 +317,17 @@ const AdminsListScreen = () => {
               </View>
               <Text style={styles.createdText}>Created: {admin.createdAt}</Text>
             </View>
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => handleEditAdmin(admin)}
+              >
+                <Ionicons name="create-outline" size={16} color="#3B82F6" />
+                <Text style={styles.editButtonText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -225,7 +337,7 @@ const AdminsListScreen = () => {
         animationType="slide"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeModal}
       >
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -235,7 +347,7 @@ const AdminsListScreen = () => {
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add New Admin</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <TouchableOpacity onPress={closeModal}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
@@ -313,18 +425,87 @@ const AdminsListScreen = () => {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Assign to Company *</Text>
-              <View style={[styles.inputContainer, { paddingVertical: 8 }]}> 
-                <Ionicons name="business-outline" size={20} color="#9CA3AF" />
-                <ScrollView style={{ maxHeight: 160 }}>
-                  {companiesOptions.map(opt => (
-                    <TouchableOpacity key={opt.value} style={{ paddingVertical: 8 }} onPress={() => setSelectedCompanyId(opt.value)}>
-                      <Text style={{ color: selectedCompanyId === opt.value ? '#2563eb' : '#111827', fontWeight: selectedCompanyId === opt.value ? '700' : '500' }}>{opt.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              {!!selectedCompanyId && (
-                <Text style={{ color: '#6B7280', marginTop: 6 }}>Selected: {companiesOptions.find(c => c.value === selectedCompanyId)?.label}</Text>
+              <TouchableOpacity 
+                style={styles.dropdownContainer}
+                onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
+              >
+                <View style={styles.dropdownButton}>
+                  <Ionicons name="business-outline" size={20} color="#9CA3AF" />
+                  <Text style={[
+                    styles.dropdownText,
+                    !selectedCompanyId && styles.dropdownPlaceholder
+                  ]}>
+                    {selectedCompanyId 
+                      ? companiesOptions.find(c => c.value === selectedCompanyId)?.label 
+                      : 'Select a company'
+                    }
+                  </Text>
+                  <Ionicons 
+                    name={showCompanyDropdown ? "chevron-up" : "chevron-down"} 
+                    size={20} 
+                    color="#9CA3AF" 
+                  />
+                </View>
+              </TouchableOpacity>
+              
+              {showCompanyDropdown && (
+                <View style={styles.dropdownList}>
+                  {/* Search Bar */}
+                  <View style={styles.dropdownSearchContainer}>
+                    <Ionicons name="search" size={16} color="#9CA3AF" />
+                    <TextInput
+                      style={styles.dropdownSearchInput}
+                      placeholder="Search companies..."
+                      value={companySearchQuery}
+                      onChangeText={setCompanySearchQuery}
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+                  
+                  <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
+                    {filteredCompanies.length > 0 ? (
+                      filteredCompanies.map((company) => (
+                        <TouchableOpacity
+                          key={company.value}
+                          style={[
+                            styles.dropdownItem,
+                            selectedCompanyId === company.value && styles.dropdownItemSelected
+                          ]}
+                          onPress={() => {
+                            setSelectedCompanyId(company.value);
+                            setShowCompanyDropdown(false);
+                            setCompanySearchQuery('');
+                          }}
+                        >
+                          <View style={styles.dropdownItemContent}>
+                            <Text style={[
+                              styles.dropdownItemText,
+                              selectedCompanyId === company.value && styles.dropdownItemTextSelected
+                            ]}>
+                              {company.label}
+                            </Text>
+                            {selectedCompanyId === company.value && (
+                              <Ionicons name="checkmark" size={16} color="#3B82F6" />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <View style={styles.dropdownEmptyState}>
+                        <Text style={styles.dropdownEmptyText}>No companies found</Text>
+                      </View>
+                    )}
+                  </ScrollView>
+                </View>
+              )}
+              
+              {selectedCompanyId && (
+                <View style={styles.selectedCompanyInfo}>
+                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                  <Text style={styles.selectedCompanyText}>
+                    Selected: {companiesOptions.find(c => c.value === selectedCompanyId)?.label}
+                  </Text>
+                </View>
               )}
             </View>
             </ScrollView>
@@ -333,7 +514,7 @@ const AdminsListScreen = () => {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={() => setModalVisible(false)}
+                onPress={closeModal}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -342,6 +523,190 @@ const AdminsListScreen = () => {
                 onPress={handleCreateAdmin}
               >
                 <Text style={styles.createButtonText}>Create Admin</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Edit Admin Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={editModalVisible}
+        onRequestClose={closeEditModal}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Admin</Text>
+              <TouchableOpacity onPress={closeEditModal}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Form */}
+            <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Full Name</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="person-outline" size={20} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter full name"
+                    value={formData.name}
+                    onChangeText={(text) => setFormData({ ...formData, name: text })}
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="mail-outline" size={20} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="admin@company.com"
+                    value={formData.email}
+                    onChangeText={(text) => setFormData({ ...formData, email: text })}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Phone</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="call-outline" size={20} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+91 98765 43210"
+                    value={formData.phone}
+                    onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                    keyboardType="phone-pad"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>New Password (Optional)</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Leave blank to keep current password"
+                    value={formData.password}
+                    onChangeText={(text) => setFormData({ ...formData, password: text })}
+                    secureTextEntry={!showPassword}
+                    placeholderTextColor="#9CA3AF"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-outline" : "eye-off-outline"}
+                      size={20}
+                      color="#9CA3AF"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Company</Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
+                >
+                  <Text style={[
+                    styles.dropdownText,
+                    selectedCompanyId ? styles.dropdownTextSelected : styles.dropdownPlaceholder
+                  ]}>
+                    {selectedCompanyId
+                      ? companiesOptions.find(c => c.value === selectedCompanyId)?.label || 'Select Company'
+                      : 'Select Company'
+                    }
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                {showCompanyDropdown && (
+                  <View style={styles.dropdownList}>
+                    <View style={styles.dropdownSearchContainer}>
+                      <Ionicons name="search" size={16} color="#9CA3AF" />
+                      <TextInput
+                        style={styles.dropdownSearchInput}
+                        placeholder="Search companies..."
+                        value={companySearchQuery}
+                        onChangeText={setCompanySearchQuery}
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
+                      {filteredCompanies.map((company) => (
+                        <TouchableOpacity
+                          key={company.value}
+                          style={[
+                            styles.dropdownItem,
+                            selectedCompanyId === company.value && styles.dropdownItemSelected
+                          ]}
+                          onPress={() => {
+                            setSelectedCompanyId(company.value);
+                            setShowCompanyDropdown(false);
+                            setCompanySearchQuery('');
+                          }}
+                        >
+                          <View style={styles.dropdownItemContent}>
+                            <Text style={[
+                              styles.dropdownItemText,
+                              selectedCompanyId === company.value && styles.dropdownItemTextSelected
+                            ]}>
+                              {company.label}
+                            </Text>
+                            {selectedCompanyId === company.value && (
+                              <Ionicons name="checkmark" size={16} color="#3B82F6" />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                      {filteredCompanies.length === 0 && (
+                        <View style={styles.dropdownEmptyState}>
+                          <Text style={styles.dropdownEmptyText}>No companies found</Text>
+                        </View>
+                      )}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            {/* Modal Actions */}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={closeEditModal}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createButton, isSubmitting && styles.submitButtonDisabled]}
+                onPress={handleUpdateAdmin}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.createButtonText}>Update Admin</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -544,6 +909,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9CA3AF',
   },
+  // Action Buttons
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    marginTop: 12,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#EBF4FF',
+    borderRadius: 8,
+    gap: 6,
+  },
+  editButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
   // Modal Styles
   modalOverlay: {
     flex: 1,
@@ -637,6 +1028,113 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  // Dropdown styles
+  dropdownContainer: {
+    position: 'relative',
+    marginBottom: 4,
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+    marginLeft: 12,
+  },
+  dropdownPlaceholder: {
+    color: '#9CA3AF',
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: 48,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    marginTop: 4,
+    maxHeight: 200,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  dropdownScroll: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownItemSelected: {
+    backgroundColor: '#F0F9FF',
+  },
+  dropdownItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: '#1F2937',
+    flex: 1,
+  },
+  dropdownItemTextSelected: {
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  selectedCompanyInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  selectedCompanyText: {
+    fontSize: 12,
+    color: '#10B981',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  // Search dropdown styles
+  dropdownSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  dropdownSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+    marginLeft: 8,
+    paddingVertical: 4,
+  },
+  dropdownEmptyState: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  dropdownEmptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
   },
 });
 

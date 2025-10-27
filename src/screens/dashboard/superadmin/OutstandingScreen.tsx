@@ -1,5 +1,5 @@
 import React from 'react';
-import OutstandingManagementScreen from '../admin/OutstandingManagementScreen';
+import OutstandingManagementScreen from './OutstandingManagementScreen';
 
 export const OutstandingScreen = () => {
   return <OutstandingManagementScreen />;

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
+import OrderDetailsModal from '../../../components/OrderDetailsModal';
 
 interface Order {
   _id: string;
@@ -71,13 +72,14 @@ interface OrderSummary {
 }
 
 const ApprovedOrdersScreen = () => {
-  const { getOrders, getOrderStats } = useAuth();
+  const { getOrders, getOrderStats, getOrderById, updateOrderStatus } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [summary, setSummary] = useState<OrderSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'approved' | 'sent_to_tally'>('approved');
   const [sortBy, setSortBy] = useState<'orderDate' | 'finalAmount' | 'orderNumber'>('orderDate');
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,9 +145,40 @@ const ApprovedOrdersScreen = () => {
     setRefreshing(false);
   };
 
-  const handleViewDetails = (order: Order) => {
-    setSelectedOrder(order);
-    setShowDetailsModal(true);
+  const handleViewDetails = async (order: Order) => {
+    try {
+      setLoadingOrderDetails(order._id);
+      const response = await getOrderById(order._id);
+      if (response?.success && response?.order) {
+        setSelectedOrder(response.order);
+        setShowDetailsModal(true);
+      } else {
+        Alert.alert('Error', 'Failed to load order details');
+      }
+    } catch (error) {
+      console.error('Error fetching order details:', error);
+      Alert.alert('Error', 'Failed to load order details');
+    } finally {
+      setLoadingOrderDetails(null);
+    }
+  };
+
+  const handleOrderStatusUpdate = async (orderId: string, newStatus: string) => {
+    try {
+      const response = await updateOrderStatus(orderId, {
+        status: newStatus,
+        notes: ''
+      });
+      if (response?.success) {
+        Alert.alert('Success', 'Order status updated successfully');
+        fetchOrders(); // Refresh orders
+      } else {
+        Alert.alert('Error', response?.message || 'Failed to update order status');
+      }
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      Alert.alert('Error', 'Failed to update order status');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -239,9 +272,19 @@ const ApprovedOrdersScreen = () => {
       </View>
 
       <View style={styles.cardFooter}>
-        <TouchableOpacity style={styles.viewButton}>
-          <Ionicons name="eye" size={16} color="#077BC3" />
-          <Text style={styles.viewButtonText}>View Details</Text>
+        <TouchableOpacity 
+          style={styles.viewButton}
+          onPress={() => handleViewDetails(item)}
+          disabled={loadingOrderDetails === item._id}
+        >
+          {loadingOrderDetails === item._id ? (
+            <ActivityIndicator size="small" color="#077BC3" />
+          ) : (
+            <Ionicons name="eye" size={16} color="#077BC3" />
+          )}
+          <Text style={styles.viewButtonText}>
+            {loadingOrderDetails === item._id ? 'Loading...' : 'View Details'}
+          </Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -338,153 +381,16 @@ const ApprovedOrdersScreen = () => {
       />
 
       {/* Order Details Modal */}
-      <Modal
+      <OrderDetailsModal
         visible={showDetailsModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Order Details</Text>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowDetailsModal(false)}
-            >
-              <Ionicons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-
-          {selectedOrder && (
-            <ScrollView style={styles.modalContent}>
-              {/* Order Information */}
-              <View style={styles.detailSection}>
-                <Text style={styles.sectionTitle}>Order Information</Text>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Order Number:</Text>
-                  <Text style={styles.detailValue}>{selectedOrder.orderNumber}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Order Date:</Text>
-                  <Text style={styles.detailValue}>
-                    {new Date(selectedOrder.orderDate).toLocaleDateString()}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Status:</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedOrder.status) }]}>
-                    <Text style={styles.statusText}>{selectedOrder.status.replace('_', ' ')}</Text>
-                  </View>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Priority:</Text>
-                  <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(selectedOrder.priority) }]}>
-                    <Text style={styles.priorityText}>{selectedOrder.priority}</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Customer Information */}
-              <View style={styles.detailSection}>
-                <Text style={styles.sectionTitle}>Customer Information</Text>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Name:</Text>
-                  <Text style={styles.detailValue}>{selectedOrder.createdBy.name}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Email:</Text>
-                  <Text style={styles.detailValue}>{selectedOrder.createdBy.email}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Role:</Text>
-                  <Text style={styles.detailValue}>{selectedOrder.createdBy.role}</Text>
-                </View>
-              </View>
-
-              {/* Financial Information */}
-              <View style={styles.detailSection}>
-                <Text style={styles.sectionTitle}>Financial Information</Text>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Total Amount:</Text>
-                  <Text style={[styles.detailValue, { color: '#10B981', fontWeight: 'bold' }]}>
-                    ₹{selectedOrder.finalAmount.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Payment Method:</Text>
-                  <Text style={styles.detailValue}>{selectedOrder.paymentMethod}</Text>
-                </View>
-                {selectedOrder.deliveryDate && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Delivery Date:</Text>
-                    <Text style={styles.detailValue}>
-                      {new Date(selectedOrder.deliveryDate).toLocaleDateString()}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Order Items */}
-              <View style={styles.detailSection}>
-                <Text style={styles.sectionTitle}>Order Items</Text>
-                {selectedOrder.orderItems.map((item, index) => (
-                  <View key={index} style={styles.orderItem}>
-                    <View style={styles.itemHeader}>
-                      <Text style={styles.itemName}>{item.product.name}</Text>
-                      <Text style={styles.itemPrice}>₹{item.totalPrice.toLocaleString()}</Text>
-                    </View>
-                    <View style={styles.itemDetails}>
-                      <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
-                      <Text style={styles.itemUnitPrice}>₹{item.product.price}/unit</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              {/* Approval History */}
-              {selectedOrder.approvalHistory && selectedOrder.approvalHistory.length > 0 && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Approval History</Text>
-                  {selectedOrder.approvalHistory.map((approval, index) => (
-                    <View key={index} style={styles.approvalItem}>
-                      <View style={styles.approvalHeader}>
-                        <Text style={styles.approverName}>{approval.approverName}</Text>
-                        <Text style={styles.approvalDate}>
-                          {new Date(approval.timestamp).toLocaleDateString()}
-                        </Text>
-                      </View>
-                      <Text style={styles.approvalAction}>
-                        {approval.action} by {approval.approverRole}
-                      </Text>
-                      {approval.notes && (
-                        <Text style={styles.approvalNotes}>{approval.notes}</Text>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Additional Information */}
-              {(selectedOrder.notes || selectedOrder.shippingAddress) && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Additional Information</Text>
-                  {selectedOrder.notes && (
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Notes:</Text>
-                      <Text style={styles.detailValue}>{selectedOrder.notes}</Text>
-                    </View>
-                  )}
-                  {selectedOrder.shippingAddress && (
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Shipping Address:</Text>
-                      <Text style={styles.detailValue}>{selectedOrder.shippingAddress}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </ScrollView>
-          )}
-        </View>
-      </Modal>
+        order={selectedOrder}
+        onClose={() => {
+          setShowDetailsModal(false);
+          setSelectedOrder(null);
+        }}
+        onStatusUpdate={handleOrderStatusUpdate}
+        canUpdateStatus={true}
+      />
     </View>
   );
 };

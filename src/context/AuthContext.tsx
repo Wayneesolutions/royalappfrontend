@@ -89,6 +89,23 @@ interface AuthContextType {
   getASMTeamMembers: (params?: any) => Promise<any>;
   getASMTeamPerformance: (params?: { period?: string }) => Promise<any>;
   getASMRecentActivity: (params?: { limit?: number; days?: number }) => Promise<any>;
+  // Super Admin methods
+  superadminCreateCompany: (data: any) => Promise<any>;
+  superadminListCompanies: (params?: any) => Promise<any>;
+  superadminGetCompanyDetails: (companyId: string) => Promise<any>;
+  superadminUpdateCompany: (companyId: string, data: any) => Promise<any>;
+  superadminGetSystemStats: () => Promise<any>;
+  superadminCreateAdmin: (data: any) => Promise<any>;
+  superadminListAdmins: (params?: any) => Promise<any>;
+  superadminUpdateAdmin: (adminId: string, data: any) => Promise<any>;
+  superadminAssignCompanyToAdmin: (adminId: string, data: any) => Promise<any>;
+  superadminGetSalesReport: (params?: any) => Promise<any>;
+  superadminExportSalesReport: (params?: any) => Promise<any>;
+  superadminGetOutstandingSummary: (params?: any) => Promise<any>;
+  superadminGetOutstandingList: (params?: any) => Promise<any>;
+  superadminGetOutstandingDetails: (outstandingId: string) => Promise<any>;
+  superadminUpdateOutstanding: (outstandingId: string, data: any) => Promise<any>;
+  superadminAddCollectionNote: (outstandingId: string, note: string) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -242,8 +259,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const deleteUser = async (userId: string): Promise<any> => {
     try {
-      const result = await apiService.adminDeleteUser(userId);
-      return result.data;
+      const result = await apiService.deleteUser(userId);
+      return result;
     } catch (error) {
       console.error('Failed to delete user:', error);
       throw error;
@@ -274,7 +291,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const getOrderById = async (orderId: string): Promise<any> => {
     try {
       const result = await apiService.getOrderById(orderId);
-      return result.data;
+      return result;
     } catch (error) {
       console.error('Failed to get order:', error);
       throw error;
@@ -833,6 +850,167 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Super Admin methods
+  const superadminCreateCompany = async (data: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminCreateCompany(data);
+      return result;
+    } catch (error) {
+      console.error('Failed to create company:', error);
+      throw error;
+    }
+  };
+
+  const superadminListCompanies = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminListCompanies(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to list companies:', error);
+      throw error;
+    }
+  };
+
+  const superadminGetCompanyDetails = async (companyId: string): Promise<any> => {
+    try {
+      const result = await apiService.superadminGetCompanyDetails(companyId);
+      return result;
+    } catch (error) {
+      console.error('Failed to get company details:', error);
+      throw error;
+    }
+  };
+
+  const superadminUpdateCompany = async (companyId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminUpdateCompany(companyId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update company:', error);
+      throw error;
+    }
+  };
+
+  const superadminGetSystemStats = async (): Promise<any> => {
+    try {
+      const result = await apiService.superadminGetSystemStats();
+      return result;
+    } catch (error) {
+      console.error('Failed to get system stats:', error);
+      throw error;
+    }
+  };
+
+  const superadminCreateAdmin = async (data: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminCreateAdmin(data);
+      return result;
+    } catch (error) {
+      console.error('Failed to create admin:', error);
+      throw error;
+    }
+  };
+
+  const superadminListAdmins = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminListAdmins(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to list admins:', error);
+      throw error;
+    }
+  };
+
+  const superadminUpdateAdmin = async (adminId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminUpdateAdmin(adminId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update admin:', error);
+      throw error;
+    }
+  };
+
+  const superadminAssignCompanyToAdmin = async (adminId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminAssignCompanyToAdmin(adminId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to assign company to admin:', error);
+      throw error;
+    }
+  };
+
+  const superadminGetSalesReport = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminGetSalesReport(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get sales report:', error);
+      throw error;
+    }
+  };
+
+  const superadminExportSalesReport = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminExportSalesReport(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to export sales report:', error);
+      throw error;
+    }
+  };
+
+  const superadminGetOutstandingSummary = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminGetOutstandingSummary(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get outstanding summary:', error);
+      throw error;
+    }
+  };
+
+  const superadminGetOutstandingList = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminGetOutstandingList(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get outstanding list:', error);
+      throw error;
+    }
+  };
+
+  const superadminGetOutstandingDetails = async (outstandingId: string): Promise<any> => {
+    try {
+      const result = await apiService.superadminGetOutstandingDetails(outstandingId);
+      return result;
+    } catch (error) {
+      console.error('Failed to get outstanding details:', error);
+      throw error;
+    }
+  };
+
+  const superadminUpdateOutstanding = async (outstandingId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.superadminUpdateOutstanding(outstandingId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update outstanding:', error);
+      throw error;
+    }
+  };
+
+  const superadminAddCollectionNote = async (outstandingId: string, note: string): Promise<any> => {
+    try {
+      const result = await apiService.superadminAddCollectionNote(outstandingId, note);
+      return result;
+    } catch (error) {
+      console.error('Failed to add collection note:', error);
+      throw error;
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isAuthenticated,
@@ -916,7 +1094,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getASMDashboardData,
     getASMTeamMembers,
     getASMTeamPerformance,
-    getASMRecentActivity
+    getASMRecentActivity,
+    // Super Admin methods
+    superadminCreateCompany,
+    superadminListCompanies,
+    superadminGetCompanyDetails,
+    superadminUpdateCompany,
+    superadminGetSystemStats,
+    superadminCreateAdmin,
+    superadminListAdmins,
+    superadminUpdateAdmin,
+    superadminAssignCompanyToAdmin,
+    superadminGetSalesReport,
+    superadminExportSalesReport,
+    superadminGetOutstandingSummary,
+    superadminGetOutstandingList,
+    superadminGetOutstandingDetails,
+    superadminUpdateOutstanding,
+    superadminAddCollectionNote
   };
 
   return (
