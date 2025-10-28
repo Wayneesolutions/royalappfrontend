@@ -301,7 +301,7 @@ const DashboardHome = () => {
             <QuickActionCard
               title="Targets"
               description="Set and track targets"
-              icon="target-outline"
+              icon="flag-outline"
               color="#EF4444"
               onPress={() => navigation.navigate('TargetManagementScreen')}
             />

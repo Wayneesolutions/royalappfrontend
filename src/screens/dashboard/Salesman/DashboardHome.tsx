@@ -28,7 +28,7 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, logout, getOrderStats, getProducts } = useAuth();
+  const { user, logout, getOrderStats, getProducts, getMyOrders } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [stats, setStats] = useState<DashboardStats>({
     totalCustomers: 0,
@@ -43,6 +43,7 @@ const DashboardHome = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
   const fetchDashboardData = async () => {
     if (!user?.defaultCompany) {
@@ -53,14 +54,16 @@ const DashboardHome = () => {
     try {
       setLoading(true);
       
-      // Fetch real order statistics
-      const [orderStatsResult, productsResult] = await Promise.all([
+      // Fetch real order statistics and recent orders
+      const [orderStatsResult, productsResult, recentOrdersResult] = await Promise.all([
         getOrderStats(),
-        getProducts({ page: 1, limit: 1 }) // Just to get count
+        getProducts({ page: 1, limit: 1 }), // Just to get count
+        getMyOrders({ page: 1, limit: 5, sortBy: 'createdAt', sortOrder: 'desc' })
       ]);
 
       console.log('Dashboard - Order stats result:', orderStatsResult);
       console.log('Dashboard - Products result:', productsResult);
+      console.log('Dashboard - Recent orders result:', recentOrdersResult);
 
       const orderStats = orderStatsResult?.success ? orderStatsResult.stats : {
         totalOrders: 0,
@@ -73,6 +76,7 @@ const DashboardHome = () => {
       };
 
       const productCount = productsResult?.success ? productsResult.pagination?.totalProducts || 0 : 0;
+      const orders = recentOrdersResult?.success ? recentOrdersResult.orders || [] : [];
 
       setStats({
         totalCustomers: 45, // Keep mock for now - would need customer API
@@ -84,6 +88,8 @@ const DashboardHome = () => {
         dailyVisits: 8, // Keep mock for now
         newLeads: 5, // Keep mock for now
       });
+
+      setRecentOrders(orders);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
@@ -130,6 +136,63 @@ const DashboardHome = () => {
 
   const cancelLogout = () => {
     setShowLogoutModal(false);
+  };
+
+  // Helper functions for order status formatting
+  const getOrderStatusColor = (status: string) => {
+    const colorMap: { [key: string]: string } = {
+      'draft': '#6B7280',
+      'pending': '#F59E0B',
+      'confirmed': '#3B82F6',
+      'approved': '#10B981',
+      'processing': '#8B5CF6',
+      'shipped': '#059669',
+      'delivered': '#10B981',
+      'cancelled': '#EF4444',
+      'rejected': '#DC2626'
+    };
+    return colorMap[status] || '#6B7280';
+  };
+
+  const getOrderStatusIcon = (status: string) => {
+    const iconMap: { [key: string]: string } = {
+      'draft': 'create-outline',
+      'pending': 'time-outline',
+      'confirmed': 'checkmark-circle-outline',
+      'approved': 'checkmark-circle',
+      'processing': 'refresh-outline',
+      'shipped': 'car-outline',
+      'delivered': 'checkmark-done-outline',
+      'cancelled': 'close-circle-outline',
+      'rejected': 'close-circle'
+    };
+    return iconMap[status] || 'help-outline';
+  };
+
+  const getOrderStatusTitle = (status: string) => {
+    const titleMap: { [key: string]: string } = {
+      'draft': 'Order Draft',
+      'pending': 'Order Pending',
+      'confirmed': 'Order Confirmed',
+      'approved': 'Order Approved',
+      'processing': 'Order Processing',
+      'shipped': 'Order Shipped',
+      'delivered': 'Order Delivered',
+      'cancelled': 'Order Cancelled',
+      'rejected': 'Order Rejected'
+    };
+    return titleMap[status] || 'Order Updated';
+  };
+
+  const formatTimeAgo = (timestamp: string | Date) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
   const StatCard = ({ title, value, icon, color, onPress }: {
@@ -239,7 +302,7 @@ const DashboardHome = () => {
           <StatCard
             title="Target Achievement"
             value={`${stats.targetAchievement}%`}
-            icon="target"
+            icon="flag-outline"
             color="#DC2626"
           />
           <StatCard
@@ -277,25 +340,18 @@ const DashboardHome = () => {
             onPress={() => navigation.navigate('OrderList')}
           />
           <QuickActionCard
-            title="Customer List"
-            description="View your customers"
-            icon="people-outline"
+            title="Product Management"
+            description="Manage products"
+            icon="settings-outline"
             color="#3B82F6"
-            onPress={() => Alert.alert('Coming Soon', 'Customer management feature will be available soon')}
+            onPress={() => navigation.navigate('ProductManagement')}
           />
           <QuickActionCard
-            title="Sales Report"
-            description="View your performance"
-            icon="bar-chart-outline"
+            title="My Targets"
+            description="View your targets"
+            icon="flag-outline"
             color="#10B981"
-            onPress={() => Alert.alert('Coming Soon', 'Sales report feature will be available soon')}
-          />
-          <QuickActionCard
-            title="Visit Plan"
-            description="Plan your visits"
-            icon="map-outline"
-            color="#F59E0B"
-            onPress={() => Alert.alert('Coming Soon', 'Visit planning feature will be available soon')}
+            onPress={() => navigation.navigate('MyTargetsScreen')}
           />
           <QuickActionCard
             title="Pending Approvals"
@@ -311,38 +367,26 @@ const DashboardHome = () => {
       <View style={styles.activitySection}>
         <Text style={styles.sectionTitle}>Recent Activity</Text>
         <View style={styles.activityCard}>
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#EF4444' }]}>
-              <Ionicons name="checkmark" size={16} color="white" />
+          {recentOrders.length > 0 ? (
+            recentOrders.map((order, index) => (
+              <View key={order._id || index} style={styles.activityItem}>
+                <View style={[styles.activityIcon, { backgroundColor: getOrderStatusColor(order.status) }]}>
+                  <Ionicons name={getOrderStatusIcon(order.status) as any} size={16} color="white" />
+                </View>
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>{getOrderStatusTitle(order.status)}</Text>
+                  <Text style={styles.activityDescription}>Order #{order.orderNumber} - ₹{order.finalAmount?.toLocaleString() || '0'}</Text>
+                  <Text style={styles.activityTime}>{formatTimeAgo(order.createdAt)}</Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyActivity}>
+              <Ionicons name="time-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyActivityText}>No recent activity</Text>
+              <Text style={styles.emptyActivitySubtext}>Your recent orders will appear here</Text>
             </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>Order Completed</Text>
-              <Text style={styles.activityDescription}>Order #12345 has been completed</Text>
-              <Text style={styles.activityTime}>2 hours ago</Text>
-            </View>
-          </View>
-          
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#3B82F6' }]}>
-              <Ionicons name="person-add" size={16} color="white" />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>New Customer</Text>
-              <Text style={styles.activityDescription}>ABC Store added as new customer</Text>
-              <Text style={styles.activityTime}>4 hours ago</Text>
-            </View>
-          </View>
-          
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#10B981' }]}>
-              <Ionicons name="trending-up" size={16} color="white" />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>Sales Target Met</Text>
-              <Text style={styles.activityDescription}>Daily target achieved</Text>
-              <Text style={styles.activityTime}>1 day ago</Text>
-            </View>
-          </View>
+          )}
         </View>
       </View>
       </ScrollView>
@@ -605,6 +649,21 @@ const styles = StyleSheet.create({
   },
   activityTime: {
     fontSize: 10,
+    color: '#9CA3AF',
+  },
+  emptyActivity: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyActivityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyActivitySubtext: {
+    fontSize: 14,
     color: '#9CA3AF',
   },
   // Modal styles

@@ -271,7 +271,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const createOrder = async (orderData: any): Promise<any> => {
     try {
       const result = await apiService.createOrder(orderData);
-      return result.data;
+      console.log('API service result:', result);
+      return result; // Return the full result, not result.data
     } catch (error) {
       console.error('Failed to create order:', error);
       throw error;

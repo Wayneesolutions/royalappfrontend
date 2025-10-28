@@ -11,12 +11,34 @@ import {
   RefreshControl,
   TextInput,
   Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { ASMStackParamList } from '../../../navigation/types';
+
+// Helper function to show toast messages that works on all platforms
+const showToast = (message: string, duration: 'short' | 'long' = 'short') => {
+  console.log('showToast called with:', message, 'duration:', duration, 'platform:', Platform.OS);
+  
+  try {
+    if (Platform.OS === 'android') {
+      const { ToastAndroid } = require('react-native');
+      ToastAndroid.show(message, duration === 'long' ? ToastAndroid.LONG : ToastAndroid.SHORT);
+      console.log('ToastAndroid.show called successfully');
+    } else {
+      // For web and iOS, use Alert instead
+      console.log('Using Alert.alert for non-Android platform');
+      Alert.alert('Error', message); // Changed title to "Error" for better visibility
+    }
+  } catch (error) {
+    console.error('Error in showToast:', error);
+    // Fallback to Alert if toast fails
+    Alert.alert('Error', message);
+  }
+};
 
 interface Target {
   _id: string;
@@ -33,7 +55,7 @@ interface Target {
 }
 
 const TargetManagementScreen = () => {
-  const { user, getASMTeamPerformance } = useAuth();
+  const { user, getASMTeamPerformance, getUsersForTargetAssignment, assignTargets } = useAuth();
   const navigation = useNavigation<StackNavigationProp<ASMStackParamList>>();
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,24 +63,47 @@ const TargetManagementScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('current');
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showCreateTarget, setShowCreateTarget] = useState(false);
+  const [targetPeriod, setTargetPeriod] = useState<string>('monthly');
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<string>('');
+  const [targetAmount, setTargetAmount] = useState<string>('');
+  const [targetQuantity, setTargetQuantity] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
 
   const periods = [
     { key: 'current', label: 'Current Period', color: '#F59E0B' },
     { key: 'month', label: 'This Month', color: '#10B981' },
-    { key: 'quarter', label: 'This Quarter', color: '#3B82F6' },
-    { key: 'year', label: 'This Year', color: '#8B5CF6' },
+  ];
+
+  const targetPeriodOptions = [
+    { key: 'monthly', label: 'Monthly', color: '#3B82F6' },
   ];
 
   const fetchTargets = async () => {
     try {
       setLoading(true);
       const result = await getASMTeamPerformance({ period: selectedPeriod });
-      if (result?.success && result?.data?.targets) {
-        setTargets(result.data.targets);
+      if (result?.success && result?.data) {
+        // Check if targets exist in the response
+        if (result.data.targets && Array.isArray(result.data.targets)) {
+          setTargets(result.data.targets);
+        } else {
+          // No targets found, set empty array
+          setTargets([]);
+          console.log('No targets found for the selected period');
+        }
+      } else {
+        setTargets([]);
+        console.log('Failed to fetch targets:', result?.message || 'Unknown error');
       }
     } catch (error) {
       console.error('Failed to fetch targets:', error);
       Alert.alert('Error', 'Failed to load targets');
+      setTargets([]);
     } finally {
       setLoading(false);
     }
@@ -72,7 +117,93 @@ const TargetManagementScreen = () => {
 
   useEffect(() => {
     fetchTargets();
+    fetchTeamMembers();
   }, [selectedPeriod]);
+
+  const fetchTeamMembers = async () => {
+    try {
+      const result = await getUsersForTargetAssignment();
+      if (result?.success && result?.data?.users) {
+        setTeamMembers(result.data.users);
+      }
+    } catch (error) {
+      console.error('Failed to fetch team members:', error);
+    }
+  };
+
+  const handleCreateTarget = async () => {
+    if (!selectedUser || !targetAmount || !startDate || !endDate) {
+      Alert.alert('Validation Error', 'Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      
+      const targetData = {
+        assignedTo: selectedUser,
+        targetType: targetPeriod,
+        period: {
+          startDate: startDate,
+          endDate: endDate,
+          year: new Date().getFullYear(),
+          month: new Date().getMonth() + 1
+        },
+        targetAmount: parseFloat(targetAmount),
+        targetQuantity: parseInt(targetQuantity) || 0,
+        notes: notes
+      };
+
+           const result = await assignTargets([targetData]);
+           
+           if (result?.success) {
+             // Success case - targets were assigned (with or without warnings)
+             if (result.data?.errors && result.data.errors.length > 0) {
+               // Show warning message for partial success
+               showToast(`Targets assigned with warnings: ${result.data.errors[0]}`, 'long');
+             }
+             
+             // Close modal immediately and reset form
+             setShowCreateTarget(false);
+             resetForm();
+             fetchTargets(); // Refresh the targets list
+             
+             // Show success message
+             Alert.alert(
+               'Success', 
+               result.message || 'Target created successfully!'
+             );
+           } else {
+             // Error case - no targets were assigned due to errors
+             console.log('Error case - success is false');
+             console.log('Result data errors:', result.data?.errors);
+             console.log('Result message:', result?.message);
+             
+             if (result.data?.errors && result.data.errors.length > 0) {
+               console.log('About to show error toast:', result.data.errors[0]);
+               showToast(result.data.errors[0], 'long');
+             } else {
+               console.log('About to show generic error toast:', result?.message || 'Failed to create target');
+               showToast(result?.message || 'Failed to create target', 'short');
+             }
+           }
+    } catch (error) {
+      console.error('Failed to create target:', error);
+      showToast('Failed to create target', 'short');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setSelectedUser('');
+    setTargetAmount('');
+    setTargetQuantity('');
+    setStartDate('');
+    setEndDate('');
+    setNotes('');
+    setTargetPeriod('monthly');
+  };
 
   const getRoleColor = (role: string) => {
     const colors: { [key: string]: string } = {
@@ -220,7 +351,10 @@ const TargetManagementScreen = () => {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Target Management</Text>
-        <TouchableOpacity style={styles.addButton}>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowCreateTarget(true)}
+        >
           <Ionicons name="add" size={24} color="#F59E0B" />
         </TouchableOpacity>
       </View>
@@ -292,14 +426,162 @@ const TargetManagementScreen = () => {
           filteredTargets.map(renderTargetCard)
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="target-outline" size={64} color="#9CA3AF" />
+            <Ionicons name="flag-outline" size={64} color="#9CA3AF" />
             <Text style={styles.emptyTitle}>No targets found</Text>
             <Text style={styles.emptySubtitle}>
-              {searchQuery ? 'Try adjusting your search criteria' : 'No targets set for this period'}
+              {searchQuery 
+                ? 'Try adjusting your search criteria' 
+                : 'No targets have been assigned to your team members for this period. Contact your manager to set up targets.'}
             </Text>
           </View>
         )}
       </ScrollView>
+
+      {/* Create Target Modal */}
+      <Modal
+        visible={showCreateTarget}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Create New Target</Text>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => setShowCreateTarget(false)}
+            >
+              <Ionicons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.formSection}>
+              {/* User Selection */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Assign To</Text>
+                <View style={styles.userSelector}>
+                  {teamMembers.map((member) => (
+                    <TouchableOpacity
+                      key={member._id}
+                      style={[
+                        styles.userOption,
+                        selectedUser === member._id && styles.selectedUserOption
+                      ]}
+                      onPress={() => setSelectedUser(member._id)}
+                    >
+                      <Text style={[
+                        styles.userOptionText,
+                        selectedUser === member._id && styles.selectedUserOptionText
+                      ]}>
+                        {member.name} ({member.role})
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Target Period Selection */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Target Period</Text>
+                <View style={styles.periodOptions}>
+                  {targetPeriodOptions.map((period) => (
+                    <TouchableOpacity
+                      key={period.key}
+                      style={[
+                        styles.periodOption,
+                        targetPeriod === period.key && styles.selectedPeriodOption
+                      ]}
+                      onPress={() => setTargetPeriod(period.key)}
+                    >
+                      <Text style={[
+                        styles.periodLabel,
+                        targetPeriod === period.key && styles.selectedPeriodLabel
+                      ]}>
+                        {period.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Target Amount */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Target Amount (₹)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter target amount"
+                  keyboardType="numeric"
+                  value={targetAmount}
+                  onChangeText={setTargetAmount}
+                />
+              </View>
+
+              {/* Target Quantity */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Target Quantity</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter target quantity"
+                  keyboardType="numeric"
+                  value={targetQuantity}
+                  onChangeText={setTargetQuantity}
+                />
+              </View>
+
+              {/* Start Date */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Start Date</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="YYYY-MM-DD"
+                  value={startDate}
+                  onChangeText={setStartDate}
+                />
+              </View>
+
+              {/* End Date */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>End Date</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="YYYY-MM-DD"
+                  value={endDate}
+                  onChangeText={setEndDate}
+                />
+              </View>
+
+              {/* Notes */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Notes (Optional)</Text>
+                <TextInput
+                  style={[styles.formInput, styles.textArea]}
+                  placeholder="Enter notes"
+                  multiline
+                  numberOfLines={3}
+                  value={notes}
+                  onChangeText={setNotes}
+                />
+              </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[styles.submitButton, submitting && styles.disabledButton]}
+                onPress={handleCreateTarget}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={20} color="#fff" />
+                    <Text style={styles.submitButtonText}>Create Target</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -579,6 +861,127 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 8,
     textAlign: 'center',
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  formSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  periodOptions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  periodOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#fff',
+  },
+  selectedPeriodOption: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#EBF8FF',
+  },
+  periodLabel: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  selectedPeriodLabel: {
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  // Additional form styles
+  userSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  userOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#fff',
+  },
+  selectedUserOption: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#EBF8FF',
+  },
+  userOptionText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  selectedUserOptionText: {
+    color: '#3B82F6',
+    fontWeight: '500',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#9CA3AF',
   },
 });
 

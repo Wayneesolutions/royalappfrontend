@@ -11,10 +11,32 @@ import {
   TextInput,
   Modal,
   FlatList,
+  Platform,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+
+// Helper function to show toast messages that works on all platforms
+const showToast = (message: string, duration: 'short' | 'long' = 'short') => {
+  console.log('showToast called with:', message, 'duration:', duration, 'platform:', Platform.OS);
+  
+  try {
+    if (Platform.OS === 'android') {
+      const { ToastAndroid } = require('react-native');
+      ToastAndroid.show(message, duration === 'long' ? ToastAndroid.LONG : ToastAndroid.SHORT);
+      console.log('ToastAndroid.show called successfully');
+    } else {
+      // For web and iOS, use Alert instead
+      console.log('Using Alert.alert for non-Android platform');
+      Alert.alert('Error', message); // Changed title to "Error" for better visibility
+    }
+  } catch (error) {
+    console.error('Error in showToast:', error);
+    // Fallback to Alert if toast fails
+    Alert.alert('Error', message);
+  }
+};
 
 interface Target {
   _id: string;
@@ -67,7 +89,7 @@ interface TargetStats {
 }
 
 const TargetManagementScreen = () => {
-  const { user, getTargetPerformanceReport, getUsersForTargetAssignment } = useAuth();
+  const { user, getTargetPerformanceReport, getUsersForTargetAssignment, assignTargets } = useAuth();
   const navigation = useNavigation();
   
   const [targets, setTargets] = useState<Target[]>([]);
@@ -94,6 +116,7 @@ const TargetManagementScreen = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   
 
   const statusOptions = [
@@ -107,8 +130,6 @@ const TargetManagementScreen = () => {
   const periodOptions = [
     { key: '', label: 'All Periods', color: '#6B7280' },
     { key: 'monthly', label: 'Monthly', color: '#3B82F6' },
-    { key: 'quarterly', label: 'Quarterly', color: '#10B981' },
-    { key: 'yearly', label: 'Yearly', color: '#F59E0B' },
   ];
 
 
@@ -174,6 +195,89 @@ const TargetManagementScreen = () => {
 
   const handleCreateTarget = () => {
     setShowCreateTarget(true);
+  };
+
+  const handleSubmitTarget = async () => {
+    if (!selectedUser) {
+      Alert.alert('Error', 'Please select a team member');
+      return;
+    }
+    if (!targetAmount || !targetQuantity) {
+      Alert.alert('Error', 'Please fill in target amount and quantity');
+      return;
+    }
+    if (!startDate || !endDate) {
+      Alert.alert('Error', 'Please fill in start and end dates');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      
+      const targetData = {
+        assignedTo: selectedUser._id,
+        targetType: targetPeriod,
+        period: {
+          startDate: startDate,
+          endDate: endDate,
+          year: new Date().getFullYear(),
+          month: new Date().getMonth() + 1
+        },
+        targetAmount: parseFloat(targetAmount),
+        targetQuantity: parseInt(targetQuantity),
+        notes: notes
+      };
+
+      const result = await assignTargets([targetData]);
+      console.log('Target creation result:', result);
+      
+      if (result?.success) {
+        // Success case - targets were assigned (with or without warnings)
+        if (result.data?.errors && result.data.errors.length > 0) {
+          // Show warning message for partial success
+          showToast(`Targets assigned with warnings: ${result.data.errors[0]}`, 'long');
+        }
+        
+        // Close modal immediately and reset form
+        setShowCreateTarget(false);
+        resetForm();
+        fetchTargetData(); // Refresh the targets list
+        
+        // Show success message
+        Alert.alert(
+          'Success', 
+          result.message || 'Target created successfully!'
+        );
+      } else {
+        // Error case - no targets were assigned due to errors
+        console.log('Error case - success is false');
+        console.log('Result data errors:', result.data?.errors);
+        console.log('Result message:', result?.message);
+        
+        if (result.data?.errors && result.data.errors.length > 0) {
+          console.log('About to show error toast:', result.data.errors[0]);
+          showToast(result.data.errors[0], 'long');
+        } else {
+          console.log('About to show generic error toast:', result?.message || 'Failed to create target');
+          showToast(result?.message || 'Failed to create target', 'short');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to create target:', error);
+      showToast('Failed to create target', 'short');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setSelectedUser(null);
+    setTargetAmount('');
+    setTargetQuantity('');
+    setStartDate('');
+    setEndDate('');
+    setNotes('');
+    setTargetPeriod('monthly');
   };
 
 
@@ -460,34 +564,16 @@ const TargetManagementScreen = () => {
           <TouchableOpacity
             style={[
               styles.createBtn,
-              (!selectedUser || !targetAmount || !targetQuantity) && styles.disabledBtn
+              (!selectedUser || !targetAmount || !targetQuantity || submitting) && styles.disabledBtn
             ]}
-            onPress={() => {
-              if (!selectedUser) {
-                Alert.alert('Error', 'Please select a team member');
-                return;
-              }
-              if (!targetAmount || !targetQuantity) {
-                Alert.alert('Error', 'Please fill in target amount and quantity');
-                return;
-              }
-              Alert.alert('Success', `Target created successfully for ${selectedUser.name}!`);
-              setShowCreateTarget(false);
-              // Reset form
-              setSelectedUser(null);
-              setTargetAmount('');
-              setTargetQuantity('');
-              setStartDate('');
-              setEndDate('');
-              setNotes('');
-            }}
-            disabled={!selectedUser || !targetAmount || !targetQuantity}
+            onPress={handleSubmitTarget}
+            disabled={!selectedUser || !targetAmount || !targetQuantity || submitting}
           >
             <Text style={[
               styles.createBtnText,
-              (!selectedUser || !targetAmount || !targetQuantity) && styles.disabledBtnText
+              (!selectedUser || !targetAmount || !targetQuantity || submitting) && styles.disabledBtnText
             ]}>
-              Create Target
+              {submitting ? 'Creating...' : 'Create Target'}
             </Text>
           </TouchableOpacity>
         </View>

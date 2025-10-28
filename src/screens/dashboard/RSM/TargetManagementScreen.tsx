@@ -51,12 +51,23 @@ const TargetManagementScreen = () => {
     try {
       setLoading(true);
       const result = await getRSMTeamPerformance({ period: selectedPeriod });
-      if (result?.success && result?.data?.targets) {
-        setTargets(result.data.targets);
+      if (result?.success && result?.data) {
+        // Check if targets exist in the response
+        if (result.data.targets && Array.isArray(result.data.targets)) {
+          setTargets(result.data.targets);
+        } else {
+          // No targets found, set empty array
+          setTargets([]);
+          console.log('No targets found for the selected period');
+        }
+      } else {
+        setTargets([]);
+        console.log('Failed to fetch targets:', result?.message || 'Unknown error');
       }
     } catch (error) {
       console.error('Failed to fetch targets:', error);
       Alert.alert('Error', 'Failed to load targets');
+      setTargets([]);
     } finally {
       setLoading(false);
     }
@@ -292,10 +303,12 @@ const TargetManagementScreen = () => {
           filteredTargets.map(renderTargetCard)
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="target-outline" size={64} color="#9CA3AF" />
+            <Ionicons name="flag-outline" size={64} color="#9CA3AF" />
             <Text style={styles.emptyTitle}>No targets found</Text>
             <Text style={styles.emptySubtitle}>
-              {searchQuery ? 'Try adjusting your search criteria' : 'No targets set for this period'}
+              {searchQuery 
+                ? 'Try adjusting your search criteria' 
+                : 'No targets have been assigned to your team members for this period. Contact your manager to set up targets.'}
             </Text>
           </View>
         )}

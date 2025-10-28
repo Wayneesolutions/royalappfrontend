@@ -275,7 +275,7 @@ const SalesReportScreen = () => {
               </Text>
             </View>
             <View style={styles.summaryItem}>
-              <Ionicons name="target" size={20} color="#3B82F6" />
+              <Ionicons name="flag-outline" size={20} color="#3B82F6" />
               <Text style={styles.summaryText}>
                 Target achievement: 78% for current period
               </Text>

@@ -10,10 +10,32 @@ import {
   TextInput,
   FlatList,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../../context/AuthContext';
+
+// Helper function to show toast messages that works on all platforms
+const showToast = (message: string, duration: 'short' | 'long' = 'short') => {
+  console.log('showToast called with:', message, 'duration:', duration, 'platform:', Platform.OS);
+  
+  try {
+    if (Platform.OS === 'android') {
+      const { ToastAndroid } = require('react-native');
+      ToastAndroid.show(message, duration === 'long' ? ToastAndroid.LONG : ToastAndroid.SHORT);
+      console.log('ToastAndroid.show called successfully');
+    } else {
+      // For web and iOS, use Alert instead
+      console.log('Using Alert.alert for non-Android platform');
+      Alert.alert('Error', message); // Changed title to "Error" for better visibility
+    }
+  } catch (error) {
+    console.error('Error in showToast:', error);
+    // Fallback to Alert if toast fails
+    Alert.alert('Error', message);
+  }
+};
 
 interface User {
   _id: string;
@@ -143,28 +165,41 @@ const TargetAssignmentScreen = () => {
       setSubmitting(true);
       const result = await assignTargets(targets);
       
-      if (result?.success) {
-        Alert.alert(
-          'Success', 
-          `Successfully assigned ${result.data?.assignedTargets || targets.length} targets`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setShowAssignmentModal(false);
-                setTargets([]);
-                setSelectedUsers([]);
-                fetchUsers();
-              }
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', result?.message || 'Failed to assign targets');
-      }
+           if (result?.success) {
+             // Success case - targets were assigned (with or without warnings)
+             if (result.data?.errors && result.data.errors.length > 0) {
+               // Show warning message for partial success
+               showToast(`Targets assigned with warnings: ${result.data.errors.join(', ')}`, 'long');
+             }
+             
+             // Close modal immediately and reset form
+             setShowAssignmentModal(false);
+             setTargets([]);
+             setSelectedUsers([]);
+             fetchUsers();
+             
+             // Show success message
+             Alert.alert(
+               'Success', 
+               result.message || `Successfully assigned ${result.data?.assignedTargets || targets.length} targets`
+             );
+           } else {
+             // Error case - no targets were assigned due to errors
+             console.log('Error case - success is false');
+             console.log('Result data errors:', result.data?.errors);
+             console.log('Result message:', result?.message);
+             
+             if (result.data?.errors && result.data.errors.length > 0) {
+               console.log('About to show error toast:', result.data.errors.join('\n'));
+               showToast(result.data.errors.join('\n'), 'long');
+             } else {
+               console.log('About to show generic error toast:', result?.message || 'Failed to assign targets');
+               showToast(result?.message || 'Failed to assign targets', 'short');
+             }
+           }
     } catch (error) {
       console.error('Error assigning targets:', error);
-      Alert.alert('Error', 'Failed to assign targets');
+      showToast('Failed to assign targets', 'short');
     } finally {
       setSubmitting(false);
     }

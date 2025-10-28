@@ -238,35 +238,58 @@ const CreateOrder = () => {
         shippingAddress: shippingAddress || selectedCustomer.address,
       };
 
+      console.log('About to call createOrder with data:', orderData);
       const result = await createOrder(orderData);
+      console.log('Full API result:', result);
+      console.log('Result success:', result?.success);
+      console.log('Result type:', typeof result);
+      console.log('Result keys:', Object.keys(result || {}));
       
       if (result?.success) {
-        Alert.alert(
-          'Success',
-          'Order created successfully!',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Reset form
-                setOrderItems([]);
-                setSelectedCustomer(null);
-                setDeliveryDate('');
-                setPriority('medium');
-                setPaymentMethod('cash');
-                setNotes('');
-                setShippingAddress('');
-                // Navigate to OrderList to show the created order
-                navigation.navigate('OrderList');
-              }
+        console.log('Order created successfully, closing screen...');
+        console.log('Navigation object:', navigation);
+        console.log('Navigation methods available:', Object.keys(navigation));
+        
+        // Close any open modals first
+        setShowCustomerModal(false);
+        setShowProductModal(false);
+        
+        // Reset form immediately
+        setOrderItems([]);
+        setSelectedCustomer(null);
+        setDeliveryDate('');
+        setPriority('medium');
+        setPaymentMethod('cash');
+        setNotes('');
+        setShippingAddress('');
+        
+        // Try navigation with callback approach
+        console.log('Attempting navigation with callback...');
+        
+        // Use requestAnimationFrame to ensure UI updates are complete
+        requestAnimationFrame(() => {
+          try {
+            console.log('Inside requestAnimationFrame, attempting navigation...');
+            navigation.navigate('OrderList');
+            console.log('Navigation completed in requestAnimationFrame');
+          } catch (error) {
+            console.error('Navigation error in requestAnimationFrame:', error);
+            // Fallback to goBack
+            try {
+              navigation.goBack();
+              console.log('Fallback goBack completed');
+            } catch (goBackError) {
+              console.error('GoBack error:', goBackError);
             }
-          ]
-        );
+          }
+        });
       } else {
         Alert.alert('Error', result?.message || 'Failed to create order');
       }
     } catch (error) {
       console.error('Error creating order:', error);
+      console.error('Error details:', error.message);
+      console.error('Error stack:', error.stack);
       Alert.alert('Error', 'Failed to create order');
     } finally {
       setLoading(false);
