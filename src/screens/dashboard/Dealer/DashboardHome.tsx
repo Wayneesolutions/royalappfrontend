@@ -279,6 +279,13 @@ const DashboardHome = () => {
               color="#F59E0B"
               onPress={() => navigation.navigate('ProductCatalog')}
             />
+            <QuickActionCard
+              title="Team Management"
+              description="Manage sub-dealers"
+              icon="people-outline"
+              color="#EF4444"
+              onPress={() => navigation.navigate('TeamManagement')}
+            />
           </View>
         </View>
 

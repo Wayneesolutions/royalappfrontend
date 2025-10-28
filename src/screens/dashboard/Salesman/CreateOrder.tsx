@@ -63,7 +63,7 @@ interface Customer {
 const CreateOrder = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'CreateOrder'>>();
-  const { user, getProducts, createOrder } = useAuth();
+  const { user, getProducts, createOrder, submitOrderForApproval } = useAuth();
   
   // Get pre-selected product from navigation params
   const selectedProductFromCatalog = route.params?.selectedProduct;
@@ -103,7 +103,8 @@ const CreateOrder = () => {
       if (result?.success && result.products) {
         setProducts(result.products || []);
         // Extract unique categories
-        const uniqueCategories = [...new Set(result.products?.map((p: Product) => p.category) || [])];
+        const categories = result.products?.map((p: Product) => p.category).filter(Boolean) || [];
+        const uniqueCategories = [...new Set(categories)] as string[];
         setCategories(['all', ...uniqueCategories]);
       }
     } catch (error) {
@@ -246,51 +247,146 @@ const CreateOrder = () => {
       console.log('Result keys:', Object.keys(result || {}));
       
       if (result?.success) {
-        console.log('Order created successfully, closing screen...');
-        console.log('Navigation object:', navigation);
-        console.log('Navigation methods available:', Object.keys(navigation));
-        
-        // Close any open modals first
-        setShowCustomerModal(false);
-        setShowProductModal(false);
-        
-        // Reset form immediately
-        setOrderItems([]);
-        setSelectedCustomer(null);
-        setDeliveryDate('');
-        setPriority('medium');
-        setPaymentMethod('cash');
-        setNotes('');
-        setShippingAddress('');
-        
-        // Try navigation with callback approach
-        console.log('Attempting navigation with callback...');
-        
-        // Use requestAnimationFrame to ensure UI updates are complete
-        requestAnimationFrame(() => {
-          try {
-            console.log('Inside requestAnimationFrame, attempting navigation...');
-            navigation.navigate('OrderList');
-            console.log('Navigation completed in requestAnimationFrame');
-          } catch (error) {
-            console.error('Navigation error in requestAnimationFrame:', error);
-            // Fallback to goBack
-            try {
-              navigation.goBack();
-              console.log('Fallback goBack completed');
-            } catch (goBackError) {
-              console.error('GoBack error:', goBackError);
+        // Show success message
+        Alert.alert(
+          'Success', 
+          'Order created successfully!',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Close any open modals first
+                setShowCustomerModal(false);
+                setShowProductModal(false);
+                
+                // Reset form
+                setOrderItems([]);
+                setSelectedCustomer(null);
+                setDeliveryDate('');
+                setPriority('medium');
+                setPaymentMethod('cash');
+                setNotes('');
+                setShippingAddress('');
+                
+                // Navigate to OrderList
+                try {
+                  navigation.navigate('OrderList');
+                } catch (navError) {
+                  console.error('Navigation error:', navError);
+                  // Fallback to goBack
+                  navigation.goBack();
+                }
+              }
             }
-          }
-        });
+          ]
+        );
       } else {
         Alert.alert('Error', result?.message || 'Failed to create order');
       }
     } catch (error) {
       console.error('Error creating order:', error);
-      console.error('Error details:', error.message);
-      console.error('Error stack:', error.stack);
+      console.error('Error details:', (error as Error).message);
+      console.error('Error stack:', (error as Error).stack);
       Alert.alert('Error', 'Failed to create order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit order for approval
+  const handleSubmitForApproval = async () => {
+    if (!selectedCustomer) {
+      Alert.alert('Error', 'Please select a customer');
+      return;
+    }
+
+    if (orderItems.length === 0) {
+      Alert.alert('Error', 'Please add at least one product to the order');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // First create the order
+      const orderData = {
+        customerId: selectedCustomer._id,
+        customerName: selectedCustomer.name,
+        customerEmail: selectedCustomer.email,
+        customerMobile: selectedCustomer.mobile,
+        customerAddress: selectedCustomer.address,
+        items: orderItems.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discount: item.discount,
+          taxRate: item.taxRate,
+          totalPrice: item.totalPrice,
+        })),
+        totalAmount: finalTotal,
+        totalDiscount,
+        totalTax,
+        deliveryDate: deliveryDate ? new Date(deliveryDate).toISOString() : undefined,
+        priority,
+        paymentMethod,
+        notes,
+        shippingAddress: shippingAddress || selectedCustomer.address,
+      };
+
+      console.log('Creating order for approval:', orderData);
+      const createResult = await createOrder(orderData);
+      
+      if (createResult?.success && createResult?.order?._id) {
+        console.log('Order created, now submitting for approval:', createResult.order._id);
+        
+        // Then submit for approval
+        const approvalResult = await submitOrderForApproval(createResult.order._id);
+        
+        if (approvalResult?.success) {
+          Alert.alert(
+            'Success', 
+            approvalResult.isSelfApproved 
+              ? 'Order has been approved automatically!' 
+              : `Order submitted for approval to ${approvalResult.nextApprover?.name || 'next approver'}`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Close any open modals first
+                  setShowCustomerModal(false);
+                  setShowProductModal(false);
+                  
+                  // Reset form
+                  setOrderItems([]);
+                  setSelectedCustomer(null);
+                  setDeliveryDate('');
+                  setPriority('medium');
+                  setPaymentMethod('cash');
+                  setNotes('');
+                  setShippingAddress('');
+                  
+                  // Navigate to OrderList
+                  try {
+                    navigation.navigate('OrderList');
+                  } catch (navError) {
+                    console.error('Navigation error:', navError);
+                    // Fallback to goBack
+                    navigation.goBack();
+                  }
+                }
+              }
+            ]
+          );
+        } else {
+          Alert.alert('Error', approvalResult?.message || 'Failed to submit order for approval');
+        }
+      } else {
+        Alert.alert('Error', createResult?.message || 'Failed to create order');
+      }
+    } catch (error) {
+      console.error('Error submitting order for approval:', error);
+      Alert.alert('Error', (error as Error).message || 'Failed to submit order for approval');
     } finally {
       setLoading(false);
     }
@@ -543,21 +639,38 @@ const CreateOrder = () => {
           </View>
         </View>
 
-        {/* Create Order Button */}
-        <TouchableOpacity
-          style={[styles.createButton, (!selectedCustomer || orderItems.length === 0) && styles.createButtonDisabled]}
-          onPress={handleCreateOrder}
-          disabled={!selectedCustomer || orderItems.length === 0 || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={styles.createButtonText}>Create Order</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.draftButton, (!selectedCustomer || orderItems.length === 0) && styles.createButtonDisabled]}
+            onPress={handleCreateOrder}
+            disabled={!selectedCustomer || orderItems.length === 0 || loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#6B7280" />
+            ) : (
+              <>
+                <Ionicons name="document-outline" size={20} color="#6B7280" />
+                <Text style={styles.draftButtonText}>Save as Draft</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.submitButton, (!selectedCustomer || orderItems.length === 0) && styles.createButtonDisabled]}
+            onPress={handleSubmitForApproval}
+            disabled={!selectedCustomer || orderItems.length === 0 || loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={styles.submitButtonText}>Submit for Approval</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Customer Selection Modal */}
@@ -968,23 +1081,46 @@ const styles = StyleSheet.create({
   paymentButtonTextSelected: {
     color: '#fff',
   },
-  createButton: {
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 32,
+  },
+  draftButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    gap: 8,
+  },
+  draftButtonText: {
+    color: '#6B7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  submitButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#059669',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 32,
     gap: 8,
   },
-  createButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  createButtonText: {
+  submitButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  createButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    borderColor: '#9CA3AF',
   },
   modalContainer: {
     flex: 1,

@@ -12,24 +12,64 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import OrderDetailsModal from '../../../components/OrderDetailsModal';
+
+interface OrderItem {
+  productId: string;
+  productName: string;
+  productCode?: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  discount?: number;
+  tax?: number;
+}
 
 interface Order {
-  _id: string;
+  _id?: string;
   orderNumber: string;
   customerName: string;
-  customerEmail: string;
-  customerMobile: string;
-  status: 'draft' | 'pending_approval' | 'approved' | 'sent_to_tally' | 'dispatched' | 'delivered' | 'cancelled' | 'returned';
-  finalAmount: number; // Changed from totalAmount to match API response
+  customerEmail?: string;
+  customerMobile?: string;
+  customerAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
+  items: OrderItem[];
   orderDate: string;
-  items: Array<{
-    productName: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-  }>;
+  deliveryDate?: string;
+  status: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  paymentStatus: 'pending' | 'paid' | 'partially_paid' | 'refunded';
+  totalAmount: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  finalAmount: number;
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'refunded';
+  paymentMethod?: string;
+  notes?: string;
+  createdBy?: {
+    name: string;
+    email: string;
+  };
+  approvedBy?: {
+    name: string;
+    email: string;
+  };
+  approvedAt?: string;
+  approvalNotes?: string;
+  trackingNumber?: string;
+  shippingAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 const OrderList = () => {
@@ -39,6 +79,8 @@ const OrderList = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'draft' | 'pending_approval' | 'approved' | 'delivered'>('all');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showOrderDetails, setShowOrderDetails] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -84,6 +126,18 @@ const OrderList = () => {
     setRefreshing(true);
     await fetchOrders();
     setRefreshing(false);
+  };
+
+  // Handle order selection
+  const handleOrderPress = (order: Order) => {
+    setSelectedOrder(order);
+    setShowOrderDetails(true);
+  };
+
+  // Close order details modal
+  const handleCloseOrderDetails = () => {
+    setShowOrderDetails(false);
+    setSelectedOrder(null);
   };
 
   // Submit order for approval
@@ -150,7 +204,11 @@ const OrderList = () => {
   };
 
   const renderOrderItem = ({ item }: { item: Order }) => (
-    <TouchableOpacity style={styles.orderCard}>
+    <TouchableOpacity 
+      style={styles.orderCard}
+      onPress={() => handleOrderPress(item)}
+      activeOpacity={0.7}
+    >
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
           <Text style={styles.orderNumber}>{item.orderNumber}</Text>
@@ -217,13 +275,24 @@ const OrderList = () => {
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.submitButton}
-            onPress={() => handleSubmitForApproval(item._id)}
+            onPress={(e) => {
+              e.stopPropagation(); // Prevent triggering the parent onPress
+              if (item._id) {
+                handleSubmitForApproval(item._id);
+              }
+            }}
           >
             <Ionicons name="send-outline" size={16} color="#fff" />
             <Text style={styles.submitButtonText}>Submit for Approval</Text>
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Click indicator */}
+      <View style={styles.clickIndicator}>
+        <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+        <Text style={styles.clickIndicatorText}>Tap to view details</Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -301,7 +370,7 @@ const OrderList = () => {
       <FlatList
         data={orders}
         renderItem={renderOrderItem}
-        keyExtractor={(item) => item._id}
+        keyExtractor={(item) => item._id || item.orderNumber}
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl
@@ -313,6 +382,14 @@ const OrderList = () => {
         }
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
+      />
+
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        visible={showOrderDetails}
+        order={selectedOrder}
+        onClose={handleCloseOrderDetails}
+        canUpdateStatus={false} // Dealers can't update order status
       />
     </View>
   );
@@ -534,6 +611,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  clickIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  clickIndicatorText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginLeft: 4,
+    fontStyle: 'italic',
   },
 });
 

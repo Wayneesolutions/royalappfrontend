@@ -259,26 +259,43 @@ const CreateOrder = () => {
         paymentMethod,
         notes,
         shippingAddress: shippingAddress || selectedCustomer.address,
-        status: 'draft', // Create as draft first
       };
 
+      console.log('About to call createOrder with data:', orderData);
       const result = await createOrder(orderData);
+      console.log('Full API result:', result);
       
       if (result?.success) {
+        // Show success message
         Alert.alert(
-          'Success',
-          'Order created as draft! Would you like to submit it for approval?',
+          'Success', 
+          'Order created successfully!',
           [
             {
-              text: 'Save Draft',
+              text: 'OK',
               onPress: () => {
-                resetForm();
-                navigation.navigate('OrderList');
+                // Close any open modals first
+                setShowCustomerModal(false);
+                setShowProductModal(false);
+                
+                // Reset form
+                setOrderItems([]);
+                setSelectedCustomer(null);
+                setDeliveryDate('');
+                setPriority('medium');
+                setPaymentMethod('cash');
+                setNotes('');
+                setShippingAddress('');
+                
+                // Navigate to OrderList
+                try {
+                  navigation.navigate('OrderList');
+                } catch (navError) {
+                  console.error('Navigation error:', navError);
+                  // Fallback to goBack
+                  navigation.goBack();
+                }
               }
-            },
-            {
-              text: 'Submit for Approval',
-              onPress: () => handleSubmitForApproval(result.data._id)
             }
           ]
         );
@@ -287,6 +304,8 @@ const CreateOrder = () => {
       }
     } catch (error) {
       console.error('Error creating order:', error);
+      console.error('Error details:', (error as Error).message);
+      console.error('Error stack:', (error as Error).stack);
       Alert.alert('Error', 'Failed to create order');
     } finally {
       setLoading(false);
@@ -294,32 +313,99 @@ const CreateOrder = () => {
   };
 
   // Submit order for approval
-  const handleSubmitForApproval = async (orderId: string) => {
+  const handleSubmitForApproval = async () => {
+    if (!selectedCustomer) {
+      Alert.alert('Error', 'Please select a customer');
+      return;
+    }
+
+    if (orderItems.length === 0) {
+      Alert.alert('Error', 'Please add at least one product to the order');
+      return;
+    }
+
     try {
       setLoading(true);
       
-      const result = await submitOrderForApproval(orderId);
+      // First create the order
+      const orderData = {
+        customerId: selectedCustomer._id,
+        customerName: selectedCustomer.name,
+        customerEmail: selectedCustomer.email,
+        customerMobile: selectedCustomer.mobile,
+        customerAddress: selectedCustomer.address,
+        items: orderItems.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discount: item.discount,
+          taxRate: item.taxRate,
+          totalPrice: item.totalPrice,
+        })),
+        totalAmount: finalTotal,
+        totalDiscount,
+        totalTax,
+        deliveryDate: deliveryDate ? new Date(deliveryDate).toISOString() : undefined,
+        priority,
+        paymentMethod,
+        notes,
+        shippingAddress: shippingAddress || selectedCustomer.address,
+      };
+
+      console.log('Creating order for approval:', orderData);
+      const createResult = await createOrder(orderData);
       
-      if (result?.success) {
-        Alert.alert(
-          'Success',
-          'Order submitted for approval successfully!',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                resetForm();
-                navigation.navigate('OrderList');
+      if (createResult?.success && createResult?.order?._id) {
+        console.log('Order created, now submitting for approval:', createResult.order._id);
+        
+        // Then submit for approval
+        const approvalResult = await submitOrderForApproval(createResult.order._id);
+        
+        if (approvalResult?.success) {
+          Alert.alert(
+            'Success', 
+            approvalResult.isSelfApproved 
+              ? 'Order has been approved automatically!' 
+              : `Order submitted for approval to ${approvalResult.nextApprover?.name || 'next approver'}`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Close any open modals first
+                  setShowCustomerModal(false);
+                  setShowProductModal(false);
+                  
+                  // Reset form
+                  setOrderItems([]);
+                  setSelectedCustomer(null);
+                  setDeliveryDate('');
+                  setPriority('medium');
+                  setPaymentMethod('cash');
+                  setNotes('');
+                  setShippingAddress('');
+                  
+                  // Navigate to OrderList
+                  try {
+                    navigation.navigate('OrderList');
+                  } catch (navError) {
+                    console.error('Navigation error:', navError);
+                    // Fallback to goBack
+                    navigation.goBack();
+                  }
+                }
               }
-            }
-          ]
-        );
+            ]
+          );
+        } else {
+          Alert.alert('Error', approvalResult?.message || 'Failed to submit order for approval');
+        }
       } else {
-        Alert.alert('Error', result?.message || 'Failed to submit order for approval');
+        Alert.alert('Error', createResult?.message || 'Failed to create order');
       }
     } catch (error) {
       console.error('Error submitting order for approval:', error);
-      Alert.alert('Error', 'Failed to submit order for approval');
+      Alert.alert('Error', (error as Error).message || 'Failed to submit order for approval');
     } finally {
       setLoading(false);
     }
@@ -590,21 +676,38 @@ const CreateOrder = () => {
           </View>
         </View>
 
-        {/* Create Order Button */}
-        <TouchableOpacity
-          style={[styles.createButton, (!selectedCustomer || orderItems.length === 0) && styles.createButtonDisabled]}
-          onPress={handleCreateOrder}
-          disabled={!selectedCustomer || orderItems.length === 0 || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={styles.createButtonText}>Create Order</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.draftButton, (!selectedCustomer || orderItems.length === 0) && styles.createButtonDisabled]}
+            onPress={handleCreateOrder}
+            disabled={!selectedCustomer || orderItems.length === 0 || loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#6B7280" />
+            ) : (
+              <>
+                <Ionicons name="document-outline" size={20} color="#6B7280" />
+                <Text style={styles.draftButtonText}>Save as Draft</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.submitButton, (!selectedCustomer || orderItems.length === 0) && styles.createButtonDisabled]}
+            onPress={handleSubmitForApproval}
+            disabled={!selectedCustomer || orderItems.length === 0 || loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={styles.submitButtonText}>Submit for Approval</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Customer Selection Modal */}
@@ -1021,23 +1124,46 @@ const styles = StyleSheet.create({
   paymentButtonTextSelected: {
     color: '#fff',
   },
-  createButton: {
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 32,
+  },
+  draftButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    gap: 8,
+  },
+  draftButtonText: {
+    color: '#6B7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  submitButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#059669',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 32,
     gap: 8,
   },
-  createButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  createButtonText: {
+  submitButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  createButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    borderColor: '#9CA3AF',
   },
   modalContainer: {
     flex: 1,

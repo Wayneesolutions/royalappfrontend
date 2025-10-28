@@ -18,6 +18,7 @@ import ProductManagement from '../screens/dashboard/Dealer/ProductManagement';
 import CreateOrder from '../screens/dashboard/Dealer/CreateOrder';
 import OrderList from '../screens/dashboard/Dealer/OrderList';
 import DealerSalesReportScreen from '../screens/dashboard/Dealer/SalesReportScreen';
+import TeamManagement from '../screens/dashboard/Dealer/TeamManagement';
 import PendingApprovalsScreen from '../screens/dashboard/admin/approval/PendingApprovalsScreen';
 import TargetAssignmentScreen from '../screens/dashboard/admin/target/TargetAssignmentScreen';
 import MyTargetsScreen from '../screens/dashboard/common/MyTargetsScreen';
@@ -153,6 +154,7 @@ export function DealerNavigator() {
       <Stack.Screen name="CreateOrder" component={CreateOrder} />
       <Stack.Screen name="OrderList" component={OrderList} />
       <Stack.Screen name="SalesReportScreen" component={DealerSalesReportScreen} />
+      <Stack.Screen name="TeamManagement" component={TeamManagement} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />

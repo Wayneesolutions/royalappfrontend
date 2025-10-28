@@ -89,6 +89,12 @@ interface AuthContextType {
   getASMTeamMembers: (params?: any) => Promise<any>;
   getASMTeamPerformance: (params?: { period?: string }) => Promise<any>;
   getASMRecentActivity: (params?: { limit?: number; days?: number }) => Promise<any>;
+  // Dealer Team Management
+  createSubDealer: (data: any) => Promise<any>;
+  getSubDealers: (params?: any) => Promise<any>;
+  getSubDealerById: (subDealerId: string) => Promise<any>;
+  updateSubDealer: (subDealerId: string, data: any) => Promise<any>;
+  deactivateSubDealer: (subDealerId: string) => Promise<any>;
   // Super Admin methods
   superadminCreateCompany: (data: any) => Promise<any>;
   superadminListCompanies: (params?: any) => Promise<any>;
@@ -851,6 +857,57 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Dealer Team Management methods
+  const createSubDealer = async (data: any): Promise<any> => {
+    try {
+      const result = await apiService.createSubDealer(data);
+      return result;
+    } catch (error) {
+      console.error('Failed to create sub-dealer:', error);
+      throw error;
+    }
+  };
+
+  const getSubDealers = async (params?: any): Promise<any> => {
+    try {
+      const result = await apiService.getSubDealers(params);
+      return result;
+    } catch (error) {
+      console.error('Failed to get sub-dealers:', error);
+      throw error;
+    }
+  };
+
+  const getSubDealerById = async (subDealerId: string): Promise<any> => {
+    try {
+      const result = await apiService.getSubDealerById(subDealerId);
+      return result;
+    } catch (error) {
+      console.error('Failed to get sub-dealer:', error);
+      throw error;
+    }
+  };
+
+  const updateSubDealer = async (subDealerId: string, data: any): Promise<any> => {
+    try {
+      const result = await apiService.updateSubDealer(subDealerId, data);
+      return result;
+    } catch (error) {
+      console.error('Failed to update sub-dealer:', error);
+      throw error;
+    }
+  };
+
+  const deactivateSubDealer = async (subDealerId: string): Promise<any> => {
+    try {
+      const result = await apiService.deactivateSubDealer(subDealerId);
+      return result;
+    } catch (error) {
+      console.error('Failed to deactivate sub-dealer:', error);
+      throw error;
+    }
+  };
+
   // Super Admin methods
   const superadminCreateCompany = async (data: any): Promise<any> => {
     try {
@@ -1096,6 +1153,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getASMTeamMembers,
     getASMTeamPerformance,
     getASMRecentActivity,
+    // Dealer Team Management
+    createSubDealer,
+    getSubDealers,
+    getSubDealerById,
+    updateSubDealer,
+    deactivateSubDealer,
     // Super Admin methods
     superadminCreateCompany,
     superadminListCompanies,

@@ -55,6 +55,7 @@ const getMembers = (userCounts: {[key: string]: number}): Member[] => [
 
 const menuItems: MenuItem[] = [
   { label: 'User Management', icon: 'people-outline', iconType: 'Ionicons', navigationScreen: 'Users' },
+  { label: 'Product Management', icon: 'cube-outline', iconType: 'Ionicons', navigationScreen: 'ProductCatalog' },
   { label: 'Order Monitoring', icon: 'eye-outline', iconType: 'Ionicons', navigationScreen: 'SaleOrders' },
   { label: 'Sales Overview', icon: 'trending-up-outline', iconType: 'Ionicons', navigationScreen: 'Sales' },
   { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },

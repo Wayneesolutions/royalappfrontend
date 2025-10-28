@@ -88,6 +88,7 @@ type AdminStackParamList = {
   ClearOrdersScreen: undefined;
   OutstandingScreen: undefined;
   TargetAssignmentScreen: undefined;
+  ProductCatalog: undefined;
 } & CommonStackParamList;
 
 // ==================== ZONAL SCREENS ====================
@@ -169,6 +170,7 @@ type DealerStackParamList = {
   OrderList: undefined;
   SalesScreen: undefined;
   SalesReportScreen: undefined;
+  TeamManagement: undefined;
   InvoiceScreen: undefined;
   LedgerScreen: undefined;
   TargetScreen: undefined;
