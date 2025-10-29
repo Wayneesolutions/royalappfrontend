@@ -252,18 +252,25 @@ const DashboardHome = () => {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
             <QuickActionCard
-              title="Place Order"
-              description="Order new products"
+              title="Create Order"
+              description="Create new order"
               icon="add-circle-outline"
               color="#8B5CF6"
-              onPress={() => navigation.navigate('CreateOrder')}
+              onPress={() => navigation.navigate('DealerCreateOrder')}
             />
             <QuickActionCard
               title="My Orders"
               description="View order status"
               icon="list-outline"
               color="#3B82F6"
-              onPress={() => navigation.navigate('OrderList')}
+              onPress={() => navigation.navigate('DealerOrderList')}
+            />
+            <QuickActionCard
+              title="Received Orders"
+              description="Orders from others"
+              icon="download-outline"
+              color="#10B981"
+              onPress={() => navigation.navigate('DealerReceivedOrders')}
             />
             <QuickActionCard
               title="Sales Report"

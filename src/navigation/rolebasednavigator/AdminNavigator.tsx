@@ -31,11 +31,13 @@ import SaleOrderEntry from '../../screens/dashboard/admin/saleOrder/SaleOrderEnt
 import SaleOrderItemSelect from '../../screens/dashboard/admin/saleOrder/SaleOrderItemSelect';
 import SaleOrderItemDetail from '../../screens/dashboard/admin/saleOrder/SaleOrderItemDetail';
 import SaleOrderApprove from '../../screens/dashboard/admin/saleOrder/SaleOrderApprove';
-import PendingApprovalsScreen from '../../screens/dashboard/admin/approval/PendingApprovalsScreen';
 import TargetAssignmentScreen from '../../screens/dashboard/admin/target/TargetAssignmentScreen';
 import MyTargetsScreen from '../../screens/dashboard/common/MyTargetsScreen';
 import ApprovedOrdersScreen from '../../screens/dashboard/admin/ApprovedOrdersScreen';
 import ProductCatalog from '../../screens/dashboard/admin/ProductCatalog';
+import AdminCreateOrder from '../../screens/dashboard/admin/AdminCreateOrder';
+import AdminOrderList from '../../screens/dashboard/admin/AdminOrderList';
+import AdminEditOrder from '../../screens/dashboard/admin/AdminEditOrder';
 // Order Management Screens (Admin can only monitor, not create)
 // import OrderManagement from '../../screens/dashboard/admin/saleOrder/OrderManagement';
 // import ProductManagement from '../../screens/dashboard/admin/saleOrder/ProductManagement';
@@ -66,7 +68,6 @@ export default function AdminNavigator() {
             <AdminStack.Screen name="LedgerScreen" component={LedgerScreen} />
             <AdminStack.Screen name="TargetScreen" component={TargetScreen} />
             <AdminStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
-            <AdminStack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
         <AdminStack.Screen name="TargetAssignmentScreen" component={TargetAssignmentScreen} />
         <AdminStack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
         <AdminStack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
@@ -75,6 +76,9 @@ export default function AdminNavigator() {
 
             {/* Product Management */}
             <AdminStack.Screen name="ProductCatalog" component={ProductCatalog} />
+            <AdminStack.Screen name="AdminCreateOrder" component={AdminCreateOrder} />
+            <AdminStack.Screen name="AdminOrderList" component={AdminOrderList} />
+            <AdminStack.Screen name="AdminEditOrder" component={AdminEditOrder} />
 
             {/* Sale Order Screens */}
             <AdminStack.Screen name="Companies" component={Companies} />

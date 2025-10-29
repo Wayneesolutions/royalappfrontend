@@ -9,17 +9,41 @@ import TeamManagementScreen from '../screens/dashboard/Zonal/TeamManagementScree
 import SalesReportScreen from '../screens/dashboard/Zonal/SalesReportScreen';
 import OrderManagementScreen from '../screens/dashboard/Zonal/OrderManagementScreen';
 import TargetManagementScreen from '../screens/dashboard/Zonal/TargetManagementScreen';
+import ZonalCreateOrder from '../screens/dashboard/Zonal/ZonalCreateOrder';
+import ZonalOrderList from '../screens/dashboard/Zonal/ZonalOrderList';
+import ZonalEditOrder from '../screens/dashboard/Zonal/ZonalEditOrder';
 import DashboardRSM from '../screens/dashboard/RSM/DashboardHome';
+import RSMCreateOrder from '../screens/dashboard/RSM/RSMCreateOrder';
+import RSMOrderList from '../screens/dashboard/RSM/RSMOrderList';
+import RSMEditOrder from '../screens/dashboard/RSM/RSMEditOrder';
+import RSMTeamManagementScreen from '../screens/dashboard/RSM/TeamManagementScreen';
+import RSMSalesReportScreen from '../screens/dashboard/RSM/SalesReportScreen';
+import RSMOrderManagementScreen from '../screens/dashboard/RSM/OrderManagementScreen';
+import RSMTargetManagementScreen from '../screens/dashboard/RSM/TargetManagementScreen';
 import DashboardASM from '../screens/dashboard/ASM/DashboardHome';
+import ASMCreateOrder from '../screens/dashboard/ASM/ASMCreateOrder';
+import ASMOrderList from '../screens/dashboard/ASM/ASMOrderList';
+import ASMEditOrder from '../screens/dashboard/ASM/ASMEditOrder';
+import ASMTeamManagementScreen from '../screens/dashboard/ASM/TeamManagementScreen';
+import ASMSalesReportScreen from '../screens/dashboard/ASM/SalesReportScreen';
+import ASMOrderManagementScreen from '../screens/dashboard/ASM/OrderManagementScreen';
+import ASMTargetManagementScreen from '../screens/dashboard/ASM/TargetManagementScreen';
 import DashboardDistributor from '../screens/dashboard/Distributor/DashboardHome';
+import DistributorCreateOrder from '../screens/dashboard/Distributor/DistributorCreateOrder';
+import DistributorOrderList from '../screens/dashboard/Distributor/DistributorOrderList';
+import DistributorEditOrder from '../screens/dashboard/Distributor/DistributorEditOrder';
+import DistributorSalesReportScreen from '../screens/dashboard/Distributor/SalesReportScreen';
 import DashboardDealer from '../screens/dashboard/Dealer/DashboardHome';
 import ProductCatalog from '../screens/dashboard/Dealer/ProductCatalog';
 import ProductManagement from '../screens/dashboard/Dealer/ProductManagement';
 import CreateOrder from '../screens/dashboard/Dealer/CreateOrder';
 import OrderList from '../screens/dashboard/Dealer/OrderList';
+import DealerCreateOrder from '../screens/dashboard/Dealer/DealerCreateOrder';
+import DealerOrderList from '../screens/dashboard/Dealer/DealerOrderList';
+import DealerReceivedOrders from '../screens/dashboard/Dealer/DealerReceivedOrders';
+import DealerEditOrder from '../screens/dashboard/Dealer/DealerEditOrder';
 import DealerSalesReportScreen from '../screens/dashboard/Dealer/SalesReportScreen';
 import TeamManagement from '../screens/dashboard/Dealer/TeamManagement';
-import PendingApprovalsScreen from '../screens/dashboard/admin/approval/PendingApprovalsScreen';
 import TargetAssignmentScreen from '../screens/dashboard/admin/target/TargetAssignmentScreen';
 import MyTargetsScreen from '../screens/dashboard/common/MyTargetsScreen';
 import DashboardSubDealer from '../screens/dashboard/SubDealer/DashboardHome';
@@ -28,6 +52,9 @@ import ProductCatalogSalesman from '../screens/dashboard/Salesman/ProductCatalog
 import ProductManagementSalesman from '../screens/dashboard/Salesman/ProductManagement';
 import CreateOrderSalesman from '../screens/dashboard/Salesman/CreateOrder';
 import OrderListSalesman from '../screens/dashboard/Salesman/OrderList';
+import SalesmanCreateOrder from '../screens/dashboard/Salesman/SalesmanCreateOrder';
+import SalesmanOrderList from '../screens/dashboard/Salesman/SalesmanOrderList';
+import SalesmanEditOrder from '../screens/dashboard/Salesman/SalesmanEditOrder';
 
 // Common Screens
 // import ZonalScreen from '../screens/common/ZonalScreen';
@@ -55,8 +82,10 @@ export function ZonalNavigator() {
       <Stack.Screen name="SalesReportScreen" component={SalesReportScreen} />
       <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
       <Stack.Screen name="TargetManagementScreen" component={TargetManagementScreen} />
-      <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
+      <Stack.Screen name="ZonalCreateOrder" component={ZonalCreateOrder} />
+      <Stack.Screen name="ZonalOrderList" component={ZonalOrderList} />
+      <Stack.Screen name="ZonalEditOrder" component={ZonalEditOrder} />
       {/* <Stack.Screen name="RSMScreen" component={RSMScreen} />
       <Stack.Screen name="ASMScreen" component={ASMScreen} />
       <Stack.Screen name="SalesScreen" component={SalesScreen} />
@@ -78,12 +107,14 @@ export function RSMNavigator() {
   return (
     <Stack.Navigator initialRouteName="DashboardRSM" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardRSM" component={DashboardRSM} />
-      <Stack.Screen name="TeamManagementScreen" component={TeamManagementScreen} />
-      <Stack.Screen name="SalesReportScreen" component={SalesReportScreen} />
-      <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
-      <Stack.Screen name="TargetManagementScreen" component={TargetManagementScreen} />
-      <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="TeamManagementScreen" component={RSMTeamManagementScreen} />
+      <Stack.Screen name="SalesReportScreen" component={RSMSalesReportScreen} />
+      <Stack.Screen name="OrderManagementScreen" component={RSMOrderManagementScreen} />
+      <Stack.Screen name="TargetManagementScreen" component={RSMTargetManagementScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
+      <Stack.Screen name="RSMCreateOrder" component={RSMCreateOrder} />
+      <Stack.Screen name="RSMOrderList" component={RSMOrderList} />
+      <Stack.Screen name="RSMEditOrder" component={RSMEditOrder} />
       {/* <Stack.Screen name="ASMScreen" component={ASMScreen} />
       <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="DealerScreen" component={DealerScreen} />
@@ -104,12 +135,14 @@ export function ASMNavigator() {
   return (
     <Stack.Navigator initialRouteName="DashboardASM" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardASM" component={DashboardASM} />
-      <Stack.Screen name="TeamManagementScreen" component={TeamManagementScreen} />
-      <Stack.Screen name="SalesReportScreen" component={SalesReportScreen} />
-      <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
-      <Stack.Screen name="TargetManagementScreen" component={TargetManagementScreen} />
-      <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
+      <Stack.Screen name="TeamManagementScreen" component={ASMTeamManagementScreen} />
+      <Stack.Screen name="SalesReportScreen" component={ASMSalesReportScreen} />
+      <Stack.Screen name="OrderManagementScreen" component={ASMOrderManagementScreen} />
+      <Stack.Screen name="TargetManagementScreen" component={ASMTargetManagementScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
+      <Stack.Screen name="ASMCreateOrder" component={ASMCreateOrder} />
+      <Stack.Screen name="ASMOrderList" component={ASMOrderList} />
+      <Stack.Screen name="ASMEditOrder" component={ASMEditOrder} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="DistributorsScreen" component={DistributorsScreen} />
@@ -129,8 +162,11 @@ export function DistributorNavigator() {
   return (
     <Stack.Navigator initialRouteName="DashboardDistributor" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardDistributor" component={DashboardDistributor} />
-      <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
+      <Stack.Screen name="DistributorCreateOrder" component={DistributorCreateOrder} />
+      <Stack.Screen name="DistributorOrderList" component={DistributorOrderList} />
+      <Stack.Screen name="DistributorEditOrder" component={DistributorEditOrder} />
+      <Stack.Screen name="SalesReportScreen" component={DistributorSalesReportScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
@@ -153,6 +189,10 @@ export function DealerNavigator() {
       <Stack.Screen name="ProductManagement" component={ProductManagement} />
       <Stack.Screen name="CreateOrder" component={CreateOrder} />
       <Stack.Screen name="OrderList" component={OrderList} />
+      <Stack.Screen name="DealerCreateOrder" component={DealerCreateOrder} />
+      <Stack.Screen name="DealerOrderList" component={DealerOrderList} />
+      <Stack.Screen name="DealerReceivedOrders" component={DealerReceivedOrders} />
+      <Stack.Screen name="DealerEditOrder" component={DealerEditOrder} />
       <Stack.Screen name="SalesReportScreen" component={DealerSalesReportScreen} />
       <Stack.Screen name="TeamManagement" component={TeamManagement} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
@@ -173,7 +213,6 @@ export function SubDealerNavigator() {
   return (
     <Stack.Navigator initialRouteName="DashboardSubDealer" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardSubDealer" component={DashboardSubDealer} />
-      <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
@@ -195,8 +234,10 @@ export function SalesmanNavigator() {
       <Stack.Screen name="ProductManagement" component={ProductManagementSalesman} />
       <Stack.Screen name="CreateOrder" component={CreateOrderSalesman} />
       <Stack.Screen name="OrderList" component={OrderListSalesman} />
-      <Stack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
       <Stack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
+      <Stack.Screen name="SalesmanCreateOrder" component={SalesmanCreateOrder} />
+      <Stack.Screen name="SalesmanOrderList" component={SalesmanOrderList} />
+      <Stack.Screen name="SalesmanEditOrder" component={SalesmanEditOrder} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
       <Stack.Screen name="LedgerScreen" component={LedgerScreen} />

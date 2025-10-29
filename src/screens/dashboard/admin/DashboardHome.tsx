@@ -56,6 +56,8 @@ const getMembers = (userCounts: {[key: string]: number}): Member[] => [
 const menuItems: MenuItem[] = [
   { label: 'User Management', icon: 'people-outline', iconType: 'Ionicons', navigationScreen: 'Users' },
   { label: 'Product Management', icon: 'cube-outline', iconType: 'Ionicons', navigationScreen: 'ProductCatalog' },
+  { label: 'Create Order', icon: 'add-circle-outline', iconType: 'Ionicons', navigationScreen: 'AdminCreateOrder' },
+  { label: 'My Orders', icon: 'list-outline', iconType: 'Ionicons', navigationScreen: 'AdminOrderList' },
   { label: 'Order Monitoring', icon: 'eye-outline', iconType: 'Ionicons', navigationScreen: 'SaleOrders' },
   { label: 'Sales Overview', icon: 'trending-up-outline', iconType: 'Ionicons', navigationScreen: 'Sales' },
   { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },
@@ -63,7 +65,6 @@ const menuItems: MenuItem[] = [
   { label: 'Target Management', icon: 'target', iconType: 'MaterialCommunityIcons', navigationScreen: 'TargetScreen' },
   { label: 'Assign Targets', icon: 'add-circle-outline', iconType: 'Ionicons', navigationScreen: 'TargetAssignmentScreen' },
   { label: 'Pending Orders', icon: 'time-outline', iconType: 'Ionicons', navigationScreen: 'PendingOrdersScreen' },
-  { label: 'Pending Approvals', icon: 'checkmark-circle-outline', iconType: 'Ionicons', navigationScreen: 'PendingApprovalsScreen' },
   { label: 'Approved Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ApprovedOrdersScreen' },
 ];
 

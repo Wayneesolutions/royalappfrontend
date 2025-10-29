@@ -110,6 +110,17 @@ class ApiService {
     // Request interceptor
     this.axiosInstance.interceptors.request.use(
       (config) => {
+        // Log all API requests in development
+        if (__DEV__) {
+          console.log('📡 API Request:', {
+            method: config.method?.toUpperCase(),
+            url: config.url,
+            baseURL: config.baseURL,
+            fullURL: `${config.baseURL}${config.url}`,
+            headers: config.headers
+          });
+        }
+        
         // Add auth token to requests
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
@@ -117,6 +128,7 @@ class ApiService {
         return config;
       },
       (error) => {
+        console.error('Request interceptor error:', error);
         return Promise.reject(error);
       }
     );
@@ -124,9 +136,30 @@ class ApiService {
     // Response interceptor
     this.axiosInstance.interceptors.response.use(
       (response) => {
+        // Log successful API responses in development
+        if (__DEV__) {
+          console.log('✅ API Response:', {
+            status: response.status,
+            url: response.config.url,
+            baseURL: response.config.baseURL,
+            data: response.data
+          });
+        }
         return response;
       },
       async (error: AxiosError) => {
+        // Log API errors in development
+        if (__DEV__) {
+          console.error('❌ API Error:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            url: error.config?.url,
+            baseURL: error.config?.baseURL,
+            message: error.message,
+            data: error.response?.data
+          });
+        }
+        
         if (error.response?.status === 401) {
           // Token expired or invalid, clear auth data
           await this.logout();
@@ -461,6 +494,13 @@ class ApiService {
     password: string;
     role: string;
     userName?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      country?: string;
+    };
   }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/admin/create-user', userData);
@@ -486,9 +526,16 @@ class ApiService {
     role: string;
     userName?: string;
     isActive?: boolean;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      country?: string;
+    };
   }): Promise<ApiResponse<any>> {
     try {
-      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/admin/user/${userId}`, userData);
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/admin/edit-user/${userId}`, userData);
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -607,6 +654,8 @@ class ApiService {
     startDate?: string;
     endDate?: string;
     search?: string;
+    orderType?: string;
+    createdBy?: string; // Filter by createdBy (user ID)
   }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/orders', { params });
@@ -630,7 +679,25 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/orders/${orderId}/status`, data);
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      // Return error response instead of throwing to avoid undefined upstream
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return {
+          success: false,
+          message: message
+        } as any;
+      } else if (axiosError.request) {
+        return {
+          success: false,
+          message: 'Network error - No response received'
+        } as any;
+      } else {
+        return {
+          success: false,
+          message: axiosError.message || 'Unknown error'
+        } as any;
+      }
     }
   }
 
@@ -639,7 +706,25 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/orders/${orderId}`, data);
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      // Return error response instead of throwing to avoid undefined upstream
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return {
+          success: false,
+          message: message
+        } as any;
+      } else if (axiosError.request) {
+        return {
+          success: false,
+          message: 'Network error - No response received'
+        } as any;
+      } else {
+        return {
+          success: false,
+          message: axiosError.message || 'Unknown error'
+        } as any;
+      }
     }
   }
 
@@ -732,11 +817,36 @@ class ApiService {
     images?: Array<{ url: string; alt?: string; isPrimary?: boolean }>;
     specifications?: any;
   }): Promise<ApiResponse<any>> {
+    console.log('🌐 API Service createProduct called with:', data);
     try {
+      console.log('📡 Making POST request to /products...');
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/products', data);
+      console.log('📡 POST response received:', response.data);
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      console.log('❌ API Service createProduct error:', error);
+      // Return error response instead of throwing
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        console.log('📡 Returning error response:', { success: false, message });
+        return {
+          success: false,
+          message: message
+        };
+      } else if (axiosError.request) {
+        console.log('📡 Returning network error response');
+        return {
+          success: false,
+          message: 'Network error - No response received'
+        };
+      } else {
+        console.log('📡 Returning unexpected error response');
+        return {
+          success: false,
+          message: axiosError.message || 'An unexpected error occurred'
+        };
+      }
     }
   }
 
@@ -761,7 +871,25 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/products/${productId}`);
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      // Return error response instead of throwing to avoid undefined upstream
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return {
+          success: false,
+          message: message
+        } as any;
+      } else if (axiosError.request) {
+        return {
+          success: false,
+          message: 'Network error - No response received'
+        } as any;
+      } else {
+        return {
+          success: false,
+          message: axiosError.message || 'Unknown error'
+        } as any;
+      }
     }
   }
 
@@ -770,7 +898,25 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/products/${productId}`, data);
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      // Return error response instead of throwing
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return {
+          success: false,
+          message: message
+        };
+      } else if (axiosError.request) {
+        return {
+          success: false,
+          message: 'Network error - No response received'
+        };
+      } else {
+        return {
+          success: false,
+          message: axiosError.message || 'An unexpected error occurred'
+        };
+      }
     }
   }
 
@@ -797,7 +943,25 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/products/${productId}/stock`, data);
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      // Return error response instead of throwing
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return {
+          success: false,
+          message: message
+        };
+      } else if (axiosError.request) {
+        return {
+          success: false,
+          message: 'Network error - No response received'
+        };
+      } else {
+        return {
+          success: false,
+          message: axiosError.message || 'An unexpected error occurred'
+        };
+      }
     }
   }
 

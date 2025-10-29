@@ -18,7 +18,6 @@ import PendingOrdersScreen from '../../screens/dashboard/admin/PendingOrdersScre
 import ClearOrdersScreen from '../../screens/dashboard/admin/ClearOrdersScreen';
 import SettingsScreen from '../../screens/dashboard/admin/SettingsScreen';
 import ProfileScreen from '../../screens/common/ProfileScreen';
-import PendingApprovalsScreen from '../../screens/dashboard/admin/approval/PendingApprovalsScreen';
 import MyTargetsScreen from '../../screens/dashboard/common/MyTargetsScreen';
 
 // RSM Specific Screens (to be created)
@@ -26,6 +25,9 @@ import TeamManagementScreen from '../../screens/dashboard/RSM/TeamManagementScre
 import SalesReportScreen from '../../screens/dashboard/RSM/SalesReportScreen';
 import OrderManagementScreen from '../../screens/dashboard/RSM/OrderManagementScreen';
 import TargetManagementScreen from '../../screens/dashboard/RSM/TargetManagementScreen';
+import RSMCreateOrder from '../../screens/dashboard/RSM/RSMCreateOrder';
+import RSMOrderList from '../../screens/dashboard/RSM/RSMOrderList';
+import RSMEditOrder from '../../screens/dashboard/RSM/RSMEditOrder';
 
 const RSMStack = createNativeStackNavigator<RootStackParamList>();
 
@@ -43,6 +45,9 @@ export default function RSMNavigator() {
             <RSMStack.Screen name="SalesReportScreen" component={SalesReportScreen} />
             <RSMStack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
             <RSMStack.Screen name="TargetManagementScreen" component={TargetManagementScreen} />
+            <RSMStack.Screen name="RSMCreateOrder" component={RSMCreateOrder} />
+            <RSMStack.Screen name="RSMOrderList" component={RSMOrderList} />
+            <RSMStack.Screen name="RSMEditOrder" component={RSMEditOrder} />
 
             {/* Common Screens */}
             <RSMStack.Screen name="ASMScreen" component={ASMScreen} />
@@ -53,7 +58,6 @@ export default function RSMNavigator() {
             <RSMStack.Screen name="LedgerScreen" component={LedgerScreen} />
             <RSMStack.Screen name="TargetScreen" component={TargetScreen} />
             <RSMStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
-            <RSMStack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
             <RSMStack.Screen name="ClearOrdersScreen" component={ClearOrdersScreen} />
             <RSMStack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
             <RSMStack.Screen name="SettingsScreen" component={SettingsScreen} />

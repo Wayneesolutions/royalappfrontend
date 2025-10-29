@@ -43,6 +43,13 @@ interface User {
   email: string;
   role: string;
   hierarchyLevel: number;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
 }
 
 interface Target {

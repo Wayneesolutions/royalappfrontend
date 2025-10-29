@@ -275,35 +275,42 @@ const DashboardHome = () => {
               description="Manage your team members"
               icon="people-outline"
               color="#3B82F6"
-              onPress={() => navigation.navigate('TeamManagementScreen')}
+              onPress={() => (navigation as any).navigate('TeamManagementScreen')}
             />
             <QuickActionCard
               title="Sales Report"
               description="View sales performance"
               icon="bar-chart-outline"
               color="#10B981"
-              onPress={() => navigation.navigate('SalesReportScreen')}
+              onPress={() => (navigation as any).navigate('SalesReportScreen')}
             />
             <QuickActionCard
-              title="Orders"
-              description="Manage orders"
+              title="Create Order"
+              description="Create new order"
+              icon="add-circle-outline"
+              color="#3B82F6"
+              onPress={() => (navigation as any).navigate('ZonalCreateOrder')}
+            />
+            <QuickActionCard
+              title="My Orders"
+              description="View all orders"
               icon="list-outline"
               color="#F59E0B"
-              onPress={() => navigation.navigate('OrderManagementScreen')}
+              onPress={() => (navigation as any).navigate('ZonalOrderList')}
             />
             <QuickActionCard
               title="Pending Approvals"
               description="Approve orders"
               icon="checkmark-circle-outline"
               color="#8B5CF6"
-              onPress={() => navigation.navigate('PendingApprovalsScreen')}
+              onPress={() => (navigation as any).navigate('PendingApprovalsScreen')}
             />
             <QuickActionCard
               title="Targets"
               description="Set and track targets"
               icon="flag-outline"
               color="#EF4444"
-              onPress={() => navigation.navigate('TargetManagementScreen')}
+              onPress={() => (navigation as any).navigate('TargetManagementScreen')}
             />
           </View>
         </View>

@@ -310,11 +310,18 @@ const DashboardHome = () => {
               onPress={() => navigation.navigate('SalesReportScreen')}
             />
             <QuickActionCard
-              title="Orders"
-              description="Manage orders"
+              title="Create Order"
+              description="Create new order"
+              icon="add-circle-outline"
+              color="#3B82F6"
+              onPress={() => (navigation as any).navigate('RSMCreateOrder')}
+            />
+            <QuickActionCard
+              title="My Orders"
+              description="View all orders"
               icon="list-outline"
               color="#F59E0B"
-              onPress={() => navigation.navigate('OrderManagementScreen')}
+              onPress={() => (navigation as any).navigate('RSMOrderList')}
             />
             <QuickActionCard
               title="Pending Approvals"

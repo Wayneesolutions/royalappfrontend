@@ -20,6 +20,8 @@ import GlobalFAB from './GlobalFAB';
 interface DashboardStats {
   totalOrders: number;
   pendingOrders: number;
+  draftOrders: number;
+  approvedOrders: number;
   completedOrders: number;
   totalSales: number;
   targetAchievement: number;
@@ -29,11 +31,13 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, getOrders, getProducts, getMyTargets } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [stats, setStats] = useState<DashboardStats>({
     totalOrders: 0,
     pendingOrders: 0,
+    draftOrders: 0,
+    approvedOrders: 0,
     completedOrders: 0,
     totalSales: 0,
     targetAchievement: 0,
@@ -46,36 +50,125 @@ const DashboardHome = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const fetchDashboardData = async () => {
+    console.log('🔍 fetchDashboardData called');
+    console.log('📋 User data:', { 
+      hasUser: !!user, 
+      hasDefaultCompany: !!user?.defaultCompany, 
+      userId: user?._id,
+      defaultCompanyId: user?.defaultCompany?._id || user?.defaultCompany 
+    });
+
     if (!user?.defaultCompany) {
+      console.warn('⚠️ Missing defaultCompany, skipping API calls');
+      setLoading(false);
+      return;
+    }
+
+    if (!user?._id) {
+      console.warn('⚠️ Missing user ID, skipping API calls');
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
+      console.log('🚀 Starting API calls...');
       
-      // Mock data for distributor - replace with actual API calls
+      // Fetch orders created by this distributor
+      const [ordersResult, productsResult, targetsResult, draftOrdersResult] = await Promise.all([
+        getOrders({ createdBy: user._id, page: 1, limit: 1 }),
+        getProducts({ page: 1, limit: 1 }),
+        getMyTargets().catch(() => null), // Optional, don't fail if targets not available
+        getOrders({ createdBy: user._id, status: 'draft', page: 1, limit: 1 }).catch(() => null) // Get draft orders count
+      ]);
+
+      console.log('📊 Dashboard - Orders result:', ordersResult);
+      console.log('📦 Dashboard - Products result:', productsResult);
+      console.log('🎯 Dashboard - Targets result:', targetsResult);
+      console.log('📝 Dashboard - Draft orders result:', draftOrdersResult);
+
+      // Extract order statistics
+      const orderStats = ordersResult?.success ? ordersResult.stats || {} : {};
+      // Get draft orders count from separate query
+      const draftOrders = draftOrdersResult?.success ? (draftOrdersResult.stats?.totalOrders || 0) : 0;
+      
+      // Pending orders includes both draft and pending_approval
+      const pendingOrders = (orderStats.pendingOrders || 0) + draftOrders;
+      
+      // Approved orders (confirmedOrders from backend)
+      const approvedOrders = orderStats.confirmedOrders || orderStats.approvedOrders || 0;
+      
+      // Completed orders (delivered + shipped/dispatched)
+      const completedOrders = (orderStats.deliveredOrders || 0) + (orderStats.shippedOrders || 0);
+      const totalSales = orderStats.totalAmount || 0;
+      const newOrders = pendingOrders;
+
+      // Extract product count
+      const productCount = productsResult?.success ? productsResult.pagination?.totalProducts || 0 : 0;
+
+      // Calculate target achievement
+      let targetAchievement = 0;
+      let monthlyTarget = 0;
+      
+      if (targetsResult?.success && targetsResult.targets && Array.isArray(targetsResult.targets) && targetsResult.targets.length > 0) {
+        // Get the current month's target
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        
+        const currentTarget = targetsResult.targets.find((target: any) => {
+          const targetDate = new Date(target.periodStart || target.createdAt);
+          return targetDate.getMonth() === currentMonth && targetDate.getFullYear() === currentYear;
+        }) || targetsResult.targets[0]; // Fallback to first target if current month not found
+
+        monthlyTarget = currentTarget.targetAmount || currentTarget.amount || 0;
+        const achievedAmount = currentTarget.achievedAmount || totalSales;
+        
+        if (monthlyTarget > 0) {
+          targetAchievement = Math.round((achievedAmount / monthlyTarget) * 100);
+        }
+      }
+
       setStats({
-        totalOrders: 20,
-        pendingOrders: 4,
-        completedOrders: 16,
-        totalSales: 95000,
-        targetAchievement: 95,
-        monthlyTarget: 120000,
-        availableProducts: 35,
-        newOrders: 3,
+        totalOrders: 0, // Not displayed, keeping for interface compatibility
+        pendingOrders,
+        draftOrders: 0, // Not displayed, keeping for interface compatibility
+        approvedOrders,
+        completedOrders,
+        totalSales,
+        targetAchievement,
+        monthlyTarget,
+        availableProducts: productCount,
+        newOrders,
       });
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
+      // Set default values on error
+      setStats({
+        totalOrders: 0, // Not displayed
+        pendingOrders: 0,
+        draftOrders: 0, // Not displayed
+        approvedOrders: 0,
+        completedOrders: 0,
+        totalSales: 0,
+        targetAchievement: 0,
+        monthlyTarget: 0,
+        availableProducts: 0,
+        newOrders: 0,
+      });
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    console.log('🔄 useEffect triggered', { 
+      hasUser: !!user, 
+      hasDefaultCompany: !!user?.defaultCompany, 
+      userId: user?._id 
+    });
     fetchDashboardData();
-  }, [user?.defaultCompany]);
+  }, [user?.defaultCompany, user?._id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -178,33 +271,27 @@ const DashboardHome = () => {
           <Text style={styles.sectionTitle}>Business Overview</Text>
           <View style={styles.statsGrid}>
             <StatCard
-              title="Total Orders"
-              value={stats.totalOrders}
-              icon="list"
-              color="#06B6D4"
-            />
-            <StatCard
               title="Pending Orders"
               value={stats.pendingOrders}
               icon="time"
               color="#F59E0B"
             />
             <StatCard
-              title="Completed Orders"
-              value={stats.completedOrders}
-              icon="checkmark-circle"
+              title="Approved Orders"
+              value={stats.approvedOrders}
+              icon="checkmark-done-circle"
               color="#10B981"
             />
             <StatCard
               title="Total Sales"
               value={`₹${stats.totalSales.toLocaleString()}`}
               icon="trending-up"
-              color="#059669"
+              color="#0891B2"
             />
             <StatCard
               title="Target Achievement"
               value={`${stats.targetAchievement}%`}
-              icon="target"
+              icon="flag"
               color="#DC2626"
             />
             <StatCard
@@ -221,39 +308,32 @@ const DashboardHome = () => {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
             <QuickActionCard
-              title="Place Order"
-              description="Order new products"
+              title="Create Order"
+              description="Create new order"
               icon="add-circle-outline"
-              color="#06B6D4"
-              onPress={() => Alert.alert('Coming Soon', 'Order placement feature will be available soon')}
+              color="#3B82F6"
+              onPress={() => (navigation as any).navigate('DistributorCreateOrder')}
             />
             <QuickActionCard
-              title="Order History"
-              description="View order status"
+              title="My Orders"
+              description="View all orders"
               icon="list-outline"
-              color="#3B82F6"
-              onPress={() => Alert.alert('Coming Soon', 'Order history feature will be available soon')}
+              color="#F59E0B"
+              onPress={() => (navigation as any).navigate('DistributorOrderList')}
+            />
+            <QuickActionCard
+              title="Target Management"
+              description="View assigned targets"
+              icon="flag-outline"
+              color="#8B5CF6"
+              onPress={() => (navigation as any).navigate('MyTargetsScreen')}
             />
             <QuickActionCard
               title="Sales Report"
               description="View performance"
               icon="bar-chart-outline"
               color="#10B981"
-              onPress={() => Alert.alert('Coming Soon', 'Sales report feature will be available soon')}
-            />
-            <QuickActionCard
-              title="Product Catalog"
-              description="Browse products"
-              icon="cube-outline"
-              color="#F59E0B"
-              onPress={() => Alert.alert('Coming Soon', 'Product catalog feature will be available soon')}
-            />
-            <QuickActionCard
-              title="Pending Approvals"
-              description="Approve orders"
-              icon="checkmark-circle-outline"
-              color="#8B5CF6"
-              onPress={() => navigation.navigate('PendingApprovalsScreen')}
+              onPress={() => (navigation as any).navigate('SalesReportScreen')}
             />
           </View>
         </View>

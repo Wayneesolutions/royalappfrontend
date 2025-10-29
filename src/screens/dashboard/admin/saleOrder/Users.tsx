@@ -24,6 +24,13 @@ interface User {
   mobile: string;
   role: string;
   isActive: boolean;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
   companies: Array<{
     companyId: {
       _id: string;
@@ -68,6 +75,13 @@ const Users = () => {
     mobile: "",
     password: "",
     role: "",
+    address: {
+      street: "",
+      city: "",
+      state: "",
+      pincode: "",
+      country: "India"
+    }
   });
 
   const availableRoles = [
@@ -131,11 +145,31 @@ const Users = () => {
         password: formData.password,
         role: formData.role,
         userName: formData.email || undefined, // Use email as username if provided
+        address: {
+          street: formData.address.street || "",
+          city: formData.address.city || "",
+          state: formData.address.state || "",
+          pincode: formData.address.pincode || "",
+          country: formData.address.country || "India"
+        }
       };
 
       await createUser(userData);
       Alert.alert("Success", "User created successfully!");
-      setFormData({ name: "", email: "", mobile: "", password: "", role: "" });
+      setFormData({ 
+        name: "", 
+        email: "", 
+        mobile: "", 
+        password: "", 
+        role: "",
+        address: {
+          street: "",
+          city: "",
+          state: "",
+          pincode: "",
+          country: "India"
+        }
+      });
       setModalVisible(false);
       fetchUsers(); // Refresh the list
     } catch (err) {
@@ -147,6 +181,9 @@ const Users = () => {
   };
 
   const handleEditUser = (userToEdit: User) => {
+    console.log('🔍 Editing user:', userToEdit);
+    console.log('🔍 User address:', userToEdit.address);
+    
     setEditingUser(userToEdit);
     setIsEditMode(true);
     setFormData({
@@ -155,7 +192,29 @@ const Users = () => {
       mobile: userToEdit.mobile,
       password: "", // Don't pre-fill password for security
       role: userToEdit.role,
+      address: {
+        street: userToEdit.address?.street || "",
+        city: userToEdit.address?.city || "",
+        state: userToEdit.address?.state || "",
+        pincode: userToEdit.address?.pincode || "",
+        country: userToEdit.address?.country || "India"
+      }
     });
+    
+    console.log('🔍 Form data set:', {
+      name: userToEdit.name,
+      email: userToEdit.email || "",
+      mobile: userToEdit.mobile,
+      role: userToEdit.role,
+      address: {
+        street: userToEdit.address?.street || "",
+        city: userToEdit.address?.city || "",
+        state: userToEdit.address?.state || "",
+        pincode: userToEdit.address?.pincode || "",
+        country: userToEdit.address?.country || "India"
+      }
+    });
+    
     setModalVisible(true);
   };
 
@@ -167,6 +226,14 @@ const Users = () => {
       return;
     }
 
+    console.log('🔍 Updating user with data:', {
+      name: formData.name,
+      email: formData.email,
+      mobile: formData.mobile,
+      role: formData.role,
+      address: formData.address
+    });
+
     setCreatingUser(true);
     try {
       const userData = {
@@ -176,11 +243,33 @@ const Users = () => {
         role: formData.role,
         userName: formData.email || undefined,
         isActive: editingUser.isActive,
+        address: {
+          street: formData.address.street || "",
+          city: formData.address.city || "",
+          state: formData.address.state || "",
+          pincode: formData.address.pincode || "",
+          country: formData.address.country || "India"
+        }
       };
+
+      console.log('🔍 Sending user data to API:', userData);
 
       await editUser(editingUser._id, userData);
       Alert.alert("Success", "User updated successfully!");
-      setFormData({ name: "", email: "", mobile: "", password: "", role: "" });
+      setFormData({ 
+        name: "", 
+        email: "", 
+        mobile: "", 
+        password: "", 
+        role: "",
+        address: {
+          street: "",
+          city: "",
+          state: "",
+          pincode: "",
+          country: "India"
+        }
+      });
       setModalVisible(false);
       setEditingUser(null);
       setIsEditMode(false);
@@ -394,7 +483,20 @@ const Users = () => {
                 setModalVisible(false);
                 setEditingUser(null);
                 setIsEditMode(false);
-                setFormData({ name: "", email: "", mobile: "", password: "", role: "" });
+                setFormData({ 
+        name: "", 
+        email: "", 
+        mobile: "", 
+        password: "", 
+        role: "",
+        address: {
+          street: "",
+          city: "",
+          state: "",
+          pincode: "",
+          country: "India"
+        }
+      });
               }}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -448,6 +550,64 @@ const Users = () => {
                     </Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+
+              {/* Address Section */}
+              <Text style={styles.sectionLabel}>Address Information</Text>
+              
+              <TextInput
+                placeholder="Street Address"
+                value={formData.address.street}
+                onChangeText={(text) => setFormData({ 
+                  ...formData, 
+                  address: { ...formData.address, street: text }
+                })}
+                style={styles.input}
+              />
+              
+              <View style={styles.addressRow}>
+                <TextInput
+                  placeholder="City"
+                  value={formData.address.city}
+                  onChangeText={(text) => setFormData({ 
+                    ...formData, 
+                    address: { ...formData.address, city: text }
+                  })}
+                  style={[styles.input, styles.halfInput]}
+                />
+                
+                <TextInput
+                  placeholder="State"
+                  value={formData.address.state}
+                  onChangeText={(text) => setFormData({ 
+                    ...formData, 
+                    address: { ...formData.address, state: text }
+                  })}
+                  style={[styles.input, styles.halfInput]}
+                />
+              </View>
+              
+              <View style={styles.addressRow}>
+                <TextInput
+                  placeholder="Pincode"
+                  value={formData.address.pincode}
+                  onChangeText={(text) => setFormData({ 
+                    ...formData, 
+                    address: { ...formData.address, pincode: text }
+                  })}
+                  keyboardType="numeric"
+                  style={[styles.input, styles.halfInput]}
+                />
+                
+                <TextInput
+                  placeholder="Country"
+                  value={formData.address.country}
+                  onChangeText={(text) => setFormData({ 
+                    ...formData, 
+                    address: { ...formData.address, country: text }
+                  })}
+                  style={[styles.input, styles.halfInput]}
+                />
               </View>
             </ScrollView>
 
@@ -767,6 +927,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600',
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  halfInput: {
+    flex: 1,
   },
 });
 

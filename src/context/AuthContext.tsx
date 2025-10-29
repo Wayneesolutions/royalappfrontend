@@ -308,7 +308,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const updateOrderStatus = async (orderId: string, data: any): Promise<any> => {
     try {
       const result = await apiService.updateOrderStatus(orderId, data);
-      return result.data;
+      return result;
     } catch (error) {
       console.error('Failed to update order status:', error);
       throw error;
@@ -318,7 +318,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const updateOrder = async (orderId: string, data: any): Promise<any> => {
     try {
       const result = await apiService.updateOrder(orderId, data);
-      return result.data;
+      return result;
     } catch (error) {
       console.error('Failed to update order:', error);
       throw error;
@@ -398,12 +398,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Product Management Methods
   const createProduct = async (productData: any): Promise<any> => {
+    console.log('🔧 AuthContext createProduct called with:', productData);
     try {
+      console.log('📡 Calling apiService.createProduct...');
       const result = await apiService.createProduct(productData);
-      return result.data;
+      console.log('📡 apiService.createProduct result:', result);
+      console.log('📡 Returning result directly:', result);
+      return result; // Return result directly, not result.data
     } catch (error) {
-      console.error('Failed to create product:', error);
-      throw error;
+      console.error('❌ AuthContext createProduct error:', error);
+      // Return error response instead of throwing
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to create product'
+      };
     }
   };
 
@@ -421,7 +429,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const getProductById = async (productId: string): Promise<any> => {
     try {
       const result = await apiService.getProductById(productId);
-      return result.data;
+      return result; // Return result directly, not result.data
     } catch (error) {
       console.error('Failed to get product:', error);
       throw error;
@@ -431,10 +439,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const updateProduct = async (productId: string, data: any): Promise<any> => {
     try {
       const result = await apiService.updateProduct(productId, data);
-      return result.data;
+      return result; // Return result directly, not result.data
     } catch (error) {
       console.error('Failed to update product:', error);
-      throw error;
+      // Return error response instead of throwing
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to update product'
+      };
     }
   };
 
@@ -461,10 +473,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const updateProductStock = async (productId: string, data: any): Promise<any> => {
     try {
       const result = await apiService.updateProductStock(productId, data);
-      return result.data;
+      return result; // Return result directly, not result.data
     } catch (error) {
       console.error('Failed to update product stock:', error);
-      throw error;
+      // Return error response instead of throwing
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to update product stock'
+      };
     }
   };
 

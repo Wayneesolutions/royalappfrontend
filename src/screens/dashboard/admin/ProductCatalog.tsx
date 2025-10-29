@@ -75,6 +75,7 @@ const ProductCatalog = () => {
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   
   // Form states
@@ -131,7 +132,7 @@ const ProductCatalog = () => {
         setProducts(fetchedProducts);
         
         // Extract unique categories
-        const uniqueCategories = [...new Set(result.products?.map((p: Product) => p.category) || [])];
+        const uniqueCategories = [...new Set(result.products?.map((p: Product) => p.category).filter(Boolean) || [])] as string[];
         setCategories(['all', ...uniqueCategories]);
         
         console.log('Admin ProductCatalog - Products loaded:', fetchedProducts.length);
@@ -142,7 +143,8 @@ const ProductCatalog = () => {
       }
     } catch (error) {
       console.error('Failed to fetch products:', error);
-      setError(`Failed to load products: ${error.message || 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setError(`Failed to load products: ${errorMessage}`);
       setProducts([]);
       setCategories(['all']);
     } finally {
@@ -197,17 +199,35 @@ const ProductCatalog = () => {
 
   // Handle product creation
   const handleCreateProduct = async () => {
+    console.log('🚀 handleCreateProduct called');
+    console.log('📝 Form Data:', formData);
+    
+    // Validate required fields
+    if (!formData.productCode || !formData.productName || !formData.category || !formData.price) {
+      console.log('❌ Validation failed - missing required fields');
+      Alert.alert('Validation Error', 'Please fill in all required fields (Product Code, Product Name, Category, and Price)');
+      return;
+    }
+
+    // Validate price is a valid number
+    if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
+      console.log('❌ Validation failed - invalid price');
+      Alert.alert('Validation Error', 'Please enter a valid price');
+      return;
+    }
+
+    console.log('✅ Validation passed, calling API...');
     try {
       setLoading(true);
       
       const productData = {
-        productCode: formData.productCode,
-        productName: formData.productName,
-        description: formData.description,
-        category: formData.category,
-        subCategory: formData.subCategory,
-        brand: formData.brand,
-        unit: formData.unit,
+        productCode: formData.productCode.trim(),
+        productName: formData.productName.trim(),
+        description: formData.description.trim(),
+        category: formData.category.trim(),
+        subCategory: formData.subCategory.trim(),
+        brand: formData.brand.trim(),
+        unit: formData.unit.trim(),
         price: parseFloat(formData.price),
         costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
         mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
@@ -223,18 +243,39 @@ const ProductCatalog = () => {
       };
 
       const result = await createProduct(productData);
+      console.log('📡 API Response received:', result);
+      console.log('Create Product Result:', result);
+      console.log('Result Success:', result?.success);
+      console.log('Result Type:', typeof result);
+      
+      // Handle case where result might be undefined or null
+      if (!result) {
+        Alert.alert('Error', 'No response received from server');
+        return;
+      }
       
       if (result?.success) {
-        Alert.alert('Success', 'Product created successfully!');
+        // Success: Close modal, reset form, and refresh product list immediately
+        console.log('✅ Success! Closing modal and refreshing product list...');
         setShowCreateModal(false);
         resetForm();
         fetchProducts();
+        
+        // Show success message after modal is closed
+        Alert.alert(
+          'Success', 
+          `Product "${result.product?.productName || formData.productName}" created successfully!`
+        );
       } else {
-        Alert.alert('Error', result?.message || 'Failed to create product');
+        // Handle specific error messages from API
+        const errorMessage = result?.message || 'Failed to create product';
+        Alert.alert('Error', errorMessage);
       }
     } catch (error) {
       console.error('Error creating product:', error);
-      Alert.alert('Error', 'Failed to create product');
+      // Handle API errors that throw exceptions (like 400 Bad Request)
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -244,16 +285,28 @@ const ProductCatalog = () => {
   const handleUpdateProduct = async () => {
     if (!selectedProduct) return;
     
+    // Validate required fields
+    if (!formData.productName || !formData.category || !formData.price) {
+      Alert.alert('Validation Error', 'Please fill in all required fields (Product Name, Category, and Price)');
+      return;
+    }
+
+    // Validate price is a valid number
+    if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
+      Alert.alert('Validation Error', 'Please enter a valid price');
+      return;
+    }
+    
     try {
       setLoading(true);
       
       const updateData = {
-        productName: formData.productName,
-        description: formData.description,
-        category: formData.category,
-        subCategory: formData.subCategory,
-        brand: formData.brand,
-        unit: formData.unit,
+        productName: formData.productName.trim(),
+        description: formData.description.trim(),
+        category: formData.category.trim(),
+        subCategory: formData.subCategory.trim(),
+        brand: formData.brand.trim(),
+        unit: formData.unit.trim(),
         price: parseFloat(formData.price),
         costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
         mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
@@ -269,19 +322,39 @@ const ProductCatalog = () => {
       };
 
       const result = await updateProduct(selectedProduct._id, updateData);
+      console.log('Update Product Result:', result);
+      console.log('Result Success:', result?.success);
+      console.log('Result Type:', typeof result);
+      
+      // Handle case where result might be undefined or null
+      if (!result) {
+        Alert.alert('Error', 'No response received from server');
+        return;
+      }
       
       if (result?.success) {
-        Alert.alert('Success', 'Product updated successfully!');
+        // Success: Close modal, reset form, and refresh product list immediately
+        console.log('✅ Update Success! Closing modal and refreshing product list...');
         setShowEditModal(false);
         setSelectedProduct(null);
         resetForm();
         fetchProducts();
+        
+        // Show success message after modal is closed
+        Alert.alert(
+          'Success', 
+          `Product "${result.product?.productName || formData.productName}" updated successfully!`
+        );
       } else {
-        Alert.alert('Error', result?.message || 'Failed to update product');
+        // Handle specific error messages from API
+        const errorMessage = result?.message || 'Failed to update product';
+        Alert.alert('Error', errorMessage);
       }
     } catch (error) {
       console.error('Error updating product:', error);
-      Alert.alert('Error', 'Failed to update product');
+      // Handle API errors that throw exceptions (like 400 Bad Request)
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -372,71 +445,83 @@ const ProductCatalog = () => {
     setShowEditModal(true);
   };
 
+  // Open product details modal
+  const openDetailsModal = (product: Product) => {
+    setSelectedProduct(product);
+    setShowDetailsModal(true);
+  };
+
   // Render product item
   const renderProductItem = ({ item }: { item: Product }) => (
     <View style={styles.productCard}>
-      <View style={styles.productImageContainer}>
-        <View style={styles.productImagePlaceholder}>
-          <Ionicons name="cube" size={32} color="#6B7280" />
-        </View>
-      </View>
-      
-      <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.productName}</Text>
-        <Text style={styles.productCode}>Code: {item.productCode}</Text>
-        <Text style={styles.productCategory}>{item.category}</Text>
-        
-        <View style={styles.priceContainer}>
-          <Text style={styles.productPrice}>₹{item.price}</Text>
-          <Text style={styles.productUnit}>/ {item.unit}</Text>
-        </View>
-        
-        <View style={styles.stockContainer}>
-          <View style={[
-            styles.stockBadge,
-            { backgroundColor: item.stock.current <= item.stock.minimum ? '#FEF3C7' : '#D1FAE5' }
-          ]}>
-            <Text style={[
-              styles.stockText,
-              { color: item.stock.current <= item.stock.minimum ? '#D97706' : '#059669' }
-            ]}>
-              {item.stock.current <= item.stock.minimum ? 'Low Stock' : 'In Stock'}
-            </Text>
-          </View>
-          <Text style={styles.stockQuantity}>{item.stock.current} {item.unit}</Text>
-        </View>
-        
-        <View style={styles.statusContainer}>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: item.isActive ? '#D1FAE5' : '#FEE2E2' }
-          ]}>
-            <Text style={[
-              styles.statusText,
-              { color: item.isActive ? '#059669' : '#DC2626' }
-            ]}>
-              {item.isActive ? 'Active' : 'Inactive'}
-            </Text>
-          </View>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: item.isAvailable ? '#D1FAE5' : '#FEE2E2' }
-          ]}>
-            <Text style={[
-              styles.statusText,
-              { color: item.isAvailable ? '#059669' : '#DC2626' }
-            ]}>
-              {item.isAvailable ? 'Available' : 'Unavailable'}
-            </Text>
+      <TouchableOpacity 
+        style={styles.productCardContent}
+        onPress={() => openDetailsModal(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.productImageContainer}>
+          <View style={styles.productImagePlaceholder}>
+            <Ionicons name="cube" size={32} color="#6B7280" />
           </View>
         </View>
         
-        {item.description && (
-          <Text style={styles.productDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
-      </View>
+        <View style={styles.productInfo}>
+          <Text style={styles.productName}>{item.productName}</Text>
+          <Text style={styles.productCode}>Code: {item.productCode}</Text>
+          <Text style={styles.productCategory}>{item.category}</Text>
+          
+          <View style={styles.priceContainer}>
+            <Text style={styles.productPrice}>₹{item.price}</Text>
+            <Text style={styles.productUnit}>/ {item.unit}</Text>
+          </View>
+          
+          <View style={styles.stockContainer}>
+            <View style={[
+              styles.stockBadge,
+              { backgroundColor: item.stock.current <= item.stock.minimum ? '#FEF3C7' : '#D1FAE5' }
+            ]}>
+              <Text style={[
+                styles.stockText,
+                { color: item.stock.current <= item.stock.minimum ? '#D97706' : '#059669' }
+              ]}>
+                {item.stock.current <= item.stock.minimum ? 'Low Stock' : 'In Stock'}
+              </Text>
+            </View>
+            <Text style={styles.stockQuantity}>{item.stock.current} {item.unit}</Text>
+          </View>
+          
+          <View style={styles.statusContainer}>
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: item.isActive ? '#D1FAE5' : '#FEE2E2' }
+            ]}>
+              <Text style={[
+                styles.statusText,
+                { color: item.isActive ? '#059669' : '#DC2626' }
+              ]}>
+                {item.isActive ? 'Active' : 'Inactive'}
+              </Text>
+            </View>
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: item.isAvailable ? '#D1FAE5' : '#FEE2E2' }
+            ]}>
+              <Text style={[
+                styles.statusText,
+                { color: item.isAvailable ? '#059669' : '#DC2626' }
+              ]}>
+                {item.isAvailable ? 'Available' : 'Unavailable'}
+              </Text>
+            </View>
+          </View>
+          
+          {item.description && (
+            <Text style={styles.productDescription} numberOfLines={2}>
+              {item.description}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
       
       <View style={styles.productActions}>
         <TouchableOpacity
@@ -628,20 +713,32 @@ const ProductCatalog = () => {
       <Modal
         visible={showCreateModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="formSheet"
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+            <TouchableOpacity 
+              style={styles.modalHeaderButton}
+              onPress={() => setShowCreateModal(false)}
+            >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Create Product</Text>
-            <TouchableOpacity onPress={handleCreateProduct} disabled={loading}>
-              <Text style={styles.modalSaveText}>Save</Text>
+            <TouchableOpacity 
+              style={styles.modalHeaderButton}
+              onPress={handleCreateProduct} 
+              disabled={loading}
+            >
+              <Text style={[styles.modalSaveText, loading && styles.disabledText]}>Save</Text>
             </TouchableOpacity>
           </View>
           
-          <ScrollView style={styles.modalContent}>
+          <ScrollView 
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalContentContainer}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Product Code *</Text>
               <TextInput
@@ -814,20 +911,32 @@ const ProductCatalog = () => {
       <Modal
         visible={showEditModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="formSheet"
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowEditModal(false)}>
+            <TouchableOpacity 
+              style={styles.modalHeaderButton}
+              onPress={() => setShowEditModal(false)}
+            >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Edit Product</Text>
-            <TouchableOpacity onPress={handleUpdateProduct} disabled={loading}>
-              <Text style={styles.modalSaveText}>Update</Text>
+            <TouchableOpacity 
+              style={styles.modalHeaderButton}
+              onPress={handleUpdateProduct} 
+              disabled={loading}
+            >
+              <Text style={[styles.modalSaveText, loading && styles.disabledText]}>Update</Text>
             </TouchableOpacity>
           </View>
           
-          <ScrollView style={styles.modalContent}>
+          <ScrollView 
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalContentContainer}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Product Code</Text>
               <TextInput
@@ -991,6 +1100,219 @@ const ProductCatalog = () => {
                 keyboardType="numeric"
               />
             </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Product Details Modal */}
+      <Modal
+        visible={showDetailsModal}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowDetailsModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.modalHeaderButton}
+              onPress={() => setShowDetailsModal(false)}
+            >
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Product Details</Text>
+            <TouchableOpacity 
+              style={styles.modalHeaderButton}
+              onPress={() => {
+                setShowDetailsModal(false);
+                openEditModal(selectedProduct!);
+              }}
+            >
+              <Ionicons name="create-outline" size={24} color="#3B82F6" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            {selectedProduct && (
+              <>
+                {/* Product Image */}
+                <View style={styles.detailsImageContainer}>
+                  <View style={styles.detailsImagePlaceholder}>
+                    <Ionicons name="cube" size={64} color="#6B7280" />
+                  </View>
+                </View>
+
+                {/* Basic Information */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Basic Information</Text>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Product Name</Text>
+                    <Text style={styles.detailsValue}>{selectedProduct.productName}</Text>
+                  </View>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Product Code</Text>
+                    <Text style={styles.detailsValue}>{selectedProduct.productCode}</Text>
+                  </View>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Description</Text>
+                    <Text style={styles.detailsValue}>{selectedProduct.description || 'No description'}</Text>
+                  </View>
+                </View>
+
+                {/* Category Information */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Category Information</Text>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Category</Text>
+                    <Text style={styles.detailsValue}>{selectedProduct.category}</Text>
+                  </View>
+                  
+                  {selectedProduct.subCategory && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Sub Category</Text>
+                      <Text style={styles.detailsValue}>{selectedProduct.subCategory}</Text>
+                    </View>
+                  )}
+                  
+                  {selectedProduct.brand && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Brand</Text>
+                      <Text style={styles.detailsValue}>{selectedProduct.brand}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Pricing Information */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Pricing Information</Text>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Price</Text>
+                    <Text style={styles.detailsValue}>₹{selectedProduct.price} / {selectedProduct.unit}</Text>
+                  </View>
+                  
+                  {selectedProduct.costPrice && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Cost Price</Text>
+                      <Text style={styles.detailsValue}>₹{selectedProduct.costPrice}</Text>
+                    </View>
+                  )}
+                  
+                  {selectedProduct.mrp && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>MRP</Text>
+                      <Text style={styles.detailsValue}>₹{selectedProduct.mrp}</Text>
+                    </View>
+                  )}
+                  
+                  {selectedProduct.discount && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Discount</Text>
+                      <Text style={styles.detailsValue}>₹{selectedProduct.discount}</Text>
+                    </View>
+                  )}
+                  
+                  {selectedProduct.taxRate && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Tax Rate</Text>
+                      <Text style={styles.detailsValue}>{selectedProduct.taxRate}%</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Stock Information */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Stock Information</Text>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Current Stock</Text>
+                    <Text style={styles.detailsValue}>{selectedProduct.stock.current} {selectedProduct.unit}</Text>
+                  </View>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Minimum Stock</Text>
+                    <Text style={styles.detailsValue}>{selectedProduct.stock.minimum} {selectedProduct.unit}</Text>
+                  </View>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Maximum Stock</Text>
+                    <Text style={styles.detailsValue}>{selectedProduct.stock.maximum} {selectedProduct.unit}</Text>
+                  </View>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Stock Status</Text>
+                    <View style={[
+                      styles.detailsBadge,
+                      { backgroundColor: selectedProduct.stock.current <= selectedProduct.stock.minimum ? '#FEF3C7' : '#D1FAE5' }
+                    ]}>
+                      <Text style={[
+                        styles.detailsBadgeText,
+                        { color: selectedProduct.stock.current <= selectedProduct.stock.minimum ? '#D97706' : '#059669' }
+                      ]}>
+                        {selectedProduct.stock.current <= selectedProduct.stock.minimum ? 'Low Stock' : 'In Stock'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Status Information */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Status Information</Text>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Active Status</Text>
+                    <View style={[
+                      styles.detailsBadge,
+                      { backgroundColor: selectedProduct.isActive ? '#D1FAE5' : '#FEE2E2' }
+                    ]}>
+                      <Text style={[
+                        styles.detailsBadgeText,
+                        { color: selectedProduct.isActive ? '#059669' : '#DC2626' }
+                      ]}>
+                        {selectedProduct.isActive ? 'Active' : 'Inactive'}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Availability</Text>
+                    <View style={[
+                      styles.detailsBadge,
+                      { backgroundColor: selectedProduct.isAvailable ? '#D1FAE5' : '#FEE2E2' }
+                    ]}>
+                      <Text style={[
+                        styles.detailsBadgeText,
+                        { color: selectedProduct.isAvailable ? '#059669' : '#DC2626' }
+                      ]}>
+                        {selectedProduct.isAvailable ? 'Available' : 'Unavailable'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Timestamps */}
+                <View style={styles.detailsSection}>
+                  <Text style={styles.detailsSectionTitle}>Timestamps</Text>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Created At</Text>
+                    <Text style={styles.detailsValue}>
+                      {new Date(selectedProduct.createdAt).toLocaleDateString()} {new Date(selectedProduct.createdAt).toLocaleTimeString()}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Updated At</Text>
+                    <Text style={styles.detailsValue}>
+                      {new Date(selectedProduct.updatedAt).toLocaleDateString()} {new Date(selectedProduct.updatedAt).toLocaleTimeString()}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -1283,56 +1605,149 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingTop: 60, // Account for status bar
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    backgroundColor: '#fff',
+  },
+  modalHeaderButton: {
+    minHeight: 44, // iOS recommended touch target
+    minWidth: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
   },
   modalCancelText: {
     fontSize: 16,
     color: '#6B7280',
+    fontWeight: '500',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1F2937',
+    textAlign: 'center',
+    flex: 1,
   },
   modalSaveText: {
     fontSize: 16,
     color: '#8B5CF6',
     fontWeight: '600',
   },
+  disabledText: {
+    color: '#9CA3AF',
+  },
   modalContent: {
     flex: 1,
-    padding: 16,
+  },
+  modalContentContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 40, // Extra padding for keyboard
   },
   formGroup: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   formRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 20,
+    gap: 12,
   },
   formLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   formInput: {
     borderWidth: 1,
     borderColor: '#D1D5DB',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
     backgroundColor: '#fff',
+    minHeight: 48, // Better touch target
+    color: '#1F2937',
   },
   textArea: {
-    height: 80,
+    height: 100,
     textAlignVertical: 'top',
+    paddingTop: 14,
   },
   disabledInput: {
     backgroundColor: '#F3F4F6',
     color: '#6B7280',
+    borderColor: '#E5E7EB',
+  },
+  
+  // Product Details Modal Styles
+  productCardContent: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  detailsImageContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingTop: 20,
+  },
+  detailsImagePlaceholder: {
+    width: 120,
+    height: 120,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  detailsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingBottom: 8,
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    flex: 1,
+  },
+  detailsValue: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#1F2937',
+    flex: 2,
+    textAlign: 'right',
+  },
+  detailsBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-end',
+  },
+  detailsBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 

@@ -319,32 +319,18 @@ const DashboardHome = () => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           <QuickActionCard
-            title="New Order"
-            description="Create a new sales order"
+            title="Create Order"
+            description="Create new order"
             icon="add-circle-outline"
-            color="#EF4444"
-            onPress={() => navigation.navigate('CreateOrder')}
-          />
-          <QuickActionCard
-            title="Product Catalog"
-            description="Browse products"
-            icon="cube-outline"
-            color="#F59E0B"
-            onPress={() => navigation.navigate('ProductCatalog')}
+            color="#3B82F6"
+            onPress={() => (navigation as any).navigate('SalesmanCreateOrder')}
           />
           <QuickActionCard
             title="My Orders"
-            description="View order status"
+            description="View all orders"
             icon="list-outline"
-            color="#8B5CF6"
-            onPress={() => navigation.navigate('OrderList')}
-          />
-          <QuickActionCard
-            title="Product Management"
-            description="Manage products"
-            icon="settings-outline"
-            color="#3B82F6"
-            onPress={() => navigation.navigate('ProductManagement')}
+            color="#F59E0B"
+            onPress={() => (navigation as any).navigate('SalesmanOrderList')}
           />
           <QuickActionCard
             title="My Targets"
