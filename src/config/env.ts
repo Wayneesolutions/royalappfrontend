@@ -1,91 +1,28 @@
 // src/config/env.ts
 // Custom environment configuration to avoid @env module resolution issues
 
-// Helper function to get the development IP
-const getDevIP = (): string => {
-  // You can set this manually or use the update-ip.ps1 script
-  // Current IP: 192.168.31.247
-  return '192.168.194.212';
-};
+// Import environment variables from .env file
+import {
+  API_BASE_URL,
+  API_TIMEOUT,
+  APP_NAME,
+  APP_VERSION,
+  DEBUG_MODE,
+  ENVIRONMENT,
+} from '@env';
 
-// Environment configuration with fallback values
+// Environment configuration with values from .env file
 export const ENV = {
-  API_BASE_URL: `http://${getDevIP()}:5000/api/v1`,
-  API_TIMEOUT: '10000',
-  APP_NAME: 'Royal Software',
-  APP_VERSION: '1.0.0',
-  DEBUG_MODE: 'true',
+  API_BASE_URL: API_BASE_URL ,
+  API_TIMEOUT: API_TIMEOUT || '10000',
+  APP_NAME: APP_NAME || 'Royal Software',
+  APP_VERSION: APP_VERSION || '1.0.0',
+  DEBUG_MODE: DEBUG_MODE || 'true',
+  ENVIRONMENT: ENVIRONMENT || 'development',
 };
 
-// Environment-specific configurations
-// Dynamically resolve host for web to avoid localhost/IPv6 issues
-const resolveDevBaseUrl = (): string => {
-  try {
-    // window is available on web; fallback to your machine's IP in native
-    const host = typeof window !== 'undefined' && window.location && window.location.hostname
-      ? window.location.hostname
-      : getDevIP(); // Use the helper function
-    const protocol = typeof window !== 'undefined' && window.location && window.location.protocol
-      ? window.location.protocol.replace(':', '')
-      : 'http';
-    // Force http for local dev API unless you run https on backend
-    const devProtocol = 'http';
-    return `${devProtocol}://${host}:5000/api/v1`;
-  } catch (e) {
-    return `http://${getDevIP()}:5000/api/v1`; // Use the helper function
-  }
-};
-
-const ENVIRONMENTS = {
-  development: {
-    API_BASE_URL: resolveDevBaseUrl(),
-    API_TIMEOUT: '10000',
-    APP_NAME: 'Royal Software (Dev)',
-    APP_VERSION: '1.0.0',
-    DEBUG_MODE: 'true',
-  },
-  staging: {
-    API_BASE_URL: 'https://staging-api.royalsoftware.com/api/v1',
-    API_TIMEOUT: '12000',
-    APP_NAME: 'Royal Software (Staging)',
-    APP_VERSION: '1.0.0',
-    DEBUG_MODE: 'true',
-  },
-  production: {
-    API_BASE_URL: 'https://your-production-api.com/api/v1',
-    API_TIMEOUT: '15000',
-    APP_NAME: 'Royal Software',
-    APP_VERSION: '1.0.0',
-    DEBUG_MODE: 'false',
-  },
-};
-
-// Function to get current environment (you can modify this logic)
-let currentEnvironment: keyof typeof ENVIRONMENTS = 'development';
-
-const getCurrentEnvironment = (): keyof typeof ENVIRONMENTS => {
-  return currentEnvironment;
-};
-
-// Function to set environment (can be called from scripts or app)
-export const setEnvironment = (env: keyof typeof ENVIRONMENTS) => {
-  if (env in ENVIRONMENTS) {
-    currentEnvironment = env;
-    const envConfig = ENVIRONMENTS[env];
-    Object.assign(ENV, envConfig);
-    console.log(`Environment switched to: ${env}`);
-    console.log('Current configuration:', ENV);
-  } else {
-    console.error(`Invalid environment: ${env}`);
-  }
-};
-
-// Get environment-specific configuration
-const currentEnv = getCurrentEnvironment();
-const envConfig = ENVIRONMENTS[currentEnv];
-
-// Update ENV with current environment values
-Object.assign(ENV, envConfig);
+// Environment is now read from .env file via @env imports above
+// No need for hardcoded environment configurations
 
 // Helper functions
 export const getApiBaseUrl = (): string => {

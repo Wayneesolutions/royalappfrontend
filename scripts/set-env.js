@@ -42,23 +42,28 @@ function setEnvironment(env) {
 
   const envFile = environments[env];
   const envPath = path.join(__dirname, '..', envFile);
-  const targetPath = path.join(__dirname, '..', '.env');
 
+  // Create env file if it doesn't exist
   if (!fs.existsSync(envPath)) {
-    console.error(`❌ Environment file not found: ${envFile}`);
-    process.exit(1);
+    console.log(`📝 Creating ${envFile} file...`);
+    const envConfig = envConfigs[env];
+    let content = '';
+    for (const [key, value] of Object.entries(envConfig)) {
+      content += `${key}=${value}\n`;
+    }
+    content += `ENVIRONMENT=${env}\n`;
+    fs.writeFileSync(envPath, content);
+    console.log(`✅ Created ${envFile}`);
   }
+
+  const targetPath = path.join(__dirname, '..', '.env');
 
   try {
     // Copy the environment file
     fs.copyFileSync(envPath, targetPath);
     
-    // Update the TypeScript environment config
-    updateTypeScriptConfig(env);
-    
     console.log(`✅ Environment set to: ${env}`);
     console.log(`📁 Copied ${envFile} to .env`);
-    console.log(`📝 Updated TypeScript configuration`);
     
     // Display current configuration
     const envContent = fs.readFileSync(targetPath, 'utf8');
@@ -70,32 +75,8 @@ function setEnvironment(env) {
   }
 }
 
-function updateTypeScriptConfig(env) {
-  const configPath = path.join(__dirname, '..', 'src', 'config', 'env.ts');
-  
-  if (!fs.existsSync(configPath)) {
-    console.warn('⚠️ TypeScript config file not found, skipping update');
-    return;
-  }
-
-  try {
-    let content = fs.readFileSync(configPath, 'utf8');
-    
-    // Update the currentEnvironment variable
-    const envConfig = envConfigs[env];
-    if (envConfig) {
-      // Replace the current environment assignment
-      content = content.replace(
-        /let currentEnvironment: keyof typeof ENVIRONMENTS = '[^']*';/,
-        `let currentEnvironment: keyof typeof ENVIRONMENTS = '${env}';`
-      );
-      
-      fs.writeFileSync(configPath, content);
-    }
-  } catch (error) {
-    console.warn(`⚠️ Could not update TypeScript config: ${error.message}`);
-  }
-}
+// TypeScript config is now managed via environment variables
+// No need to manually update env.ts
 
 // Get environment from command line argument
 const env = process.argv[2];
