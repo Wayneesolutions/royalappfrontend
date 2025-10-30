@@ -82,13 +82,18 @@ interface Order {
   orderType: string;
   createdAt: string;
   updatedAt: string;
-  createdBy: string;
+  createdBy: string | {
+    _id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
 }
 
 const AdminOrderList = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { getOrders, updateOrderStatus } = useAuth();
+  const { user, getOrders, updateOrderStatus } = useAuth();
   
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
@@ -166,21 +171,37 @@ const AdminOrderList = () => {
 
   const fetchOrders = async () => {
     try {
+      if (!user?._id) {
+        console.log('⏳ User not loaded yet, skipping fetch');
+        return;
+      }
+
       setLoading(true);
       
+      // Filter orders created by this admin (createdBy = admin._id)
       const params: any = { 
         page: 1, 
         limit: 50,
-        orderType: 'admin_created'
+        createdBy: user._id
       };
       
       if (filter !== 'all') {
         params.status = filter;
       }
       
+      console.log('🔍 Fetching admin orders with params:', params);
       const response = await getOrders(params);
+      console.log('📡 Orders response:', response);
+      
       if (response?.success) {
-        setOrders(response.orders || []);
+        // Double-check: filter to ensure createdBy matches
+        let filteredOrders = response.orders || [];
+        filteredOrders = filteredOrders.filter((order: Order) => {
+          const createdBy = typeof order.createdBy === 'object' ? order.createdBy._id : order.createdBy;
+          return createdBy === user._id;
+        });
+        setOrders(filteredOrders);
+        console.log('✅ Loaded orders created by admin:', filteredOrders.length);
       }
     } catch (error) {
       console.error('Error fetching orders:', error);

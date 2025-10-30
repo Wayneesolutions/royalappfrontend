@@ -50,7 +50,8 @@ const getMembers = (userCounts: {[key: string]: number}): Member[] => [
   { id: '3', name: 'ASM', role: 'asm', color: '#F59E0B', navigationScreen: 'ASMScreen' as keyof RootStackParamList, count: userCounts.asm || 0 },
   { id: '4', name: 'Sales', role: 'salesman', color: '#EF4444', navigationScreen: 'SalesScreen' as keyof RootStackParamList, count: userCounts.salesman || 0 },
   { id: '5', name: 'Dealer', role: 'dealers', color: '#8B5CF6', navigationScreen: 'DealerScreen' as keyof RootStackParamList, count: userCounts.dealers || 0 },
-  { id: '6', name: 'Distributors', role: 'distibutors', color: '#06B6D4', navigationScreen: 'DistributorsScreen' as keyof RootStackParamList, count: userCounts.distibutors || 0 },
+  { id: '6', name: 'Sub Dealer', role: 'subdealer', color: '#EC4899', navigationScreen: 'DealerScreen' as keyof RootStackParamList, count: userCounts.subdealer || 0 },
+  { id: '7', name: 'Distributors', role: 'distibutors', color: '#06B6D4', navigationScreen: 'DistributorsScreen' as keyof RootStackParamList, count: userCounts.distibutors || 0 },
 ];
 
 const menuItems: MenuItem[] = [
@@ -103,7 +104,7 @@ const DashboardHome = () => {
 
     try {
       const roleCounts: {[key: string]: number} = {};
-      const roles = ['zonal', 'rsm', 'asm', 'salesman', 'dealers', 'distibutors'];
+      const roles = ['zonal', 'rsm', 'asm', 'salesman', 'dealers', 'subdealer', 'distibutors'];
       
       for (const role of roles) {
         try {
@@ -556,9 +557,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   companyInfoSection: {
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    marginBottom: 24,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    marginBottom: 20,
   },
   companyHeader: {
     flexDirection: 'row',
@@ -578,13 +579,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   companyName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#1F2937',
     marginBottom: 4,
   },
   companyCode: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#6B7280',
   },
   statsContainer: {
@@ -598,19 +599,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#1F2937',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
     textAlign: 'center',
   },
   usersSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -745,15 +746,15 @@ const styles = StyleSheet.create({
     color: 'black',
   },
   fieldMembersSection: {
-    paddingTop: 20,
-    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingHorizontal: 16,
     marginTop: 5,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectionCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -764,27 +765,27 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 16,
+    marginBottom: 12,
     textAlign: 'left',
-    paddingLeft: 10
+    paddingLeft: 6
   },
   membersScrollContainer: {
     paddingVertical: 4,
   },
   memberItem: {
     alignItems: 'center',
-    marginHorizontal: 12,
+    marginHorizontal: 8,
   },
   memberCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
     borderWidth: 2,
     borderColor: '#486CD6',
     shadowColor: '#486CD6',
@@ -797,21 +798,21 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   memberName: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#4B5563',
     fontWeight: '500',
     textAlign: 'center',
   },
   menuSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    marginBottom: 20,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     backgroundColor: '#fff',
     marginBottom: 8,
     borderRadius: 12,
@@ -830,16 +831,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuIconContainer: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     backgroundColor: '#EFF6FF',
-    borderRadius: 12,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   menuLabel: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#374151',
     fontWeight: '500',
     flex: 1,
@@ -847,9 +848,9 @@ const styles = StyleSheet.create({
   chartSection: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 20,
-    marginBottom: 20,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -860,10 +861,10 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   chartTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   chartContainer: {
     alignItems: 'center',
