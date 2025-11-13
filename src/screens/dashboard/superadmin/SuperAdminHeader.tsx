@@ -6,6 +6,7 @@ import {
     StyleSheet,
     Modal,
     Alert,
+    useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -36,6 +37,8 @@ const SuperAdminHeader: React.FC<SuperAdminHeaderProps> = ({
     const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
     const [showMenuDropdown, setShowMenuDropdown] = useState(false);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const { width } = useWindowDimensions();
+    const isSmallScreen = width < 380;
 
     const companies: Company[] = [
         { id: 'ALL', name: 'All Companies' },
@@ -72,28 +75,59 @@ const SuperAdminHeader: React.FC<SuperAdminHeaderProps> = ({
 
     return (
         <>
-            <View style={styles.header}>
+            <View style={[
+                styles.header,
+                isSmallScreen && styles.headerCompact,
+            ]}>
                 {/* Left Section - Profile */}
                 <TouchableOpacity
-                    style={styles.headerLeft}
+                    style={[
+                        styles.headerLeft,
+                        isSmallScreen && styles.headerLeftCompact,
+                    ]}
                     onPress={handleProfilePress}
                     activeOpacity={0.7}
                 >
-                    <View style={styles.profileImage}>
-                        <Ionicons name="person" size={24} color="#FFFFFF" />
+                    <View style={[
+                        styles.profileImage,
+                        isSmallScreen && styles.profileImageCompact,
+                    ]}>
+                        <Ionicons name="person" size={isSmallScreen ? 20 : 24} color="#FFFFFF" />
                     </View>
                     <View>
-                        <Text style={styles.headerTitle}>Super Admin</Text>
-                        <Text style={styles.headerSubtitle}>{subtitle}</Text>
+                        <Text
+                            style={[
+                                styles.headerTitle,
+                                isSmallScreen && styles.headerTitleCompact,
+                            ]}
+                            numberOfLines={1}
+                        >
+                            Super Admin
+                        </Text>
+                        <Text
+                            style={[
+                                styles.headerSubtitle,
+                                isSmallScreen && styles.headerSubtitleCompact,
+                            ]}
+                            numberOfLines={1}
+                        >
+                            {subtitle}
+                        </Text>
                     </View>
                 </TouchableOpacity>
 
                 {/* Right Section */}
-                <View style={styles.headerRight}>
+                <View style={[
+                    styles.headerRight,
+                    isSmallScreen && styles.headerRightCompact,
+                ]}>
                     {/* Company Selector */}
                     {showCompanySelector && (
                         <TouchableOpacity
-                            style={styles.companySelector}
+                            style={[
+                                styles.companySelector,
+                                isSmallScreen && styles.companySelectorCompact,
+                            ]}
                             onPress={() => {
                                 setShowCompanyDropdown(!showCompanyDropdown);
                                 setShowMenuDropdown(false);
@@ -113,7 +147,10 @@ const SuperAdminHeader: React.FC<SuperAdminHeaderProps> = ({
 
                     {/* Three Dot Menu */}
                     <TouchableOpacity
-                        style={styles.menuButton}
+                        style={[
+                            styles.menuButton,
+                            isSmallScreen && styles.menuButtonCompact,
+                        ]}
                         onPress={() => {
                             setShowMenuDropdown(!showMenuDropdown);
                             setShowCompanyDropdown(false);
@@ -127,7 +164,10 @@ const SuperAdminHeader: React.FC<SuperAdminHeaderProps> = ({
 
             {/* Company Dropdown */}
             {showCompanyDropdown && (
-                <View style={styles.dropdownContainer}>
+                <View style={[
+                    styles.dropdownContainer,
+                    isSmallScreen && styles.dropdownContainerCompact,
+                ]}>
                     <View style={styles.companyDropdown}>
                         {companies.map((company, index) => (
                             <TouchableOpacity
@@ -160,7 +200,10 @@ const SuperAdminHeader: React.FC<SuperAdminHeaderProps> = ({
 
             {/* Menu Dropdown */}
             {showMenuDropdown && (
-                <View style={styles.menuDropdownContainer}>
+                <View style={[
+                    styles.menuDropdownContainer,
+                    isSmallScreen && styles.menuDropdownContainerCompact,
+                ]}>
                     <View style={styles.menuDropdown}>
                         <TouchableOpacity
                             style={styles.menuDropdownItem}
@@ -245,11 +288,23 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#E5E7EB',
         zIndex: 1000,
+        flexWrap: 'wrap',
+        rowGap: 12,
+        columnGap: 12,
+    },
+    headerCompact: {
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 12,
     },
     headerLeft: {
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
+        minWidth: 0,
+    },
+    headerLeftCompact: {
+        maxWidth: '70%',
     },
     profileImage: {
         width: 48,
@@ -260,20 +315,36 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 12,
     },
+    profileImageCompact: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: 10,
+    },
     headerTitle: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#1F2937',
+    },
+    headerTitleCompact: {
+        fontSize: 18,
     },
     headerSubtitle: {
         fontSize: 12,
         color: '#6B7280',
         marginTop: 2,
     },
+    headerSubtitleCompact: {
+        fontSize: 11,
+    },
     headerRight: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+    },
+    headerRightCompact: {
+        width: '100%',
+        justifyContent: 'space-between',
     },
     companySelector: {
         flexDirection: 'row',
@@ -285,6 +356,13 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E5E7EB',
         maxWidth: 150,
+        flexShrink: 1,
+    },
+    companySelectorCompact: {
+        flex: 1,
+        maxWidth: '100%',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
     },
     companySelectorText: {
         fontSize: 12,
@@ -300,11 +378,19 @@ const styles = StyleSheet.create({
         backgroundColor: '#F3F4F6',
         borderRadius: 8,
     },
+    menuButtonCompact: {
+        width: 36,
+        height: 36,
+    },
     dropdownContainer: {
         position: 'absolute',
         top: 95,
         right: 68,
         zIndex: 1001,
+    },
+    dropdownContainerCompact: {
+        top: 88,
+        right: 16,
     },
     companyDropdown: {
         backgroundColor: '#FFFFFF',
@@ -342,6 +428,10 @@ const styles = StyleSheet.create({
         top: 95,
         right: 20,
         zIndex: 1001,
+    },
+    menuDropdownContainerCompact: {
+        top: 88,
+        right: 16,
     },
     menuDropdown: {
         backgroundColor: '#FFFFFF',

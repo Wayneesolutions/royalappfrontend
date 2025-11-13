@@ -4,6 +4,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loginUser, logoutUser, checkAuthStatus, clearError, updateUser } from '../store/slices/authSlice';
 import { persistor } from '../store';
 import { apiService } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
   user: any;
@@ -174,22 +175,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const switchCompany = async (companyId: string): Promise<void> => {
     try {
-      const result = await apiService.adminSwitchCompany(companyId);
-      if (result.success && result.data?.admin) {
-        // Update user data in store
-        dispatch(updateUser(result.data.admin));
-        // Update stored user data
-        await apiService.getStoredUser().then(async (storedUser) => {
-          if (storedUser) {
-            const updatedUser = { ...storedUser, ...result.data.admin };
-            await apiService.getStoredToken().then(async (token) => {
-              if (token) {
-                await apiService.post('/auth/update-stored-user', { userData: updatedUser });
-              }
-            });
-          }
-        });
+      const result = await apiService.switchCompany(companyId);
+
+      if (!result?.success || !result.data?.user) {
+        throw new Error(result?.message || 'Failed to switch company');
       }
+
+      const updatedUser = {
+        ...result.data.user,
+        id: result.data.user._id,
+      };
+
+      // Update Redux store
+      dispatch(updateUser(updatedUser));
+
+      // Persist updated user data
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
     } catch (error) {
       console.error('Company switch failed:', error);
       throw error;
@@ -198,9 +199,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const getCompanyData = async (companyId?: string): Promise<any> => {
     try {
+      if (!isAuthenticated || !user) {
+        return null;
+      }
+
       const result = await apiService.adminGetCompanyData(companyId);
+      if (!result?.success || !result.data) {
+        return null;
+      }
       return result.data;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+
+      const normalized = message.toLowerCase();
+      if (normalized.includes('unauthorized') || normalized.includes('not authenticated')) {
+        return null;
+      }
+
       console.error('Failed to get company data:', error);
       throw error;
     }
@@ -212,32 +227,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     page?: number; 
     limit?: number; 
   }): Promise<any> => {
+    if (!isAuthenticated || !user) {
+      return null;
+    }
+
     try {
-      // Use admin endpoint for admin users, general user endpoint for others
       if (user?.role === 'admin') {
         const result = await apiService.adminGetUsersByCompany(params);
+        if (!result?.success || !result.data) {
+          return null;
+        }
         return result.data;
       } else {
         const result = await apiService.getUserUsersByCompany(params);
         return result.data;
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      const normalized = message.toLowerCase();
+      if (normalized.includes('unauthorized') || normalized.includes('not authenticated')) {
+        return null;
+      }
       console.error('Failed to get users by company:', error);
       throw error;
     }
   };
 
   const getUsersByRole = async (role: string): Promise<any> => {
+    if (!isAuthenticated || !user) {
+      return null;
+    }
+
     try {
-      // Use admin endpoint for admin users, general user endpoint for others
       if (user?.role === 'admin') {
         const result = await apiService.adminGetUsersByRole(role);
+        if (!result?.success || !result.data) {
+          return null;
+        }
         return result.data;
       } else {
         const result = await apiService.getUserUsersByRole(role);
         return result.data;
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      const normalized = message.toLowerCase();
+      if (normalized.includes('unauthorized') || normalized.includes('not authenticated')) {
+        return null;
+      }
       console.error('Failed to get users by role:', error);
       throw error;
     }
@@ -701,10 +738,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // ==================== STOCK MANAGEMENT ====================
   const getStockSummary = async (params?: any): Promise<any> => {
+    if (!isAuthenticated || !user) {
+      return null;
+    }
+
     try {
       const result = await apiService.getStockSummary(params);
+      if (!result?.success || !result.data) {
+        return null;
+      }
       return result;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      const normalized = message.toLowerCase();
+      if (normalized.includes('unauthorized') || normalized.includes('not authenticated')) {
+        return null;
+      }
       console.error('Failed to get stock summary:', error);
       throw error;
     }

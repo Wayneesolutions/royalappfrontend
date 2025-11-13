@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { DEFAULT_GST_RATE, GstType } from '../../../utils/gst';
 
 interface OrderItem {
   productId: string;
@@ -22,6 +23,17 @@ interface OrderItem {
   unit: string;
   unitPrice: number;
   quantity: number;
+  discount?: number;
+  gstRate?: number;
+  taxType?: GstType;
+  taxableValue?: number;
+  cgstRate?: number;
+  cgstAmount?: number;
+  sgstRate?: number;
+  sgstAmount?: number;
+  igstRate?: number;
+  igstAmount?: number;
+  totalTaxAmount?: number;
   totalAmount: number;
 }
 
@@ -64,7 +76,7 @@ interface Order {
   shippingAddress: {
     subDealerId?: string;
     name: string;
-    address: string;
+    address: any;
     mobile: string;
   };
   customerAddress?: {
@@ -77,6 +89,16 @@ interface Order {
   items: OrderItem[];
   totalQuantity: number;
   totalAmount: number;
+  taxableValueTotal?: number;
+  cgstTotal?: number;
+  sgstTotal?: number;
+  igstTotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  finalAmount?: number;
+  sellerState?: string;
+  buyerState?: string;
+  gstType?: GstType;
   notes?: string;
   status: 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   orderType: string;
@@ -88,6 +110,13 @@ interface Order {
     email: string;
     role: string;
   };
+  paymentMethod?: string;
+  modeSelection?: string;
+  mode?: string;
+  termsOfPayment?: string;
+  otherReference?: string;
+  termsOfDelivery1?: string;
+  termsOfDelivery2?: string;
 }
 
 const AdminOrderList = () => {
@@ -108,6 +137,18 @@ const AdminOrderList = () => {
     
     return parts.length > 0 ? parts.join(', ') : 'Address not specified';
   };
+
+const formatCurrency = (value?: number | string | null) => {
+  const numericValue =
+    typeof value === 'number' && isFinite(value)
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : 0;
+
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+  return `₹${safeValue.toFixed(2)}`;
+};
 
   // Helper function to get dealer name (customer)
   const getDealerName = (order: Order) => {
@@ -132,7 +173,55 @@ const AdminOrderList = () => {
       return formatAddress(order.subDealerId.address);
     }
     // Otherwise, use the shippingAddress field
-    return order.shippingAddress?.address || 'Address not specified';
+  const shippingAddress = order.shippingAddress?.address;
+  if (!shippingAddress) {
+    return 'Address not specified';
+  }
+  if (typeof shippingAddress === 'string') {
+    return shippingAddress;
+  }
+  return formatAddress(shippingAddress);
+  };
+
+  const mapPaymentMethodToLabel = (value?: string) => {
+    if (!value) return 'Not specified';
+    const normalized = value.toString().toLowerCase();
+    switch (normalized) {
+      case 'cash':
+        return 'Cash';
+      case 'cheque':
+      case 'check':
+        return 'Cheque';
+      case 'bank_transfer':
+      case 'bank transfer':
+      case 'bank-transfer':
+      case 'neft':
+      case 'rtgs':
+        return 'Bank Transfer';
+      case 'upi':
+        return 'UPI';
+      case 'card':
+    case 'credit card':
+    case 'debit card':
+      return 'Credit Card';
+      case 'credit':
+        return 'Credit';
+      default:
+        return value;
+    }
+  };
+
+  const formatPaymentMode = (order: Order) => {
+    if (order.mode) {
+      return order.mode;
+    }
+    if (order.modeSelection) {
+      return order.modeSelection;
+    }
+    if (order.paymentMethod) {
+      return mapPaymentMethodToLabel(order.paymentMethod);
+    }
+    return 'Not specified';
   };
   
   const [orders, setOrders] = useState<Order[]>([]);
@@ -312,6 +401,10 @@ const AdminOrderList = () => {
           <Text style={styles.orderDetailValue}>₹{item.totalAmount}</Text>
         </View>
         <View style={styles.orderDetailRow}>
+          <Text style={styles.orderDetailLabel}>Payment:</Text>
+          <Text style={styles.orderDetailValue}>{formatPaymentMode(item)}</Text>
+        </View>
+        <View style={styles.orderDetailRow}>
           <Text style={styles.orderDetailLabel}>Date:</Text>
           <Text style={styles.orderDetailValue}>
             {new Date(item.createdAt).toLocaleDateString()}
@@ -430,23 +523,106 @@ const AdminOrderList = () => {
               </View>
             </View>
 
+            {/* Payment & Delivery */}
+            <View style={styles.detailsSection}>
+              <Text style={styles.detailsSectionTitle}>Payment & Delivery</Text>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>Payment Mode</Text>
+                <Text style={styles.detailsValue}>{formatPaymentMode(selectedOrder)}</Text>
+              </View>
+
+              {selectedOrder.termsOfPayment ? (
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Terms of Payment</Text>
+                  <Text style={styles.detailsValue}>{selectedOrder.termsOfPayment}</Text>
+                </View>
+              ) : null}
+
+              {selectedOrder.otherReference ? (
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Other Reference</Text>
+                  <Text style={styles.detailsValue}>{selectedOrder.otherReference}</Text>
+                </View>
+              ) : null}
+
+              {selectedOrder.termsOfDelivery1 ? (
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Terms of Delivery 1</Text>
+                  <Text style={styles.detailsValue}>{selectedOrder.termsOfDelivery1}</Text>
+                </View>
+              ) : null}
+
+              {selectedOrder.termsOfDelivery2 ? (
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Terms of Delivery 2</Text>
+                  <Text style={styles.detailsValue}>{selectedOrder.termsOfDelivery2}</Text>
+                </View>
+              ) : null}
+            </View>
+
             {/* Order Items */}
             <View style={styles.detailsSection}>
               <Text style={styles.detailsSectionTitle}>Order Items</Text>
               
-              {selectedOrder.items.map((item, index) => (
-                <View key={index} style={styles.itemRow}>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.productName}</Text>
-                    <Text style={styles.itemCode}>{item.productCode}</Text>
-                    <Text style={styles.itemPrice}>₹{item.unitPrice}/{item.unit}</Text>
+              {selectedOrder.items.map((item, index) => {
+                const taxableValue =
+                  typeof item.taxableValue === 'number'
+                    ? item.taxableValue
+                    : item.unitPrice * item.quantity;
+                const totalTaxAmount =
+                  typeof item.totalTaxAmount === 'number'
+                    ? item.totalTaxAmount
+                    : (item.cgstAmount || 0) + (item.sgstAmount || 0) + (item.igstAmount || 0);
+
+                return (
+                  <View key={index} style={styles.itemContainer}>
+                    <View style={styles.itemRow}>
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemName}>{item.productName}</Text>
+                        <Text style={styles.itemCode}>{item.productCode}</Text>
+                        <Text style={styles.itemPrice}>
+                          {formatCurrency(item.unitPrice)} / {item.unit}
+                        </Text>
+                      </View>
+                      <View style={styles.itemQuantity}>
+                        <Text style={styles.itemQuantityText}>Qty: {item.quantity}</Text>
+                        <Text style={styles.itemTotal}>{formatCurrency(item.totalAmount)}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.itemTaxContainer}>
+                      <Text style={styles.itemTaxLine}>
+                        Taxable Value: {formatCurrency(taxableValue)}
+                      </Text>
+                      <Text style={styles.itemTaxLine}>
+                        GST Rate: {(item.gstRate ?? DEFAULT_GST_RATE)}%
+                      </Text>
+                      {item.cgstAmount ? (
+                        <Text style={styles.itemTaxLine}>
+                          CGST ({item.cgstRate ?? (item.gstRate ?? DEFAULT_GST_RATE) / 2}%):{' '}
+                          {formatCurrency(item.cgstAmount)}
+                        </Text>
+                      ) : null}
+                      {item.sgstAmount ? (
+                        <Text style={styles.itemTaxLine}>
+                          SGST/UTGST ({item.sgstRate ?? (item.gstRate ?? DEFAULT_GST_RATE) / 2}%):{' '}
+                          {formatCurrency(item.sgstAmount)}
+                        </Text>
+                      ) : null}
+                      {item.igstAmount ? (
+                        <Text style={styles.itemTaxLine}>
+                          IGST ({item.igstRate ?? item.gstRate ?? DEFAULT_GST_RATE}%):{' '}
+                          {formatCurrency(item.igstAmount)}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.itemTaxTotal}>
+                        Total GST: {formatCurrency(totalTaxAmount)}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.itemQuantity}>
-                    <Text style={styles.itemQuantityText}>Qty: {item.quantity}</Text>
-                    <Text style={styles.itemTotal}>₹{item.totalAmount}</Text>
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
 
             {/* Order Summary */}
@@ -465,9 +641,74 @@ const AdminOrderList = () => {
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Total Amount</Text>
-                <Text style={[styles.detailsValue, styles.totalAmount]}>₹{selectedOrder.totalAmount}</Text>
+                <Text style={[styles.detailsValue, styles.totalAmount]}>
+                  {formatCurrency(selectedOrder.totalAmount)}
+                </Text>
               </View>
               
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>GST Type</Text>
+                <Text style={styles.detailsValue}>
+                  {selectedOrder.gstType === 'INTRA_STATE'
+                    ? 'Intra-state (CGST + SGST/UTGST)'
+                    : selectedOrder.gstType === 'INTER_STATE'
+                      ? 'Inter-state (IGST)'
+                      : 'Not specified'}
+                </Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>Seller State</Text>
+                <Text style={styles.detailsValue}>{selectedOrder.sellerState || 'N/A'}</Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>Buyer State</Text>
+                <Text style={styles.detailsValue}>{selectedOrder.buyerState || 'N/A'}</Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>Taxable Value</Text>
+                <Text style={styles.detailsValue}>
+                  {formatCurrency(selectedOrder.taxableValueTotal ?? 0)}
+                </Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>CGST</Text>
+                <Text style={styles.detailsValue}>
+                  {formatCurrency(selectedOrder.cgstTotal ?? 0)}
+                </Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>SGST/UTGST</Text>
+                <Text style={styles.detailsValue}>
+                  {formatCurrency(selectedOrder.sgstTotal ?? 0)}
+                </Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>IGST</Text>
+                <Text style={styles.detailsValue}>
+                  {formatCurrency(selectedOrder.igstTotal ?? 0)}
+                </Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>Total GST</Text>
+                <Text style={styles.detailsValue}>
+                  {formatCurrency(selectedOrder.taxAmount ?? 0)}
+                </Text>
+              </View>
+
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailsLabel}>Grand Total</Text>
+                <Text style={[styles.detailsValue, styles.totalAmount]}>
+                  {formatCurrency(selectedOrder.finalAmount ?? selectedOrder.totalAmount)}
+                </Text>
+              </View>
+
               {selectedOrder.notes && (
                 <View style={styles.detailsRow}>
                   <Text style={styles.detailsLabel}>Notes</Text>
@@ -851,13 +1092,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#059669',
   },
+  itemContainer: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
   itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    paddingHorizontal: 12,
   },
   itemInfo: {
     flex: 1,
@@ -889,6 +1137,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  itemTaxContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  itemTaxLine: {
+    fontSize: 12,
+    color: '#4B5563',
+    marginBottom: 2,
+  },
+  itemTaxTotal: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#059669',
+    marginTop: 4,
   },
   modalActions: {
     flexDirection: 'row',

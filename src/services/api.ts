@@ -7,6 +7,7 @@ import { getApiBaseUrl, getApiTimeout, logApiConfig } from '../config/api';
 // Base API configuration
 const API_BASE_URL = getApiBaseUrl();
 const API_TIMEOUT = getApiTimeout();
+const DEFAULT_UNIT_LABEL = 'units';
 
 // Log API configuration on initialization
 logApiConfig();
@@ -136,7 +137,6 @@ class ApiService {
     // Response interceptor
     this.axiosInstance.interceptors.response.use(
       (response) => {
-        // Log successful API responses in development
         if (__DEV__) {
           console.log('✅ API Response:', {
             status: response.status,
@@ -148,7 +148,6 @@ class ApiService {
         return response;
       },
       async (error: AxiosError) => {
-        // Log API errors in development
         if (__DEV__) {
           console.error('❌ API Error:', {
             status: error.response?.status,
@@ -161,12 +160,16 @@ class ApiService {
         }
         
         if (error.response?.status === 401) {
-          // Token expired or invalid, clear auth data
-          await this.logout();
+          this.clearAuthHeaders();
         }
         return Promise.reject(error);
       }
     );
+  }
+
+  private clearAuthHeaders() {
+    this.token = null;
+    delete this.axiosInstance.defaults.headers.common['Authorization'];
   }
 
   private handleApiError(error: AxiosError): never {
@@ -401,6 +404,10 @@ class ApiService {
 
   async adminGetCompanyData(companyId?: string): Promise<ApiResponse<any>> {
     try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
       const params = companyId ? { companyId } : {};
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/company-data', { params });
       return response.data;
@@ -416,6 +423,10 @@ class ApiService {
     limit?: number; 
   }): Promise<ApiResponse<any>> {
     try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/users-by-company', { params });
       return response.data;
     } catch (error) {
@@ -432,6 +443,15 @@ class ApiService {
   }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/user/users-by-company', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async switchCompany(companyId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/user/switch-company', { companyId });
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -480,6 +500,10 @@ class ApiService {
 
   async adminGetUsersByRole(role: string): Promise<ApiResponse<any>> {
     try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/admin/role/${role}`);
       return response.data;
     } catch (error) {
@@ -629,12 +653,20 @@ class ApiService {
     items: Array<{
       productId: string;
       quantity: number;
+      unitPrice?: number;
       discount?: number;
-      tax?: number;
+      gstRate?: number;
     }>;
     deliveryDate?: string;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
-    paymentMethod?: 'cash' | 'cheque' | 'bank_transfer' | 'upi' | 'card' | 'credit';
+    paymentMethod?: 'cash' | 'cheque' | 'bank_transfer' | 'upi' | 'card' | 'credit' | 'other';
+    modeSelection?: string;
+    mode?: string;
+    customMode?: string;
+    termsOfPayment?: string;
+    otherReference?: string;
+    termsOfDelivery1?: string;
+    termsOfDelivery2?: string;
     notes?: string;
     shippingAddress?: any;
   }): Promise<ApiResponse<any>> {
@@ -803,26 +835,37 @@ class ApiService {
     category: string;
     subCategory?: string;
     brand?: string;
-    unit: string;
     price: number;
-    costPrice?: number;
-    mrp?: number;
-    discount?: number;
-    taxRate?: number;
-    stock?: {
-      current?: number;
-      minimum?: number;
-      maximum?: number;
-    };
-    images?: Array<{ url: string; alt?: string; isPrimary?: boolean }>;
-    specifications?: any;
+    stock?: number;
+    isActive?: boolean;
+    gstRate?: number;
   }): Promise<ApiResponse<any>> {
     console.log('🌐 API Service createProduct called with:', data);
     try {
       console.log('📡 Making POST request to /products...');
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/products', data);
       console.log('📡 POST response received:', response.data);
-      return response.data;
+      const result: any = response.data;
+
+      if (result?.success && result.product) {
+        const stockValue =
+          typeof result.product.stock === 'number'
+            ? result.product.stock
+            : (result.product.stock?.current ?? 0);
+
+        result.product = {
+          ...result.product,
+          unit: result.product.unit ?? DEFAULT_UNIT_LABEL,
+          stock: {
+            current: stockValue,
+            minimum: result.product.stock?.minimum ?? 0,
+            maximum: result.product.stock?.maximum ?? Math.max(stockValue, 0),
+          },
+          stockQuantity: stockValue,
+        };
+      }
+
+      return result;
     } catch (error) {
       console.log('❌ API Service createProduct error:', error);
       // Return error response instead of throwing
@@ -855,12 +898,33 @@ class ApiService {
     limit?: number;
     category?: string;
     search?: string;
-    isAvailable?: boolean;
     isActive?: boolean;
   }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/products', { params });
-      return response.data;
+      const data: any = response.data;
+
+      if (data?.products && Array.isArray(data.products)) {
+        data.products = data.products.map((product: any) => {
+          const stockValue =
+            typeof product.stock === 'number'
+              ? product.stock
+              : (product.stock?.current ?? 0);
+
+          return {
+            ...product,
+            unit: product.unit ?? DEFAULT_UNIT_LABEL,
+            stock: {
+              current: stockValue,
+              minimum: product.stock?.minimum ?? 0,
+              maximum: product.stock?.maximum ?? Math.max(stockValue, 0),
+            },
+            stockQuantity: stockValue,
+          };
+        });
+      }
+
+      return data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
     }
@@ -869,7 +933,27 @@ class ApiService {
   async getProductById(productId: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/products/${productId}`);
-      return response.data;
+      const data: any = response.data;
+
+      if (data?.success && data.product) {
+        const stockValue =
+          typeof data.product.stock === 'number'
+            ? data.product.stock
+            : (data.product.stock?.current ?? 0);
+
+        data.product = {
+          ...data.product,
+          unit: data.product.unit ?? DEFAULT_UNIT_LABEL,
+          stock: {
+            current: stockValue,
+            minimum: data.product.stock?.minimum ?? 0,
+            maximum: data.product.stock?.maximum ?? Math.max(stockValue, 0),
+          },
+          stockQuantity: stockValue,
+        };
+      }
+
+      return data;
     } catch (error) {
       // Return error response instead of throwing to avoid undefined upstream
       const axiosError = error as AxiosError;
@@ -893,10 +977,40 @@ class ApiService {
     }
   }
 
-  async updateProduct(productId: string, data: any): Promise<ApiResponse<any>> {
+  async updateProduct(productId: string, data: {
+    productName?: string;
+    description?: string;
+    category?: string;
+    subCategory?: string;
+    brand?: string;
+    price?: number;
+    stock?: number;
+    isActive?: boolean;
+    gstRate?: number;
+  }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/products/${productId}`, data);
-      return response.data;
+      const result: any = response.data;
+
+      if (result?.success && result.product) {
+        const stockValue =
+          typeof result.product.stock === 'number'
+            ? result.product.stock
+            : (result.product.stock?.current ?? 0);
+
+        result.product = {
+          ...result.product,
+          unit: result.product.unit ?? DEFAULT_UNIT_LABEL,
+          stock: {
+            current: stockValue,
+            minimum: result.product.stock?.minimum ?? 0,
+            maximum: result.product.stock?.maximum ?? Math.max(stockValue, 0),
+          },
+          stockQuantity: stockValue,
+        };
+      }
+
+      return result;
     } catch (error) {
       // Return error response instead of throwing
       const axiosError = error as AxiosError;
@@ -1236,6 +1350,10 @@ class ApiService {
   // ==================== STOCK MANAGEMENT ====================
   async getStockSummary(params?: any): Promise<ApiResponse<any>> {
     try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/stock/summary', { params });
       return response.data;
     } catch (error) {

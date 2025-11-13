@@ -10,7 +10,8 @@ import {
   Alert,
   StatusBar,
   Modal,
-  ActivityIndicator
+  ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { 
@@ -40,6 +41,7 @@ import {
   CheckCircle,
   Globe,
   FileText,
+  Hash,
   Settings,
   X,
   Save,
@@ -81,6 +83,7 @@ interface Company {
 
 // ==================== MOCK DATA ====================
 const initialCompanies: Company[] = [];
+type AdminOption = { label: string; value: string };
 
 // ==================== COMPANIES LIST SCREEN ====================
 const CompaniesListScreen = ({ 
@@ -96,6 +99,8 @@ const CompaniesListScreen = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const { width } = useWindowDimensions();
+  const isCompact = width < 420;
 
   const filteredCompanies = companies.filter(company => {
     const matchesSearch = company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -109,29 +114,69 @@ const CompaniesListScreen = ({
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity style={styles.backButton} onPress={onBack}>
-            <View style={styles.backButtonContent}>
-              <ArrowLeft size={20} color="#2563eb" />
-              <Text style={styles.backButtonText}>Back</Text>
-            </View>
-          </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
+      {isCompact ? (
+        <View style={[styles.header, styles.headerCompact]}>
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity style={styles.backButton} onPress={onBack}>
+              <View style={styles.backButtonContent}>
+                <ArrowLeft size={20} color="#2563eb" />
+                <Text style={styles.backButtonText}>Back</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.backButton, styles.addButtonCompact]}
+              onPress={onCreateNew}
+              activeOpacity={0.85}
+            >
+              <View style={styles.backButtonContent}>
+                <Plus size={20} color="#2563eb" />
+                <Text style={[styles.backButtonText, styles.backButtonTextSecondary]}>Add company</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.headerTitleRow}>
             <View style={styles.iconContainer}>
               <Building2 size={24} color="#2563eb" />
             </View>
-            <View>
+            <View style={styles.headerTextGroup}>
               <Text style={styles.headerTitle}>Companies</Text>
-              <Text style={styles.headerSubtitle}>{filteredCompanies.length} total companies</Text>
+              <Text style={styles.headerSubtitle}>
+                {filteredCompanies.length} total companies
+              </Text>
             </View>
           </View>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={onCreateNew}>
-          <Plus size={20} color="#fff" />
-          <Text style={styles.addButtonText}>Add</Text>
-        </TouchableOpacity>
-      </View>
+      ) : (
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <TouchableOpacity style={styles.backButton} onPress={onBack}>
+              <View style={styles.backButtonContent}>
+                <ArrowLeft size={20} color="#2563eb" />
+                <Text style={styles.backButtonText}>Back</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.headerTitleContainer}>
+              <View style={styles.iconContainer}>
+                <Building2 size={24} color="#2563eb" />
+              </View>
+              <View>
+                <Text style={styles.headerTitle}>Companies</Text>
+                <Text style={styles.headerSubtitle}>
+                  {filteredCompanies.length} total companies
+                </Text>
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={onCreateNew}
+            activeOpacity={0.85}
+          >
+            <Plus size={20} color="#fff" />
+            <Text style={styles.addButtonText}>Add Company</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Search and Filters */}
       <View style={styles.searchContainer}>
@@ -167,7 +212,7 @@ const CompaniesListScreen = ({
       </View>
 
       {/* Companies List */}
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         {filteredCompanies.map(company => (
           <TouchableOpacity
             key={company.id}
@@ -183,6 +228,9 @@ const CompaniesListScreen = ({
                 <View>
                   <Text style={styles.companyName}>{company.name}</Text>
                   <Text style={styles.companyCode}>Code: {company.code}</Text>
+                  <Text style={styles.companyGuid}>
+                    GUID: {company.guid ? company.guid : 'Not assigned'}
+                  </Text>
                 </View>
               </View>
               <View style={[
@@ -585,6 +633,14 @@ const CompanyDetailsScreen = ({
                     <Text style={styles.infoLabel}>Company Code</Text>
                   </View>
                   <Text style={styles.infoValue}>{company.code}</Text>
+                </View>
+
+                <View style={styles.infoItem}>
+                  <View style={styles.infoItemHeader}>
+                    <Hash size={16} color="#6b7280" />
+                    <Text style={styles.infoLabel}>Company GUID</Text>
+                  </View>
+                  <Text style={styles.infoValue}>{company.guid || 'Not assigned'}</Text>
                 </View>
                 
                 <View style={styles.infoItem}>
@@ -1288,8 +1344,8 @@ const CompanyFormScreen = ({
     admin: { name: '', phone: '', email: '' },
   });
   const [maxUsers, setMaxUsers] = useState<string>('100');
-  const [guid, setGuid] = useState<string>(String(Date.now()));
-  const [adminOptions, setAdminOptions] = useState<{label:string; value:string}[]>([]);
+  const [guid, setGuid] = useState<string>(company?.guid ? String(company.guid) : '');
+  const [adminOptions, setAdminOptions] = useState<AdminOption[]>([]);
   const [selectedAdminId, setSelectedAdminId] = useState<string>('');
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
@@ -1304,7 +1360,7 @@ const CompanyFormScreen = ({
       setStreet(company.address || '');
       setPincode(company.pincode || '');
       setMaxUsers(company.maxUsers?.toString() || '100');
-      setGuid(company.guid?.toString() || Date.now().toString());
+      setGuid(company.guid?.toString() || '');
     }
   }, [isEdit, company]);
 
@@ -1348,7 +1404,7 @@ const CompanyFormScreen = ({
     });
   };
 
-  const filteredAdmins = adminOptions.filter(admin =>
+  const filteredAdmins = adminOptions.filter((admin:AdminOption) =>
     admin.label.toLowerCase().includes(adminSearchQuery.toLowerCase())
   );
 
@@ -1381,9 +1437,6 @@ const CompanyFormScreen = ({
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>
               {isEdit ? 'Edit Company' : 'Create New Company'}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {isEdit ? 'Update company details' : 'Fill in the company information'}
             </Text>
           </View>
         </View>
@@ -1509,82 +1562,97 @@ const CompanyFormScreen = ({
               placeholderTextColor="#9ca3af"
             />
             <Text style={styles.formLabel}>Assign Admin (optional)</Text>
-            <TouchableOpacity 
-              style={styles.dropdownContainer}
-              onPress={() => setShowAdminDropdown(!showAdminDropdown)}
-            >
-              <View style={styles.dropdownButton}>
-                <Users size={20} color="#9ca3af" />
-                <Text style={[
-                  styles.dropdownText,
-                  !selectedAdminId && styles.dropdownPlaceholder
-                ]}>
-                  {selectedAdminId 
-                    ? adminOptions.find(a => a.value === selectedAdminId)?.label 
-                    : 'Select an admin'
-                  }
-                </Text>
-                <ArrowLeft 
-                  size={20} 
-                  color="#9ca3af" 
-                  style={[
-                    styles.dropdownChevron,
-                    showAdminDropdown && styles.dropdownChevronRotated
-                  ]}
-                />
-              </View>
-            </TouchableOpacity>
-            
-            {showAdminDropdown && (
-              <View style={styles.dropdownList}>
-                {/* Search Bar */}
-                <View style={styles.dropdownSearchContainer}>
-                  <Search size={16} color="#9ca3af" />
-                  <TextInput
-                    style={styles.dropdownSearchInput}
-                    placeholder="Search admins..."
-                    value={adminSearchQuery}
-                    onChangeText={setAdminSearchQuery}
-                    placeholderTextColor="#9ca3af"
+            <View style={styles.dropdownWrapper}>
+              <TouchableOpacity 
+                style={styles.dropdownContainer}
+                onPress={() => setShowAdminDropdown(!showAdminDropdown)}
+                activeOpacity={0.9}
+              >
+                <View style={styles.dropdownButton}>
+                  <Users size={20} color="#9ca3af" />
+                  <Text style={[
+                    styles.dropdownText,
+                    !selectedAdminId && styles.dropdownPlaceholder
+                  ]}>
+                    {selectedAdminId 
+                      ? adminOptions.find(a => a.value === selectedAdminId)?.label 
+                      : 'Select an admin'
+                    }
+                  </Text>
+                  <ChevronDown 
+                    size={20} 
+                    color="#9ca3af" 
+                    style={[
+                      styles.dropdownChevron,
+                      showAdminDropdown && styles.dropdownChevronRotated
+                    ]}
                   />
                 </View>
-                
-                <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
-                  {filteredAdmins.length > 0 ? (
-                    filteredAdmins.map((admin) => (
-                      <TouchableOpacity
-                        key={admin.value}
-                        style={[
-                          styles.dropdownItem,
-                          selectedAdminId === admin.value && styles.dropdownItemSelected
-                        ]}
-                        onPress={() => {
-                          setSelectedAdminId(admin.value);
-                          setShowAdminDropdown(false);
-                          setAdminSearchQuery('');
-                        }}
-                      >
-                        <View style={styles.dropdownItemContent}>
-                          <Text style={[
-                            styles.dropdownItemText,
-                            selectedAdminId === admin.value && styles.dropdownItemTextSelected
-                          ]}>
-                            {admin.label}
-                          </Text>
-                          {selectedAdminId === admin.value && (
-                            <Check size={16} color="#2563eb" />
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    ))
-                  ) : (
-                    <View style={styles.dropdownEmptyState}>
-                      <Text style={styles.dropdownEmptyText}>No admins found</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-            )}
+              </TouchableOpacity>
+
+              {showAdminDropdown && (
+                <TouchableOpacity 
+                  activeOpacity={1}
+                  style={styles.dropdownBackdrop}
+                  onPress={() => {
+                    setShowAdminDropdown(false);
+                    setAdminSearchQuery('');
+                  }}
+                />
+              )}
+
+              {showAdminDropdown && (
+                <View style={styles.dropdownPopover}>
+                  <View style={styles.dropdownSearchContainer}>
+                    <Search size={16} color="#9ca3af" />
+                    <TextInput
+                      style={styles.dropdownSearchInput}
+                      placeholder="Search admins..."
+                      value={adminSearchQuery}
+                      onChangeText={setAdminSearchQuery}
+                      placeholderTextColor="#9ca3af"
+                    />
+                  </View>
+
+                  <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator>
+                    {filteredAdmins.length > 0 ? (
+                      filteredAdmins.map((admin) => (
+                        <TouchableOpacity
+                          key={admin.value}
+                          style={[
+                            styles.dropdownItem,
+                            selectedAdminId === admin.value && styles.dropdownItemSelected,
+                          ]}
+                          onPress={() => {
+                            setSelectedAdminId(admin.value);
+                            setShowAdminDropdown(false);
+                            setAdminSearchQuery('');
+                          }}
+                        >
+                          <View style={styles.dropdownItemContent}>
+                            <Text
+                              style={[
+                                styles.dropdownItemText,
+                                selectedAdminId === admin.value && styles.dropdownItemTextSelected,
+                              ]}
+                            >
+                              {admin.label}
+                            </Text>
+                            {selectedAdminId === admin.value && (
+                              <Check size={16} color="#2563eb" />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <View style={styles.dropdownEmptyState}>
+                        <Text style={styles.dropdownEmptyText}>No admins found</Text>
+                      </View>
+                    )}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
             
             {selectedAdminId && (
               <View style={styles.selectedAdminInfo}>
@@ -1679,6 +1747,7 @@ const CompanyManagementSystem = () => {
           id: c._id,
           name: c.companyName,
           code: c.companyCode,
+          guid: c.guid ? String(c.guid) : '',
           address: c.contactDetails?.address?.street || '',
           city: c.contactDetails?.address?.city || '',
           state: c.contactDetails?.address?.state || '',
@@ -1732,8 +1801,7 @@ const CompanyManagementSystem = () => {
   const handleSave = async (data: any) => {
     try {
       if (currentView === 'create') {
-        // Map UI form to backend payload
-        const payload = {
+        const payload: any = {
           companyName: data.name || '',
           companyState: data.state || '',
           companyCountry: data.country || 'India',
@@ -1741,7 +1809,6 @@ const CompanyManagementSystem = () => {
           companyEmail: data.email || '',
           companyCode: data.code || '',
           maxUser: Number(data.maxUsers) || 100,
-          guid: Number(data.guid) || Date.now(),
           contactDetails: {
             email: data.email,
             phone: data.phone,
@@ -1755,26 +1822,14 @@ const CompanyManagementSystem = () => {
           }
         };
 
+        if (data.guid) {
+          payload.guid = Number(data.guid);
+        }
+
         const res = await apiService.superadminCreateCompany(payload as any);
         if (res.success && res.data) {
           Alert.alert('Success', 'Company created successfully!');
-          // Optionally refresh list
-          setCompanies([{ 
-            id: res.data._id,
-            name: res.data.companyName,
-            code: res.data.companyCode,
-            address: payload.contactDetails.address.street || '',
-            city: payload.contactDetails.address.city || '',
-            state: payload.contactDetails.address.state || '',
-            pincode: payload.contactDetails.address.pincode || '',
-            phone: payload.contactDetails.phone || '',
-            email: payload.contactDetails.email || '',
-            gstNumber: '',
-            status: 'active',
-            createdAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-            admin: { name: '', phone: '', email: '' },
-            stats: { totalSales: '₹0', totalOrders: 0, pendingOrders: 0, totalUsers: 0, activeUsers: 0 },
-          }, ...companies]);
+          await loadCompanies();
 
           // Assign admin if provided
           if (data.selectedAdminId) {
@@ -1788,8 +1843,7 @@ const CompanyManagementSystem = () => {
           Alert.alert('Failed', res.message || 'Failed to create company');
         }
       } else if (currentView === 'edit' && selectedCompany) {
-        // Map UI form to backend payload for update
-        const payload = {
+        const payload: any = {
           companyName: data.name || '',
           companyState: data.state || '',
           companyCountry: data.country || 'India',
@@ -1797,7 +1851,6 @@ const CompanyManagementSystem = () => {
           companyEmail: data.email || '',
           companyCode: data.code || '',
           maxUser: Number(data.maxUsers) || 100,
-          guid: Number(data.guid) || Date.now(),
           contactDetails: {
             email: data.email,
             phone: data.phone,
@@ -1811,24 +1864,25 @@ const CompanyManagementSystem = () => {
           }
         };
 
+        if (data.guid) {
+          payload.guid = Number(data.guid);
+        }
+
         const res = await apiService.superadminUpdateCompany(selectedCompany.id, payload);
         if (res.success && res.data) {
+          if (data.selectedAdminId) {
+            try {
+              await apiService.superadminAssignCompanyToAdmin(data.selectedAdminId, {
+                companyId: selectedCompany.id,
+                setAsDefault: true,
+              });
+            } catch (assignError) {
+              console.warn('Failed to assign admin during update:', assignError);
+            }
+          }
+
+          await loadCompanies();
           Alert.alert('Success', 'Company updated successfully!');
-          
-          // Update the companies list with the updated data
-          setCompanies(companies.map(c => 
-            c.id === selectedCompany.id ? { 
-              ...c, 
-              name: res.data.companyName,
-              code: res.data.companyCode,
-              address: res.data.contactDetails?.address?.street || '',
-              city: res.data.contactDetails?.address?.city || '',
-              state: res.data.contactDetails?.address?.state || '',
-              pincode: res.data.contactDetails?.address?.pincode || '',
-              phone: res.data.contactDetails?.phone || '',
-              email: res.data.contactDetails?.email || '',
-            } : c
-          ));
         } else {
           Alert.alert('Failed', res.message || 'Failed to update company');
         }
@@ -1906,6 +1960,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    rowGap: 12,
+  },
+  headerCompact: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    rowGap: 10,
   },
   headerContent: {
     flexDirection: 'row',
@@ -1937,11 +1998,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2563eb',
   },
+  backButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    gap: 10,
+  },
   headerTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flex: 1,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
   },
   iconContainer: {
     width: 48,
@@ -1961,6 +2040,9 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
+  headerTextGroup: {
+    flex: 1,
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1969,6 +2051,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
+  },
+  addButtonCompact: {
+    marginRight: 12,
   },
   addButtonText: {
     color: '#fff',
@@ -2071,6 +2156,11 @@ const styles = StyleSheet.create({
   companyCode: {
     fontSize: 13,
     color: '#6b7280',
+    marginTop: 2,
+  },
+  companyGuid: {
+    fontSize: 12,
+    color: '#9ca3af',
     marginTop: 2,
   },
   statusBadge: {
@@ -2525,6 +2615,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: 4,
   },
+  dropdownWrapper: {
+    position: 'relative',
+  },
+  dropdownBackdrop: {
+    position: 'absolute',
+    top: -8,
+    left: -16,
+    right: -16,
+    bottom: -16,
+  },
   dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2551,23 +2651,22 @@ const styles = StyleSheet.create({
   dropdownChevronRotated: {
     transform: [{ rotate: '270deg' }],
   },
-  dropdownList: {
+  dropdownPopover: {
     position: 'absolute',
-    top: 48,
+    top: 52,
     left: 0,
     right: 0,
     backgroundColor: '#fff',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 12,
-    marginTop: 4,
-    maxHeight: 200,
-    zIndex: 1000,
-    elevation: 5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    maxHeight: 240,
+    zIndex: 1000,
   },
   dropdownSearchContainer: {
     flexDirection: 'row',
@@ -2586,7 +2685,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   dropdownScroll: {
-    maxHeight: 200,
+    maxHeight: 220,
   },
   dropdownItem: {
     paddingHorizontal: 16,
@@ -2631,6 +2730,56 @@ const styles = StyleSheet.create({
     color: '#16a34a',
     marginLeft: 6,
     fontWeight: '500',
+  },
+  dropdownModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  dropdownModalContent: {
+    width: '92%',
+    maxHeight: '70%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  dropdownModalHeader: {
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  dropdownModalSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  dropdownModalClose: {
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: '#f3f4f6',
+  },
+  dropdownModalList: {
+    maxHeight: 320,
+  },
+  dropdownEmptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   // Enhanced Overview Section styles
   infoGrid: {

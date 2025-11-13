@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import {
+  DEFAULT_GST_RATE,
+  computeGstBreakdown,
+  determineGstType,
+  extractState,
+  GstType,
+} from '../../../utils/gst';
+
+const MODE_OPTIONS = ['Cash', 'Cheque', 'Bank Transfer', 'UPI', 'Credit Card', 'Other'];
 
 interface Dealer {
   _id: string;
@@ -49,12 +58,13 @@ interface Product {
   productCode: string;
   productName: string;
   price: number;
-  unit: string;
-  stock: {
+  unit?: string;
+  stock: number | {
     current: number;
-    minimum: number;
-    maximum: number;
+    minimum?: number;
+    maximum?: number;
   };
+  gstRate?: number;
 }
 
 interface OrderItem {
@@ -64,13 +74,59 @@ interface OrderItem {
   unit: string;
   unitPrice: number;
   quantity: number;
+  discount: number;
+  gstRate: number;
+  taxType: GstType;
+  taxableValue: number;
+  cgstRate: number;
+  cgstAmount: number;
+  sgstRate: number;
+  sgstAmount: number;
+  igstRate: number;
+  igstAmount: number;
+  totalTaxAmount: number;
   totalAmount: number;
   availableStock: number;
 }
 
+interface ProductSelectionState {
+  quantity: string;
+  validating: boolean;
+  isValid: boolean;
+  availableStock: number;
+  error?: string;
+  adding: boolean;
+  lastValidatedQuantity?: number;
+  productData?: Product;
+}
+
+const DEFAULT_UNIT_LABEL = 'units';
+
+const getStockNumber = (stock: Product['stock']): number => {
+  if (typeof stock === 'number') {
+    return stock;
+  }
+
+  if (stock && typeof stock.current === 'number') {
+    return stock.current;
+  }
+
+  return 0;
+};
+
+const getUnitLabel = (unit?: string): string => {
+  if (unit && unit.trim().length > 0) {
+    return unit;
+  }
+
+  return DEFAULT_UNIT_LABEL;
+};
+
+const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
+
 const AdminCreateOrder = () => {
   const navigation = useNavigation();
-  const { getUsersByRole, getSubDealers, getProducts, getProductById, createOrder } = useAuth();
+  const { user, getUsersByRole, getSubDealers, getProducts, getProductById, createOrder } = useAuth();
   
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
@@ -85,6 +141,16 @@ const AdminCreateOrder = () => {
     
     return parts.length > 0 ? parts.join(', ') : 'Address not specified';
   };
+
+  const normalizeAddress = (
+    address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }
+  ) => ({
+    street: address?.street || '',
+    city: address?.city || '',
+    state: address?.state || '',
+    pincode: address?.pincode || '',
+    country: address?.country || 'India',
+  });
   
   // State for dropdowns
   const [dealers, setDealers] = useState<Dealer[]>([]);
@@ -102,6 +168,8 @@ const AdminCreateOrder = () => {
   
   // State for order items
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [productSelections, setProductSelections] = useState<Record<string, ProductSelectionState>>({});
+  const [bulkAdding, setBulkAdding] = useState(false);
   
   // State for loading
   const [loading, setLoading] = useState(true);
@@ -109,10 +177,129 @@ const AdminCreateOrder = () => {
   
   // State for order details
   const [orderNotes, setOrderNotes] = useState('');
+  const [mode, setMode] = useState('');
+  const [customMode, setCustomMode] = useState('');
+  const [termsOfPayment, setTermsOfPayment] = useState('');
+  const [otherReference, setOtherReference] = useState('');
+  const [termsOfDelivery1, setTermsOfDelivery1] = useState('');
+  const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
+
+  const deriveSellerState = useCallback(() => {
+    if (!user) {
+      return '';
+    }
+
+    const defaultCompany =
+      (user as any)?.defaultCompany ??
+      (user as any)?.userDetails?.defaultCompany;
+
+    if (!defaultCompany || typeof defaultCompany === 'string') {
+      return '';
+    }
+
+    return (
+      extractState(defaultCompany.companyState) ||
+      extractState(defaultCompany?.contactDetails?.address?.state)
+    );
+  }, [user]);
+
+  const sellerState = useMemo(() => deriveSellerState(), [deriveSellerState]);
+
+  const buyerState = useMemo(() => {
+    if (selectedSubDealer?.address?.state) {
+      return extractState(selectedSubDealer.address.state);
+    }
+    if (selectedDealer?.address?.state) {
+      return extractState(selectedDealer.address.state);
+    }
+    return '';
+  }, [selectedDealer, selectedSubDealer]);
+
+  const gstType = useMemo(
+    () => determineGstType(sellerState, buyerState),
+    [sellerState, buyerState]
+  );
+
+  const applyGstToItems = useCallback(
+    (items: OrderItem[], type: GstType): OrderItem[] =>
+      items.map((item) => {
+        const tax = computeGstBreakdown({
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountPercent: item.discount ?? 0,
+          gstRate: item.gstRate ?? DEFAULT_GST_RATE,
+          gstType: type,
+        });
+
+        return {
+          ...item,
+          discount: item.discount ?? 0,
+          gstRate: tax.gstRate,
+          taxType: type,
+          taxableValue: tax.taxableValue,
+          cgstRate: tax.cgstRate,
+          cgstAmount: tax.cgstAmount,
+          sgstRate: tax.sgstRate,
+          sgstAmount: tax.sgstAmount,
+          igstRate: tax.igstRate,
+          igstAmount: tax.igstAmount,
+          totalTaxAmount: tax.totalTaxAmount,
+          totalAmount: tax.lineTotal,
+        };
+      }),
+    []
+  );
+
+  const calculateOrderSummary = useCallback(
+    (items: OrderItem[]) =>
+      items.reduce(
+        (acc, item) => {
+          acc.totalQuantity += item.quantity;
+          acc.grossAmount += item.unitPrice * item.quantity;
+          acc.taxableValue += item.taxableValue || 0;
+          acc.cgstTotal += item.cgstAmount || 0;
+          acc.sgstTotal += item.sgstAmount || 0;
+          acc.igstTotal += item.igstAmount || 0;
+          acc.taxTotal += item.totalTaxAmount || 0;
+          acc.totalAmount += item.totalAmount || 0;
+          return acc;
+        },
+        {
+          totalQuantity: 0,
+          grossAmount: 0,
+          taxableValue: 0,
+          cgstTotal: 0,
+          sgstTotal: 0,
+          igstTotal: 0,
+          taxTotal: 0,
+          totalAmount: 0,
+        }
+      ),
+    []
+  );
 
   useEffect(() => {
     fetchInitialData();
   }, []);
+
+  useEffect(() => {
+    setOrderItems((prev) => applyGstToItems(prev, gstType));
+  }, [gstType, applyGstToItems]);
+
+  const orderSummary = useMemo(
+    () => calculateOrderSummary(orderItems),
+    [orderItems, calculateOrderSummary]
+  );
+
+  const hasCgst = orderSummary.cgstTotal > 0.0001;
+  const hasSgst = orderSummary.sgstTotal > 0.0001;
+  const hasIgst = orderSummary.igstTotal > 0.0001;
+  const gstTypeLabel =
+    gstType === 'INTRA_STATE'
+      ? 'Intra-state (CGST + SGST/UTGST)'
+      : gstType === 'INTER_STATE'
+        ? 'Inter-state (IGST)'
+        : 'GST type unavailable';
 
   const fetchInitialData = async () => {
     try {
@@ -203,118 +390,384 @@ const AdminCreateOrder = () => {
     setShowSubDealerDropdown(false);
   };
 
-  const addProductToOrder = async (product: Product) => {
-    console.log('🔍 addProductToOrder called with:', product.productName);
-    console.log('📊 Current orderItems length:', orderItems.length);
-    
-    // Check if the exact same product (same ID, price, and unit) already exists
-    const existingItem = orderItems.find(item => 
-      item.productId === product._id && 
-      item.unitPrice === product.price && 
-      item.unit === product.unit
-    );
-    
-    if (existingItem) {
-      console.log('⚠️ Exact product already exists in order');
-      Alert.alert(
-        'Product Already Added', 
-        'This exact product (same price and unit) is already in the order. Would you like to increase its quantity by 1?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Increase Quantity',
-            onPress: () => updateQuantity(product._id, existingItem.quantity + 1)
-          }
-        ]
-      );
-      return;
+  const createSelectionState = (initialStock: number): ProductSelectionState => ({
+    quantity: '0',
+    validating: false,
+    isValid: false,
+    availableStock: initialStock,
+    error: '',
+    adding: false,
+    lastValidatedQuantity: undefined,
+    productData: undefined,
+  });
+
+  const getSelectionState = (product: Product): ProductSelectionState =>
+    productSelections[product._id] ?? createSelectionState(getStockNumber(product.stock));
+
+  const getFreshProduct = async (productId: string): Promise<Product> => {
+    const response = await getProductById(productId);
+    if (!response?.success || !response.product) {
+      throw new Error(response?.message || 'Product not available at the moment.');
     }
-    
-    // Check if the same product ID exists but with different price/unit
-    const sameProductDifferentPrice = orderItems.find(item => 
-      item.productId === product._id && 
-      (item.unitPrice !== product.price || item.unit !== product.unit)
-    );
-    
-    if (sameProductDifferentPrice) {
-      console.log('⚠️ Same product with different price/unit exists');
-      Alert.alert(
-        'Same Product, Different Price/Unit', 
-        `This product already exists with different pricing (₹${sameProductDifferentPrice.unitPrice}/${sameProductDifferentPrice.unit}). Do you want to add this variant (₹${product.price}/${product.unit})?`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Add Variant',
-            onPress: async () => {
-              // Proceed with adding the new variant
-              await addProductVariant(product);
-            }
-          }
-        ]
-      );
-      return;
-    }
-    
-    // If no duplicates found, add the product normally
-    await addProductVariant(product);
+    return response.product as Product;
   };
 
-  const addProductVariant = async (product: Product) => {
-    try {
-      // Prefer fresh product from backend, but gracefully fall back to selected list item
-      console.log(`🔍 Adding product ${product.productName} to order`);
-      const productResponse = await getProductById(product._id);
-      console.log('📡 Product response:', productResponse);
+  const handleProductQuantityChange = (product: Product, rawValue: string) => {
+    const sanitized = rawValue.replace(/[^0-9]/g, '');
+    const quantityString = sanitized === '' ? '0' : sanitized;
+    const quantityNumber = parseInt(quantityString, 10) || 0;
 
-      const freshProduct = (productResponse?.success
-        ? productResponse.product
-        : null) || product;
-
-      const newItem: OrderItem = {
-        productId: freshProduct._id,
-        productCode: freshProduct.productCode,
-        productName: freshProduct.productName,
-        unit: freshProduct.unit,
-        unitPrice: freshProduct.price,
-        quantity: 0,
-        totalAmount: 0,
-        availableStock: freshProduct.stock?.current ?? product.stock.current,
+    setProductSelections((prev) => {
+      const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+      return {
+        ...prev,
+        [product._id]: {
+          ...prevState,
+          quantity: quantityString,
+          validating: quantityNumber > 0,
+          isValid: false,
+          error: '',
+        },
       };
+    });
 
-      console.log('📦 New item to add:', newItem);
-      console.log('📊 Current orderItems before update:', orderItems);
+    if (quantityNumber <= 0) {
+      setProductSelections((prev) => {
+        const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+        return {
+          ...prev,
+          [product._id]: {
+            ...prevState,
+            quantity: quantityString,
+            validating: false,
+            isValid: false,
+            error: '',
+            lastValidatedQuantity: undefined,
+            productData: undefined,
+          },
+        };
+      });
+      return;
+    }
 
-      setOrderItems(prevItems => {
-        const updatedItems = [...prevItems, newItem];
-        console.log('📊 Updated orderItems:', updatedItems);
-        return updatedItems;
+    const validate = async () => {
+      try {
+        const freshProduct = await getFreshProduct(product._id);
+        const availableStock = getStockNumber(freshProduct.stock);
+        const isValid = quantityNumber <= availableStock;
+
+        setProductSelections((prev) => {
+          const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+          if ((prevState.quantity || '0') !== quantityString) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [product._id]: {
+              ...prevState,
+              validating: false,
+              isValid,
+              availableStock,
+              error: isValid ? '' : `Only ${availableStock} units available`,
+              productData: freshProduct,
+              lastValidatedQuantity: quantityNumber,
+            },
+          };
+        });
+      } catch (error) {
+        setProductSelections((prev) => {
+          const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+          if ((prevState.quantity || '0') !== quantityString) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [product._id]: {
+              ...prevState,
+              validating: false,
+              isValid: false,
+              error: error instanceof Error ? error.message : 'Unable to validate stock',
+              productData: undefined,
+              lastValidatedQuantity: undefined,
+            },
+          };
+        });
+      }
+    };
+
+    validate();
+  };
+
+  const adjustProductSelectionQuantity = (product: Product, delta: number) => {
+    const currentSelection = getSelectionState(product);
+    const currentQuantity = parseInt(currentSelection.quantity, 10) || 0;
+    const nextQuantity = Math.max(0, currentQuantity + delta);
+    handleProductQuantityChange(product, String(nextQuantity));
+  };
+
+  const handleAddProductSelection = async (product: Product) => {
+    const selection = getSelectionState(product);
+    const quantityNumber = parseInt(selection.quantity, 10) || 0;
+
+    if (quantityNumber <= 0 || selection.adding) {
+      return;
+    }
+
+    setProductSelections((prev) => {
+      const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+      return {
+        ...prev,
+        [product._id]: {
+          ...prevState,
+          adding: true,
+          error: '',
+        },
+      };
+    });
+
+    try {
+      let freshProduct = selection.productData;
+      let availableStock = selection.availableStock;
+
+      if (!selection.isValid || selection.lastValidatedQuantity !== quantityNumber || !freshProduct) {
+        freshProduct = await getFreshProduct(product._id);
+        availableStock = getStockNumber(freshProduct.stock);
+
+        if (quantityNumber > availableStock) {
+          setProductSelections((prev) => ({
+            ...prev,
+            [product._id]: {
+              ...(prev[product._id] ?? createSelectionState(availableStock)),
+              quantity: selection.quantity,
+              validating: false,
+              isValid: false,
+              availableStock,
+              error: `Only ${availableStock} units available`,
+              adding: false,
+              productData: freshProduct,
+              lastValidatedQuantity: quantityNumber,
+            },
+          }));
+          return;
+        }
+      }
+
+      const success = await addProductToOrder(product, quantityNumber, freshProduct);
+
+      if (success) {
+        const resetState = createSelectionState(getStockNumber((freshProduct ?? product).stock));
+        setProductSelections((prev) => ({
+          ...prev,
+          [product._id]: resetState,
+        }));
+      } else {
+        setProductSelections((prev) => {
+          const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+          return {
+            ...prev,
+            [product._id]: {
+              ...prevState,
+              adding: false,
+            },
+          };
+        });
+      }
+    } catch (error) {
+      setProductSelections((prev) => {
+        const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+        return {
+          ...prev,
+          [product._id]: {
+            ...prevState,
+            adding: false,
+            isValid: false,
+            error: error instanceof Error ? error.message : 'Failed to add product to order',
+          },
+        };
+      });
+    }
+  };
+
+  const handleAddAllProducts = async () => {
+    const entries = products
+      .map((product) => {
+        const selection = getSelectionState(product);
+        const quantity = parseInt(selection.quantity, 10) || 0;
+        return { product, selection, quantity };
+      })
+      .filter(({ quantity }) => quantity > 0);
+
+    if (entries.length === 0) {
+      Alert.alert('No Products Selected', 'Set the quantity for at least one product to add.');
+      return;
+    }
+
+    if (bulkAdding) {
+      return;
+    }
+
+    setBulkAdding(true);
+
+    let addedCount = 0;
+    const errorMessages: string[] = [];
+
+    for (const { product, selection, quantity } of entries) {
+      try {
+        let freshProduct = selection.productData;
+        let availableStock = selection.availableStock;
+
+        if (
+          !selection.isValid ||
+          selection.lastValidatedQuantity !== quantity ||
+          !freshProduct
+        ) {
+          freshProduct = await getFreshProduct(product._id);
+          availableStock = getStockNumber(freshProduct.stock);
+        }
+
+        if (quantity > availableStock) {
+          const message = `${freshProduct.productName}: Only ${availableStock} available.`;
+          errorMessages.push(message);
+          setProductSelections((prev) => ({
+            ...prev,
+            [product._id]: {
+              ...(prev[product._id] ?? createSelectionState(availableStock)),
+              quantity: String(quantity),
+              validating: false,
+              isValid: false,
+              availableStock,
+              error: `Only ${availableStock} units available`,
+              adding: false,
+              lastValidatedQuantity: undefined,
+              productData: freshProduct,
+            },
+          }));
+          continue;
+        }
+
+        const success = await addProductToOrder(product, quantity, freshProduct);
+        if (success) {
+          addedCount += 1;
+          const refreshedStock = getStockNumber(freshProduct.stock);
+          setProductSelections((prev) => ({
+            ...prev,
+            [product._id]: createSelectionState(refreshedStock),
+          }));
+        } else {
+          const message = `${freshProduct.productName}: Failed to add to order.`;
+          errorMessages.push(message);
+          setProductSelections((prev) => ({
+            ...prev,
+            [product._id]: {
+              ...(prev[product._id] ?? createSelectionState(getStockNumber(product.stock))),
+              quantity: String(quantity),
+              adding: false,
+            },
+          }));
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to add product.';
+        errorMessages.push(`${product.productName}: ${message}`);
+        setProductSelections((prev) => ({
+          ...prev,
+          [product._id]: {
+            ...(prev[product._id] ?? createSelectionState(getStockNumber(product.stock))),
+            adding: false,
+            isValid: false,
+            error: message,
+          },
+        }));
+      }
+    }
+
+    setBulkAdding(false);
+
+    if (addedCount > 0) {
+      setShowProductDropdown(false);
+    }
+
+    if (errorMessages.length > 0) {
+      Alert.alert('Notice', errorMessages.join('\n'));
+    }
+  };
+
+  const addProductToOrder = async (
+    product: Product,
+    quantity: number,
+    freshProductOverride?: Product
+  ): Promise<boolean> => {
+    if (quantity <= 0) {
+      return false;
+    }
+
+    try {
+      const freshProduct = freshProductOverride ?? await getFreshProduct(product._id);
+      const unitLabel = getUnitLabel(freshProduct.unit);
+      const availableStock = getStockNumber(freshProduct.stock);
+
+      if (quantity > availableStock) {
+        Alert.alert(
+          'Insufficient Stock',
+          `Only ${availableStock} ${unitLabel} available for ${freshProduct.productName}.`
+        );
+        return false;
+      }
+
+      setOrderItems((prevItems) => {
+        const updatedItems = [...prevItems];
+        const existingIndex = updatedItems.findIndex(
+          (item) => item.productId === freshProduct._id && item.unit === unitLabel
+        );
+
+        if (existingIndex >= 0) {
+          const previous = updatedItems[existingIndex];
+          updatedItems[existingIndex] = {
+            ...previous,
+            quantity,
+            unitPrice: freshProduct.price,
+            gstRate:
+              previous.gstRate ??
+              (typeof (freshProduct as any).gstRate === 'number'
+                ? (freshProduct as any).gstRate
+                : DEFAULT_GST_RATE),
+            availableStock,
+          };
+        } else {
+          updatedItems.push({
+            productId: freshProduct._id,
+            productCode: freshProduct.productCode,
+            productName: freshProduct.productName,
+            unit: unitLabel,
+            unitPrice: freshProduct.price,
+            quantity,
+            discount: 0,
+            gstRate:
+              typeof (freshProduct as any).gstRate === 'number'
+                ? (freshProduct as any).gstRate
+                : DEFAULT_GST_RATE,
+            taxType: gstType,
+            taxableValue: 0,
+            cgstRate: 0,
+            cgstAmount: 0,
+            sgstRate: 0,
+            sgstAmount: 0,
+            igstRate: 0,
+            igstAmount: 0,
+            totalTaxAmount: 0,
+            totalAmount: 0,
+            availableStock,
+          });
+        }
+
+        return applyGstToItems(updatedItems, gstType);
       });
 
-      setShowProductDropdown(false);
-      console.log(`✅ Added product ${freshProduct.productName} to order (stock: ${newItem.availableStock})`);
+      return true;
     } catch (error) {
       console.error('❌ Error adding product to order:', error);
-      // Fallback: still add based on the selected product to keep UX smooth
-      const fallbackItem: OrderItem = {
-        productId: product._id,
-        productCode: product.productCode,
-        productName: product.productName,
-        unit: product.unit,
-        unitPrice: product.price,
-        quantity: 0,
-        totalAmount: 0,
-        availableStock: product.stock.current,
-      };
-      
-      setOrderItems(prevItems => [...prevItems, fallbackItem]);
-      setShowProductDropdown(false);
-      console.log(`✅ Added product ${product.productName} to order (fallback mode)`);
+      Alert.alert('Error', 'Failed to add product to order. Please try again.');
+      return false;
     }
   };
 
@@ -331,7 +784,7 @@ const AdminCreateOrder = () => {
       // Get fresh product data to check current stock
       const productResponse = await getProductById(productId);
       const currentStock = (productResponse?.success
-        ? productResponse.product?.stock?.current
+        ? getStockNumber(productResponse.product?.stock)
         : undefined) ?? item.availableStock;
 
       if (newQuantity > currentStock) {
@@ -339,20 +792,21 @@ const AdminCreateOrder = () => {
         return;
       }
 
-      const totalAmount = newQuantity * item.unitPrice;
-      const updatedItems = orderItems.map(it => 
-        it.productId === productId 
-          ? { 
-              ...it, 
-              quantity: newQuantity, 
-              totalAmount: totalAmount,
-              availableStock: currentStock
-            }
-          : it
+      setOrderItems((prevItems) =>
+        applyGstToItems(
+          prevItems.map((it) =>
+            it.productId === productId
+              ? {
+                  ...it,
+                  quantity: newQuantity,
+                  availableStock: currentStock,
+                }
+              : it
+          ),
+          gstType
+        )
       );
-
-      setOrderItems(updatedItems);
-      console.log(`✅ Updated quantity for ${item.productName}: ${newQuantity}, Total: ₹${totalAmount}`);
+      console.log(`✅ Updated quantity for ${item.productName}: ${newQuantity}`);
     } catch (error) {
       console.error('❌ Error updating quantity:', error);
       Alert.alert('Error', 'Failed to update quantity');
@@ -361,14 +815,6 @@ const AdminCreateOrder = () => {
 
   const removeItem = (productId: string) => {
     setOrderItems(orderItems.filter(item => item.productId !== productId));
-  };
-
-  const calculateTotalAmount = () => {
-    return orderItems.reduce((total, item) => total + item.totalAmount, 0);
-  };
-
-  const calculateTotalQuantity = () => {
-    return orderItems.reduce((total, item) => total + item.quantity, 0);
   };
 
   const handleCreateOrder = async () => {
@@ -396,13 +842,18 @@ const AdminCreateOrder = () => {
     
     try {
       setSaving(true);
+      if (mode === 'Other' && !customMode.trim()) {
+        Alert.alert('Validation Error', 'Please specify the payment mode when selecting Other.');
+        setSaving(false);
+        return;
+      }
       
       // Final stock validation before creating order
       console.log('🔍 Performing final stock validation...');
       for (const item of itemsWithQuantity) {
         const productResponse = await getProductById(item.productId);
         if (productResponse?.success) {
-          const currentStock = productResponse.product.stock.current;
+          const currentStock = getStockNumber(productResponse.product.stock);
           if (item.quantity > currentStock) {
             Alert.alert(
               'Stock Validation Failed', 
@@ -414,41 +865,50 @@ const AdminCreateOrder = () => {
         }
       }
       
-      const orderData = {
+      const trimmedCustomMode = customMode.trim();
+      const trimmedTermsOfPayment = termsOfPayment.trim();
+      const trimmedOtherReference = otherReference.trim();
+      const trimmedTermsOfDelivery1 = termsOfDelivery1.trim();
+      const trimmedTermsOfDelivery2 = termsOfDelivery2.trim();
+      const modePayload = mode === 'Other' ? (trimmedCustomMode || 'Other') : mode;
+
+      const finalSummary = calculateOrderSummary(itemsWithQuantity);
+      const orderData: any = {
         customerId: selectedDealer._id,
         customerName: selectedDealer.name,
         customerEmail: selectedDealer.email,
         customerMobile: selectedDealer.mobile,
+        customerAddress: normalizeAddress(selectedDealer.address),
         dealerId: selectedDealer._id, // Save dealer ID separately
         dealerName: selectedDealer.name,
         subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately
         subDealerName: selectedSubDealer ? selectedSubDealer.name : null,
-        shippingAddress: selectedSubDealer ? {
-          subDealerId: selectedSubDealer._id,
-          name: selectedSubDealer.name,
-          address: formatAddress(selectedSubDealer.address),
-          mobile: selectedSubDealer.mobile,
-        } : {
-          subDealerId: null,
-          name: selectedDealer.name,
-          address: formatAddress(selectedDealer.address),
-          mobile: selectedDealer.mobile,
-        },
+        shippingAddress: selectedSubDealer
+          ? normalizeAddress(selectedSubDealer.address)
+          : normalizeAddress(selectedDealer.address),
         items: itemsWithQuantity.map(item => ({
           productId: item.productId,
-          productCode: item.productCode,
-          productName: item.productName,
-          unit: item.unit,
-          unitPrice: item.unitPrice,
           quantity: item.quantity,
-          totalPrice: item.totalAmount, // Send totalPrice instead of totalAmount
+          unitPrice: item.unitPrice,
+          discount: item.discount ?? 0,
+          gstRate: item.gstRate ?? DEFAULT_GST_RATE,
         })),
-        totalQuantity: calculateTotalQuantity(),
-        totalAmount: calculateTotalAmount(),
+        totalQuantity: finalSummary.totalQuantity,
+        totalAmount: finalSummary.totalAmount,
         notes: orderNotes,
+        paymentMethod: modePayload,
+        mode: modePayload,
+        modeSelection: mode,
+        termsOfPayment: trimmedTermsOfPayment,
+        otherReference: trimmedOtherReference,
+        termsOfDelivery1: trimmedTermsOfDelivery1,
+        termsOfDelivery2: trimmedTermsOfDelivery2,
         status: 'draft',
         orderType: 'admin_created',
       };
+      if (mode === 'Other') {
+        orderData.customMode = trimmedCustomMode;
+      }
       
       console.log('📦 Creating order with data:', orderData);
       
@@ -463,11 +923,17 @@ const AdminCreateOrder = () => {
             setOrderItems([]);
             setOrderNotes('');
             setSubDealers([]);
+            setMode('');
+            setCustomMode('');
+            setTermsOfPayment('');
+            setOtherReference('');
+            setTermsOfDelivery1('');
+            setTermsOfDelivery2('');
             
-            Alert.alert(
-              'Success', 
-              `Order created successfully!\nOrder Number: ${response.order?.orderNumber || 'N/A'}\nTotal Amount: ₹${calculateTotalAmount()}`,
-              [
+          Alert.alert(
+            'Success',
+            `Order created successfully!\nOrder Number: ${response.order?.orderNumber || 'N/A'}\nTotal Amount: ₹${finalSummary.totalAmount.toFixed(2)}`,
+            [
                 {
                   text: 'View Orders',
                   onPress: () => {
@@ -503,6 +969,12 @@ const AdminCreateOrder = () => {
     >
       <Text style={styles.dropdownItemText}>{item.name}</Text>
       <Text style={styles.dropdownItemSubtext}>{item.mobile}</Text>
+      {item.email ? (
+        <Text style={styles.dropdownItemMeta}>{item.email}</Text>
+      ) : null}
+      {item.address ? (
+        <Text style={styles.dropdownItemMeta}>{formatAddress(item.address)}</Text>
+      ) : null}
     </TouchableOpacity>
   );
 
@@ -517,60 +989,159 @@ const AdminCreateOrder = () => {
   );
 
   const renderProductItem = ({ item }: { item: Product }) => {
-    // Check if exact same product (same ID, price, unit) is already added
-    const isExactMatch = orderItems.some(orderItem => 
-      orderItem.productId === item._id && 
-      orderItem.unitPrice === item.price && 
-      orderItem.unit === item.unit
+    const selection = getSelectionState(item);
+    const quantityNumber = parseInt(selection.quantity, 10) || 0;
+    const existingItem = orderItems.find(
+      (orderItem) =>
+        orderItem.productId === item._id &&
+        orderItem.unitPrice === item.price &&
+        orderItem.unit === getUnitLabel(item.unit)
     );
-    
-    // Check if same product ID exists but with different price/unit
-    const isSameProductDifferentPrice = orderItems.some(orderItem => 
-      orderItem.productId === item._id && 
-      (orderItem.unitPrice !== item.price || orderItem.unit !== item.unit)
+    const isSameProductDifferentPrice = orderItems.some(
+      (orderItem) =>
+        orderItem.productId === item._id &&
+        (orderItem.unitPrice !== item.price || orderItem.unit !== getUnitLabel(item.unit))
     );
-    
-    const isAlreadyAdded = isExactMatch || isSameProductDifferentPrice;
-    
+
+    const availableStockLabel =
+      selection.availableStock > 0
+        ? selection.availableStock
+        : getStockNumber(item.stock);
+
+    const addButtonVisible = quantityNumber > 0;
+    const isLoading = selection.validating || selection.adding;
+    const canAdd =
+      addButtonVisible && selection.isValid && !isLoading;
+    const addButtonLabel = existingItem ? 'Update' : 'Add';
+
     return (
-      <TouchableOpacity
+      <View
         style={[
           styles.dropdownItem,
-          isAlreadyAdded && styles.addedProductItem
+          existingItem && styles.addedProductItem,
         ]}
-        onPress={async () => {
-          console.log('🎯 Product selected:', item.productName);
-          await addProductToOrder(item);
-        }}
       >
         <View style={styles.productItemContainer}>
           <View style={styles.productItemInfo}>
-            <Text style={[
-              styles.dropdownItemText,
-              isAlreadyAdded && styles.addedProductText
-            ]}>
+            <Text
+              style={[
+                styles.dropdownItemText,
+                existingItem && styles.addedProductText,
+              ]}
+            >
               {item.productName}
             </Text>
-            <Text style={[
-              styles.dropdownItemSubtext,
-              isAlreadyAdded && styles.addedProductSubtext
-            ]}>
-              {item.productCode} • ₹{item.price}/{item.unit} • Stock: {item.stock.current}
+            <Text
+              style={[
+                styles.dropdownItemSubtext,
+                existingItem && styles.addedProductSubtext,
+              ]}
+            >
+              {item.productCode} • ₹{item.price}
             </Text>
-            {isExactMatch && (
-              <Text style={styles.alreadyAddedText}>✓ Exact match already in order</Text>
-            )}
-            {isSameProductDifferentPrice && !isExactMatch && (
-              <Text style={styles.variantAddedText}>⚠ Same product with different price/unit exists</Text>
-            )}
+            <Text
+              style={[
+                styles.dropdownItemSubtext,
+                existingItem && styles.addedProductSubtext,
+              ]}
+            >
+              GST: {(typeof item.gstRate === 'number' ? item.gstRate : DEFAULT_GST_RATE)}%
+            </Text>
+            <Text style={styles.productAvailabilityText}>
+              Available: {availableStockLabel}
+            </Text>
           </View>
-          <Ionicons 
-            name={isExactMatch ? "checkmark-circle" : isSameProductDifferentPrice ? "warning" : "add-circle-outline"} 
-            size={24} 
-            color={isExactMatch ? "#10B981" : isSameProductDifferentPrice ? "#F59E0B" : "#3B82F6"} 
-          />
+          {existingItem ? (
+            <Ionicons name="checkmark-circle" size={22} color="#10B981" />
+          ) : (
+            <Ionicons name="cube-outline" size={22} color="#3B82F6" />
+          )}
         </View>
-      </TouchableOpacity>
+
+        {isSameProductDifferentPrice && !existingItem && (
+          <Text style={styles.variantAddedText}>
+            ⚠ Same product already in order with different price/unit
+          </Text>
+        )}
+
+        <View style={styles.productSelectionControls}>
+          <View style={styles.selectionQuantityControls}>
+            <TouchableOpacity
+              style={[
+                styles.selectionQuantityButton,
+                (quantityNumber <= 0 || isLoading) &&
+                  styles.selectionQuantityButtonDisabled,
+              ]}
+              onPress={() => adjustProductSelectionQuantity(item, -1)}
+              disabled={quantityNumber <= 0 || isLoading}
+            >
+              <Ionicons
+                name="remove"
+                size={18}
+                color="#111827"
+              />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.selectionQuantityInput}
+              value={selection.quantity}
+              onChangeText={(value) => handleProductQuantityChange(item, value)}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              editable={!isLoading}
+              maxLength={6}
+              selectTextOnFocus
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity
+              style={[
+                styles.selectionQuantityButton,
+                isLoading && styles.selectionQuantityButtonDisabled,
+              ]}
+              onPress={() => adjustProductSelectionQuantity(item, 1)}
+              disabled={isLoading}
+            >
+              <Ionicons
+                name="add"
+                size={18}
+                color="#111827"
+              />
+            </TouchableOpacity>
+          </View>
+
+          {addButtonVisible && (
+            <TouchableOpacity
+              style={[
+                styles.addProductActionButton,
+                !canAdd && styles.addProductActionButtonDisabled,
+              ]}
+              onPress={() => handleAddProductSelection(item)}
+              disabled={!canAdd}
+            >
+              {selection.adding ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.addProductActionButtonText}>
+                  {addButtonLabel}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {selection.validating && (
+          <Text style={styles.selectionHelperText}>Validating stock...</Text>
+        )}
+
+        {selection.error ? (
+          <Text style={styles.selectionErrorText}>{selection.error}</Text>
+        ) : null}
+
+        {existingItem && !selection.error && (
+          <Text style={styles.selectionInfoText}>
+            In order: {existingItem.quantity} {existingItem.unit}
+          </Text>
+        )}
+      </View>
     );
   };
 
@@ -579,44 +1150,74 @@ const AdminCreateOrder = () => {
       <View style={styles.orderItemInfo}>
         <Text style={styles.orderItemName}>{item.productName}</Text>
         <Text style={styles.orderItemCode}>{item.productCode}</Text>
-        <Text style={styles.orderItemPrice}>₹{item.unitPrice}/{item.unit}</Text>
+        <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
         <Text style={styles.orderItemStock}>
           Available: {item.availableStock} {item.unit}
         </Text>
       </View>
-      
-      <View style={styles.orderItemControls}>
-        <View style={styles.quantityControls}>
-          <TouchableOpacity
-            style={[styles.quantityButton, item.quantity <= 0 && styles.disabledButton]}
-            onPress={() => updateQuantity(item.productId, item.quantity - 1)}
-            disabled={item.quantity <= 0}
-          >
-            <Ionicons name="remove" size={20} color={item.quantity <= 0 ? "#9CA3AF" : "#374151"} />
-          </TouchableOpacity>
-          
-          <Text style={styles.quantityText}>{item.quantity}</Text>
-          
-          <TouchableOpacity
-            style={[styles.quantityButton, item.quantity >= item.availableStock && styles.disabledButton]}
-            onPress={() => updateQuantity(item.productId, item.quantity + 1)}
-            disabled={item.quantity >= item.availableStock}
-          >
-            <Ionicons name="add" size={20} color={item.quantity >= item.availableStock ? "#9CA3AF" : "#374151"} />
-          </TouchableOpacity>
-        </View>
-        
-        <Text style={styles.orderItemTotal}>₹{item.totalAmount}</Text>
-        
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={() => removeItem(item.productId)}
-        >
-          <Ionicons name="trash-outline" size={20} color="#EF4444" />
-        </TouchableOpacity>
+
+      <View style={styles.orderItemSummary}>
+        <Text style={styles.orderItemQuantity}>
+          Quantity:{' '}
+          <Text style={styles.orderItemQuantityValue}>{item.quantity}</Text>
+        </Text>
+        <Text style={styles.orderItemTotal}>{formatCurrency(item.totalAmount)}</Text>
       </View>
+
+      <View style={styles.orderItemTaxDetails}>
+        <Text style={styles.orderItemTaxLine}>
+          Taxable Value: {formatCurrency(item.taxableValue)}
+        </Text>
+        <Text style={styles.orderItemTaxLine}>
+          GST Rate: {item.gstRate}%
+        </Text>
+        {item.cgstAmount > 0 ? (
+          <Text style={styles.orderItemTaxLine}>
+            CGST ({item.cgstRate}%): {formatCurrency(item.cgstAmount)}
+          </Text>
+        ) : null}
+        {item.sgstAmount > 0 ? (
+          <Text style={styles.orderItemTaxLine}>
+            SGST/UTGST ({item.sgstRate}%): {formatCurrency(item.sgstAmount)}
+          </Text>
+        ) : null}
+        {item.igstAmount > 0 ? (
+          <Text style={styles.orderItemTaxLine}>
+            IGST ({item.igstRate}%): {formatCurrency(item.igstAmount)}
+          </Text>
+        ) : null}
+        <Text style={styles.orderItemTaxTotal}>
+          Total GST: {formatCurrency(item.totalTaxAmount)}
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => removeItem(item.productId)}
+      >
+        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+      </TouchableOpacity>
     </View>
   );
+
+  const productSelectionEntries = products.map((product) => {
+    const selection = getSelectionState(product);
+    const quantity = parseInt(selection.quantity, 10) || 0;
+    return { product, selection, quantity };
+  });
+
+  const selectedEntries = productSelectionEntries.filter(({ quantity }) => quantity > 0);
+  const bulkButtonVisible = selectedEntries.length > 0;
+  const bulkButtonDisabled =
+    bulkAdding || selectedEntries.some(({ selection }) => selection.adding);
+  const totalSelectedQuantity = selectedEntries.reduce(
+    (sum, { quantity }) => sum + quantity,
+    0
+  );
+  const bulkButtonLabel =
+    selectedEntries.length > 1
+      ? `Add Selected Products (Qty: ${totalSelectedQuantity})`
+      : `Add Selected Product (Qty: ${totalSelectedQuantity || 0})`;
 
   if (loading) {
     return (
@@ -641,62 +1242,74 @@ const AdminCreateOrder = () => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Debug Info */}
-        <View style={styles.debugSection}>
-          <Text style={styles.debugTitle}>Debug Info</Text>
-          <Text style={styles.debugText}>Dealers loaded: {dealers.length}</Text>
-          <Text style={styles.debugText}>Sub dealers loaded: {subDealers.length}</Text>
-          <Text style={styles.debugText}>Products loaded: {products.length}</Text>
-          <Text style={styles.debugText}>Selected dealer: {selectedDealer?.name || 'None'}</Text>
-          <Text style={styles.debugText}>Selected sub dealer: {selectedSubDealer?.name || 'None'}</Text>
-          {dealers.length > 0 && (
-            <Text style={styles.debugText}>First dealer: {dealers[0].name} ({dealers[0].mobile})</Text>
-          )}
-          {subDealers.length > 0 && (
-            <Text style={styles.debugText}>First sub dealer: {subDealers[0].name} ({formatAddress(subDealers[0].address)})</Text>
-          )}
-        </View>
-
         {/* Customer Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Customer (Dealer)</Text>
-          <TouchableOpacity
-            style={styles.dropdownButton}
-            onPress={() => {
-              console.log('🔍 Opening dealer dropdown, dealers available:', dealers.length);
-              setShowDealerDropdown(true);
-            }}
-          >
-            <Text style={[styles.dropdownButtonText, !selectedDealer && styles.placeholderText]}>
-              {selectedDealer ? selectedDealer.name : 'Select Dealer'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color="#6B7280" />
-          </TouchableOpacity>
+          <View style={styles.selectionRow}>
+            <TouchableOpacity
+              style={[styles.dropdownButton, styles.selectionButton]}
+              onPress={() => {
+                console.log('🔍 Opening dealer dropdown, dealers available:', dealers.length);
+                setShowDealerDropdown(true);
+              }}
+            >
+              <Text style={[styles.dropdownButtonText, !selectedDealer && styles.placeholderText]}>
+                {selectedDealer ? selectedDealer.name : 'Select Dealer'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </TouchableOpacity>
+            {selectedDealer && (
+              <TouchableOpacity
+                style={styles.clearSelectionButton}
+                onPress={() => {
+                  setSelectedDealer(null);
+                  setSelectedSubDealer(null);
+                }}
+              >
+                <Ionicons name="close-circle" size={20} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+          </View>
+          {selectedDealer && (
+            <View style={styles.selectedDealerInfo}>
+              <Text style={styles.addressText}>{formatAddress(selectedDealer.address)}</Text>
+            </View>
+          )}
         </View>
 
         {/* Shipping Address Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) - Optional</Text>
-          <TouchableOpacity
-            style={[styles.dropdownButton, subDealers.length === 0 && !loading && styles.disabledButton]}
-            onPress={() => {
-              if (subDealers.length > 0) {
-                console.log('🔍 Opening sub dealer dropdown, sub dealers available:', subDealers.length);
-                setShowSubDealerDropdown(true);
-              } else if (!loading) {
-                Alert.alert('Info', 'No sub dealers available. Order will use dealer address.');
-              }
-            }}
-            disabled={subDealers.length === 0 && !loading}
-          >
-            <Text style={[styles.dropdownButtonText, !selectedSubDealer && styles.placeholderText]}>
-              {loading ? 'Loading sub dealers...' : 
-               selectedSubDealer ? selectedSubDealer.name : 
-               subDealers.length > 0 ? 'Select Sub Dealer (Optional)' : 
-               'No Sub Dealers Available'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color="#6B7280" />
-          </TouchableOpacity>
+          <View style={styles.selectionRow}>
+            <TouchableOpacity
+              style={[styles.dropdownButton, styles.selectionButton, subDealers.length === 0 && !loading && styles.disabledButton]}
+              onPress={() => {
+                if (subDealers.length > 0) {
+                  console.log('🔍 Opening sub dealer dropdown, sub dealers available:', subDealers.length);
+                  setShowSubDealerDropdown(true);
+                } else if (!loading) {
+                  Alert.alert('Info', 'No sub dealers available. Order will use dealer address.');
+                }
+              }}
+              disabled={subDealers.length === 0 && !loading}
+            >
+              <Text style={[styles.dropdownButtonText, !selectedSubDealer && styles.placeholderText]}>
+                {loading ? 'Loading sub dealers...' : 
+                selectedSubDealer ? selectedSubDealer.name : 
+                subDealers.length > 0 ? 'Select Sub Dealer (Optional)' : 
+                'No Sub Dealers Available'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </TouchableOpacity>
+            {selectedSubDealer && (
+              <TouchableOpacity
+                style={styles.clearSelectionButton}
+                onPress={() => setSelectedSubDealer(null)}
+              >
+                <Ionicons name="close-circle" size={20} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+          </View>
           {selectedSubDealer && (
             <Text style={styles.addressText}>{formatAddress(selectedSubDealer.address)}</Text>
           )}
@@ -738,36 +1351,136 @@ const AdminCreateOrder = () => {
             </View>
           </View>
         )}
-        
-        {/* Debug Order Items */}
-        {__DEV__ && (
-          <View style={styles.debugSection}>
-            <Text style={styles.debugTitle}>Order Items Debug</Text>
-            <Text style={styles.debugText}>Order items count: {orderItems.length}</Text>
-            {orderItems.map((item, index) => (
-              <Text key={index} style={styles.debugText}>
-                {index + 1}. {item.productName} - Qty: {item.quantity} - Price: ₹{item.unitPrice}
-              </Text>
-            ))}
-          </View>
-        )}
-
         {/* Order Summary */}
         {orderItems.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Order Summary</Text>
             <View style={styles.summaryContainer}>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total Quantity:</Text>
-                <Text style={styles.summaryValue}>{calculateTotalQuantity()}</Text>
+                <Text style={styles.summaryLabel}>GST Type:</Text>
+                <Text style={styles.summaryValue}>{gstTypeLabel}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total Amount:</Text>
-                <Text style={styles.summaryValue}>₹{calculateTotalAmount()}</Text>
+                <Text style={styles.summaryLabel}>Seller State:</Text>
+                <Text style={styles.summaryValue}>{sellerState || 'N/A'}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Buyer State:</Text>
+                <Text style={styles.summaryValue}>{buyerState || 'N/A'}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Total Quantity:</Text>
+                <Text style={styles.summaryValue}>{orderSummary.totalQuantity}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Taxable Value:</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(orderSummary.taxableValue)}</Text>
+              </View>
+              {(hasCgst || hasSgst) && (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>CGST:</Text>
+                    <Text style={styles.summaryValue}>{formatCurrency(orderSummary.cgstTotal)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>SGST/UTGST:</Text>
+                    <Text style={styles.summaryValue}>{formatCurrency(orderSummary.sgstTotal)}</Text>
+                  </View>
+                </>
+              )}
+              {hasIgst && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>IGST:</Text>
+                  <Text style={styles.summaryValue}>{formatCurrency(orderSummary.igstTotal)}</Text>
+                </View>
+              )}
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Total GST:</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(orderSummary.taxTotal)}</Text>
+              </View>
+              <View style={[styles.summaryRow, styles.summaryRowHighlight]}>
+                <Text style={styles.summaryLabel}>Grand Total:</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(orderSummary.totalAmount)}</Text>
               </View>
             </View>
           </View>
         )}
+
+        {/* Payment Mode */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Select Payment Mode</Text>
+          <View style={styles.modeOptionsContainer}>
+            {MODE_OPTIONS.map((option) => {
+              const isSelected = mode === option;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.modeOptionButton,
+                    isSelected && styles.modeOptionButtonSelected,
+                  ]}
+                  onPress={() => {
+                    setMode(option);
+                    if (option !== 'Other') {
+                      setCustomMode('');
+                    }
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.modeOptionText,
+                      isSelected && styles.modeOptionTextSelected,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {mode === 'Other' && (
+            <TextInput
+              style={styles.fieldInput}
+              placeholder="Specify other payment mode"
+              value={customMode}
+              onChangeText={setCustomMode}
+              placeholderTextColor="#9CA3AF"
+            />
+          )}
+        </View>
+
+        {/* Additional Order Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Additional Order Details</Text>
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Terms of Payment"
+            value={termsOfPayment}
+            onChangeText={setTermsOfPayment}
+            placeholderTextColor="#9CA3AF"
+          />
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Other Reference"
+            value={otherReference}
+            onChangeText={setOtherReference}
+            placeholderTextColor="#9CA3AF"
+          />
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Terms of Delivery 1"
+            value={termsOfDelivery1}
+            onChangeText={setTermsOfDelivery1}
+            placeholderTextColor="#9CA3AF"
+          />
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Terms of Delivery 2"
+            value={termsOfDelivery2}
+            onChangeText={setTermsOfDelivery2}
+            placeholderTextColor="#9CA3AF"
+          />
+        </View>
 
         {/* Order Notes */}
         <View style={styles.section}>
@@ -876,6 +1589,32 @@ const AdminCreateOrder = () => {
             renderItem={renderProductItem}
             keyExtractor={(item) => item._id}
             style={styles.dropdownList}
+            contentContainerStyle={styles.productListContent}
+            extraData={productSelections}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            ListFooterComponent={
+              bulkButtonVisible ? (
+                <View style={styles.productSelectionFooter}>
+                  <TouchableOpacity
+                    style={[
+                      styles.bulkAddButton,
+                      (bulkButtonDisabled || bulkAdding) && styles.bulkAddButtonDisabled,
+                    ]}
+                    onPress={handleAddAllProducts}
+                    disabled={bulkButtonDisabled || bulkAdding}
+                  >
+                    {bulkAdding ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.bulkAddButtonText}>{bulkButtonLabel}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.productSelectionFooterSpacer} />
+              )
+            }
           />
         </View>
       </Modal>
@@ -951,12 +1690,35 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     flex: 1,
   },
+  selectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectionButton: {
+    flex: 1,
+  },
+  clearSelectionButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
   placeholderText: {
     color: '#9CA3AF',
   },
   disabledButton: {
     backgroundColor: '#F3F4F6',
     borderColor: '#E5E7EB',
+  },
+  selectedDealerInfo: {
+    marginTop: 8,
+    gap: 4,
+  },
+  selectedDealerMeta: {
+    fontSize: 14,
+    color: '#4B5563',
   },
   addressText: {
     fontSize: 14,
@@ -1036,35 +1798,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  orderItemControls: {
+  orderItemSummary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  quantityControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  orderItemTaxDetails: {
+    marginTop: 12,
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
-    padding: 4,
-  },
-  quantityButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E5E7EB',
   },
-  quantityText: {
-    fontSize: 16,
+  orderItemTaxLine: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  orderItemTaxTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginTop: 4,
+  },
+  orderItemQuantity: {
+    fontSize: 14,
+    color: '#4B5563',
+  },
+  orderItemQuantityValue: {
     fontWeight: '600',
     color: '#1F2937',
-    marginHorizontal: 12,
-    minWidth: 24,
-    textAlign: 'center',
   },
   orderItemTotal: {
     fontSize: 16,
@@ -1087,6 +1858,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  summaryRowHighlight: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 8,
+    marginTop: 4,
+  },
   summaryLabel: {
     fontSize: 16,
     color: '#6B7280',
@@ -1095,6 +1872,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginBottom: 8,
+  },
+  fieldInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  modeOptionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modeOptionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  modeOptionButtonSelected: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  modeOptionText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  modeOptionTextSelected: {
+    color: '#FFFFFF',
   },
   notesInput: {
     backgroundColor: '#FFFFFF',
@@ -1148,6 +1968,30 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  productListContent: {
+    paddingBottom: 24,
+  },
+  productSelectionFooter: {
+    marginTop: 16,
+  },
+  bulkAddButton: {
+    backgroundColor: '#111827',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bulkAddButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
+  bulkAddButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  productSelectionFooterSpacer: {
+    height: 12,
+  },
   dropdownItem: {
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
@@ -1166,6 +2010,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
+  dropdownItemMeta: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
   productItemContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1174,26 +2023,76 @@ const styles = StyleSheet.create({
   productItemInfo: {
     flex: 1,
   },
-  
-  // Debug styles
-  debugSection: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
+  productAvailabilityText: {
+    fontSize: 13,
+    color: '#047857',
+    marginTop: 6,
   },
-  debugTitle: {
+  productSelectionControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+  selectionQuantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F9FAFB',
+  },
+  selectionQuantityButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  selectionQuantityButtonDisabled: {
+    opacity: 0.4,
+  },
+  selectionQuantityInput: {
+    width: 56,
+    textAlign: 'center',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#D1D5DB',
+    paddingVertical: 8,
+    fontSize: 16,
+    color: '#1F2937',
+    backgroundColor: '#FFFFFF',
+  },
+  addProductActionButton: {
+    flexGrow: 1,
+    backgroundColor: '#3B82F6',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 120,
+  },
+  addProductActionButtonDisabled: {
+    backgroundColor: '#93C5FD',
+  },
+  addProductActionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#92400E',
-    marginBottom: 8,
+    color: '#FFFFFF',
   },
-  debugText: {
+  selectionHelperText: {
+    marginTop: 6,
     fontSize: 12,
-    color: '#92400E',
-    marginBottom: 2,
+    color: '#6B7280',
+  },
+  selectionErrorText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#DC2626',
+  },
+  selectionInfoText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#059669',
   },
   // Visual indicators for already added products
   addedProductItem: {
@@ -1205,12 +2104,6 @@ const styles = StyleSheet.create({
   },
   addedProductSubtext: {
     color: '#047857',
-  },
-  alreadyAddedText: {
-    fontSize: 12,
-    color: '#059669',
-    fontWeight: '500',
-    marginTop: 2,
   },
   variantAddedText: {
     fontSize: 12,

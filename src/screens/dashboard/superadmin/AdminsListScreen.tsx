@@ -353,7 +353,11 @@ const AdminsListScreen = () => {
             </View>
 
             {/* Form */}
-            <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.form}
+              contentContainerStyle={styles.formContent}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Full Name</Text>
                 <View style={styles.inputContainer}>
@@ -449,55 +453,65 @@ const AdminsListScreen = () => {
               </TouchableOpacity>
               
               {showCompanyDropdown && (
-                <View style={styles.dropdownList}>
-                  {/* Search Bar */}
-                  <View style={styles.dropdownSearchContainer}>
-                    <Ionicons name="search" size={16} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.dropdownSearchInput}
-                      placeholder="Search companies..."
-                      value={companySearchQuery}
-                      onChangeText={setCompanySearchQuery}
-                      placeholderTextColor="#9CA3AF"
-                    />
+                <View style={styles.dropdownWrapper}>
+                  <TouchableOpacity
+                    style={styles.dropdownBackdrop}
+                    activeOpacity={1}
+                    onPress={() => {
+                      setShowCompanyDropdown(false);
+                      setCompanySearchQuery('');
+                    }}
+                  />
+                  <View style={styles.dropdownPanel}>
+                    <View style={styles.dropdownSearchContainer}>
+                      <Ionicons name="search" size={16} color="#9CA3AF" />
+                      <TextInput
+                        style={styles.dropdownSearchInput}
+                        placeholder="Search companies..."
+                        value={companySearchQuery}
+                        onChangeText={setCompanySearchQuery}
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    
+                    <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator>
+                      {filteredCompanies.length > 0 ? (
+                        filteredCompanies.map((company) => (
+                          <TouchableOpacity
+                            key={company.value}
+                            style={[
+                              styles.dropdownItem,
+                              selectedCompanyId === company.value && styles.dropdownItemSelected
+                            ]}
+                            onPress={() => {
+                              setSelectedCompanyId(company.value);
+                              setShowCompanyDropdown(false);
+                              setCompanySearchQuery('');
+                            }}
+                          >
+                            <View style={styles.dropdownItemContent}>
+                              <Text style={[
+                                styles.dropdownItemText,
+                                selectedCompanyId === company.value && styles.dropdownItemTextSelected
+                              ]}>
+                                {company.label}
+                              </Text>
+                              {selectedCompanyId === company.value && (
+                                <Ionicons name="checkmark" size={16} color="#3B82F6" />
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        ))
+                      ) : (
+                        <View style={styles.dropdownEmptyState}>
+                          <Text style={styles.dropdownEmptyText}>No companies found</Text>
+                        </View>
+                      )}
+                    </ScrollView>
                   </View>
-                  
-                  <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
-                    {filteredCompanies.length > 0 ? (
-                      filteredCompanies.map((company) => (
-                        <TouchableOpacity
-                          key={company.value}
-                          style={[
-                            styles.dropdownItem,
-                            selectedCompanyId === company.value && styles.dropdownItemSelected
-                          ]}
-                          onPress={() => {
-                            setSelectedCompanyId(company.value);
-                            setShowCompanyDropdown(false);
-                            setCompanySearchQuery('');
-                          }}
-                        >
-                          <View style={styles.dropdownItemContent}>
-                            <Text style={[
-                              styles.dropdownItemText,
-                              selectedCompanyId === company.value && styles.dropdownItemTextSelected
-                            ]}>
-                              {company.label}
-                            </Text>
-                            {selectedCompanyId === company.value && (
-                              <Ionicons name="checkmark" size={16} color="#3B82F6" />
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      ))
-                    ) : (
-                      <View style={styles.dropdownEmptyState}>
-                        <Text style={styles.dropdownEmptyText}>No companies found</Text>
-                      </View>
-                    )}
-                  </ScrollView>
                 </View>
               )}
+              {showCompanyDropdown && <View style={styles.dropdownSpacer} />}
               
               {selectedCompanyId && (
                 <View style={styles.selectedCompanyInfo}>
@@ -508,6 +522,7 @@ const AdminsListScreen = () => {
                 </View>
               )}
             </View>
+            <View style={styles.formBottomSpacer} />
             </ScrollView>
 
             {/* Action Buttons */}
@@ -550,7 +565,11 @@ const AdminsListScreen = () => {
             </View>
 
             {/* Form */}
-            <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.form}
+              contentContainerStyle={styles.formContent}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Full Name</Text>
                 <View style={styles.inputContainer}>
@@ -610,7 +629,7 @@ const AdminsListScreen = () => {
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Ionicons
                       name={showPassword ? "eye-outline" : "eye-off-outline"}
@@ -629,7 +648,7 @@ const AdminsListScreen = () => {
                 >
                   <Text style={[
                     styles.dropdownText,
-                    selectedCompanyId ? styles.dropdownTextSelected : styles.dropdownPlaceholder
+                    !selectedCompanyId && styles.dropdownPlaceholder
                   ]}>
                     {selectedCompanyId
                       ? companiesOptions.find(c => c.value === selectedCompanyId)?.label || 'Select Company'
@@ -640,53 +659,67 @@ const AdminsListScreen = () => {
                 </TouchableOpacity>
 
                 {showCompanyDropdown && (
-                  <View style={styles.dropdownList}>
-                    <View style={styles.dropdownSearchContainer}>
-                      <Ionicons name="search" size={16} color="#9CA3AF" />
-                      <TextInput
-                        style={styles.dropdownSearchInput}
-                        placeholder="Search companies..."
-                        value={companySearchQuery}
-                        onChangeText={setCompanySearchQuery}
-                        placeholderTextColor="#9CA3AF"
-                      />
-                    </View>
-                    <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
-                      {filteredCompanies.map((company) => (
-                        <TouchableOpacity
-                          key={company.value}
-                          style={[
-                            styles.dropdownItem,
-                            selectedCompanyId === company.value && styles.dropdownItemSelected
-                          ]}
-                          onPress={() => {
-                            setSelectedCompanyId(company.value);
-                            setShowCompanyDropdown(false);
-                            setCompanySearchQuery('');
-                          }}
-                        >
-                          <View style={styles.dropdownItemContent}>
-                            <Text style={[
-                              styles.dropdownItemText,
-                              selectedCompanyId === company.value && styles.dropdownItemTextSelected
-                            ]}>
-                              {company.label}
-                            </Text>
-                            {selectedCompanyId === company.value && (
-                              <Ionicons name="checkmark" size={16} color="#3B82F6" />
-                            )}
+                  <View style={styles.dropdownWrapper}>
+                    <TouchableOpacity
+                      style={styles.dropdownBackdrop}
+                      activeOpacity={1}
+                      onPress={() => {
+                        setShowCompanyDropdown(false);
+                        setCompanySearchQuery('');
+                      }}
+                    />
+                    <View style={styles.dropdownPanel}>
+                      <View style={styles.dropdownSearchContainer}>
+                        <Ionicons name="search" size={16} color="#9CA3AF" />
+                        <TextInput
+                          style={styles.dropdownSearchInput}
+                          placeholder="Search companies..."
+                          value={companySearchQuery}
+                          onChangeText={setCompanySearchQuery}
+                          placeholderTextColor="#9CA3AF"
+                        />
+                      </View>
+                      <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator>
+                        {filteredCompanies.length > 0 ? (
+                          filteredCompanies.map((company) => (
+                            <TouchableOpacity
+                              key={company.value}
+                              style={[
+                                styles.dropdownItem,
+                                selectedCompanyId === company.value && styles.dropdownItemSelected
+                              ]}
+                              onPress={() => {
+                                setSelectedCompanyId(company.value);
+                                setShowCompanyDropdown(false);
+                                setCompanySearchQuery('');
+                              }}
+                            >
+                              <View style={styles.dropdownItemContent}>
+                                <Text style={[
+                                  styles.dropdownItemText,
+                                  selectedCompanyId === company.value && styles.dropdownItemTextSelected
+                                ]}>
+                                  {company.label}
+                                </Text>
+                                {selectedCompanyId === company.value && (
+                                  <Ionicons name="checkmark" size={16} color="#3B82F6" />
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={styles.dropdownEmptyState}>
+                            <Text style={styles.dropdownEmptyText}>No companies found</Text>
                           </View>
-                        </TouchableOpacity>
-                      ))}
-                      {filteredCompanies.length === 0 && (
-                        <View style={styles.dropdownEmptyState}>
-                          <Text style={styles.dropdownEmptyText}>No companies found</Text>
-                        </View>
-                      )}
-                    </ScrollView>
+                        )}
+                      </ScrollView>
+                    </View>
                   </View>
                 )}
-              </View>
+
+                {showCompanyDropdown && <View style={styles.dropdownSpacer} />}
+            </View>
+            <View style={styles.formBottomSpacer} />
             </ScrollView>
 
             {/* Modal Actions */}
@@ -946,6 +979,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 20,
+    paddingBottom: 16,
     maxHeight: '90%',
   },
   modalHeader: {
@@ -965,6 +999,12 @@ const styles = StyleSheet.create({
   form: {
     paddingHorizontal: 20,
     paddingTop: 20,
+  },
+  formContent: {
+    paddingBottom: 40,
+  },
+  formBottomSpacer: {
+    height: 24,
   },
   inputGroup: {
     marginBottom: 20,
@@ -999,11 +1039,13 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingTop: 24,
+    paddingBottom: 32,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    marginTop: 12,
   },
   cancelButton: {
     flex: 1,
@@ -1054,26 +1096,38 @@ const styles = StyleSheet.create({
   dropdownPlaceholder: {
     color: '#9CA3AF',
   },
-  dropdownList: {
+  dropdownWrapper: {
     position: 'absolute',
     top: 48,
     left: 0,
     right: 0,
+    zIndex: 1000,
+  },
+  dropdownBackdrop: {
+    position: 'absolute',
+    top: -48,
+    left: -20,
+    right: -20,
+    bottom: -240,
+  },
+  dropdownPanel: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 12,
     marginTop: 4,
-    maxHeight: 200,
-    zIndex: 1000,
-    elevation: 5,
+    maxHeight: 240,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
   },
   dropdownScroll: {
     maxHeight: 200,
+  },
+  dropdownSpacer: {
+    height: 240,
   },
   dropdownItem: {
     paddingHorizontal: 16,

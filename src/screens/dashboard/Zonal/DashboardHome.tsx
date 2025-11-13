@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,7 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, getUsersByCompany, logout, getZonalDashboardData, getZonalRecentActivity } = useAuth();
+  const { user, getUsersByCompany, logout, getZonalDashboardData, getZonalRecentActivity, switchCompany } = useAuth();
   const navigation = useNavigation();
   const [stats, setStats] = useState<DashboardStats>({
     totalRSMs: 0,
@@ -45,6 +45,55 @@ const DashboardHome = () => {
   const [topPerformers, setTopPerformers] = useState<any[]>([]);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [switchingCompany, setSwitchingCompany] = useState(false);
+
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  const getCompanyId = (companyRef: any) => {
+    if (!companyRef) return null;
+    if (typeof companyRef === 'string') return companyRef;
+    if (typeof companyRef === 'object' && companyRef._id) return companyRef._id.toString();
+    return null;
+  };
+
+  const formatRoleLabel = (role?: string) => {
+    if (!role) return 'Unknown';
+    const roleMap: Record<string, string> = {
+      superadmin: 'Super Admin',
+      admin: 'Admin',
+      zonal: 'Zonal Manager',
+      rsm: 'Regional Manager',
+      asm: 'Area Manager',
+      salesman: 'Salesman',
+      dealers: 'Dealer',
+      distibutors: 'Distributor',
+      subdealer: 'Sub Dealer',
+    };
+    return roleMap[role] || role.charAt(0).toUpperCase() + role.slice(1);
+  };
+
+  const availableCompanies = useMemo(
+    () => (user?.companies || []).filter((entry: any) => entry?.companyId && entry.isActive),
+    [user?.companies]
+  );
+  const currentCompanyId = getCompanyId(user?.defaultCompany);
+  const currentCompanyAssignment = useMemo(
+    () => availableCompanies.find((entry: any) => getCompanyId(entry.companyId) === currentCompanyId),
+    [availableCompanies, currentCompanyId]
+  );
+  const currentCompany =
+    typeof user?.defaultCompany === 'object' && user?.defaultCompany !== null
+      ? user?.defaultCompany
+      : currentCompanyAssignment?.companyId;
+  const currentCompanyRole = currentCompanyAssignment?.role || user?.role;
+  const hasCompanySwitch = availableCompanies.length > 0;
 
   const fetchDashboardData = async () => {
     if (!user?.defaultCompany) {
@@ -127,6 +176,38 @@ const DashboardHome = () => {
     setShowLogoutModal(false);
   };
 
+  const handleCompanyChange = async (targetCompanyId: string) => {
+    if (!targetCompanyId) {
+      return;
+    }
+
+    if (targetCompanyId === currentCompanyId) {
+      if (isMounted.current) {
+        setShowCompanyModal(false);
+      }
+      return;
+    }
+
+    if (isMounted.current) {
+      setSwitchingCompany(true);
+    }
+
+    try {
+      await switchCompany(targetCompanyId);
+      if (isMounted.current) {
+        setShowCompanyModal(false);
+      }
+    } catch (error) {
+      if (isMounted.current) {
+        Alert.alert('Error', error instanceof Error ? error.message : 'Failed to switch company. Please try again.');
+      }
+    } finally {
+      if (isMounted.current) {
+        setSwitchingCompany(false);
+      }
+    }
+  };
+
   // Helper function to format time ago
   const formatTimeAgo = (timestamp: string | Date) => {
     const now = new Date();
@@ -205,21 +286,52 @@ const DashboardHome = () => {
           <View style={styles.headerTop}>
             <View style={styles.welcomeSection}>
               <Text style={styles.welcomeText}>Welcome back,</Text>
-              <Text style={styles.userName}>{user?.name || 'Zonal Manager'}</Text>
-              <Text style={styles.userRole}>Zonal Manager</Text>
+              <Text style={styles.userName}>{user?.name || 'User'}</Text>
+              <Text style={styles.userRole}>{formatRoleLabel(user?.role)}</Text>
             </View>
-            <TouchableOpacity 
-              style={styles.logoutButton} 
-              onPress={handleLogout}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="log-out-outline" size={24} color="#EF4444" />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              {hasCompanySwitch && (
+                <TouchableOpacity
+                  style={styles.companySwitchButton}
+                  onPress={() => setShowCompanyModal(true)}
+                  activeOpacity={0.8}
+                  disabled={switchingCompany}
+                >
+                  <View style={styles.companySwitchLabel}>
+                    <Text style={styles.companySwitchName} numberOfLines={1}>
+                      {currentCompany?.companyName || 'Select Company'}
+                    </Text>
+                    <Text style={styles.companySwitchRole}>
+                      {formatRoleLabel(currentCompanyRole)}
+                    </Text>
+                  </View>
+                  {switchingCompany ? (
+                    <ActivityIndicator size="small" color="#1F2937" />
+                  ) : (
+                    <Ionicons
+                      name={showCompanyModal ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color="#1F2937"
+                    />
+                  )}
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.logoutButton}
+                onPress={handleLogout}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="log-out-outline" size={24} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.companyInfo}>
-            <Text style={styles.companyName}>{user?.defaultCompany?.companyName || 'Company'}</Text>
-            <Text style={styles.companyCode}>{user?.defaultCompany?.companyCode || 'CODE'}</Text>
+            <View style={styles.companyDetails}>
+              <Text style={styles.companyName}>{currentCompany?.companyName || 'Company'}</Text>
+              <Text style={styles.companyCode}>{currentCompany?.companyCode || 'CODE'}</Text>
+            </View>
+            <Text style={styles.currentRoleBadge}>{formatRoleLabel(currentCompanyRole)}</Text>
           </View>
         </View>
 
@@ -390,6 +502,73 @@ const DashboardHome = () => {
         </View>
       </ScrollView>
 
+      {/* Company Switch Modal */}
+      <Modal
+        visible={showCompanyModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!switchingCompany) {
+            setShowCompanyModal(false);
+          }
+        }}
+      >
+        <View style={styles.companyModalOverlay}>
+          <View style={styles.companyModalContainer}>
+            <View style={styles.companyModalHeader}>
+              <Text style={styles.companyModalTitle}>Switch Company</Text>
+              <TouchableOpacity
+                onPress={() => !switchingCompany && setShowCompanyModal(false)}
+                disabled={switchingCompany}
+                style={styles.companyModalClose}
+              >
+                <Ionicons name="close" size={20} color="#475569" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.companyModalDivider} />
+            <ScrollView style={styles.companyModalList} contentContainerStyle={styles.companyModalListContent}>
+              {availableCompanies.length === 0 && (
+                <View style={styles.companyModalEmpty}>
+                  <Ionicons name="information-circle-outline" size={22} color="#94A3B8" />
+                  <Text style={styles.companyModalEmptyText}>No active companies assigned.</Text>
+                </View>
+              )}
+              {availableCompanies.map((entry: any) => {
+                const company = entry.companyId;
+                const companyIdValue = getCompanyId(company);
+                const isCurrent = companyIdValue === currentCompanyId;
+                return (
+                  <TouchableOpacity
+                    key={companyIdValue}
+                    style={[styles.companyModalItem, isCurrent && styles.companyModalItemActive]}
+                    onPress={() => handleCompanyChange(companyIdValue as string)}
+                    activeOpacity={0.85}
+                    disabled={isCurrent || switchingCompany}
+                  >
+                    <View style={styles.companyModalInfo}>
+                      <Text style={styles.companyModalName} numberOfLines={1}>
+                        {company?.companyName || 'Company'}
+                      </Text>
+                      <View style={styles.companyModalMeta}>
+                        <Text style={styles.companyModalCode}>{company?.companyCode || '--'}</Text>
+                        <Text style={styles.companyModalRole}>{formatRoleLabel(entry.role)}</Text>
+                      </View>
+                    </View>
+                    {isCurrent ? (
+                      <Ionicons name="checkmark-circle" size={22} color="#10B981" />
+                    ) : switchingCompany ? (
+                      <ActivityIndicator size="small" color="#3B82F6" />
+                    ) : (
+                      <Ionicons name="arrow-forward-circle-outline" size={22} color="#3B82F6" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Logout Confirmation Modal */}
       <Modal
         visible={showLogoutModal}
@@ -470,6 +649,35 @@ const styles = StyleSheet.create({
   welcomeSection: {
     flex: 1,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  companySwitchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxWidth: 200,
+  },
+  companySwitchLabel: {
+    flex: 1,
+    marginRight: 8,
+  },
+  companySwitchName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  companySwitchRole: {
+    fontSize: 10,
+    color: '#475569',
+    fontWeight: '500',
+    marginTop: 2,
+  },
   logoutButton: {
     padding: 12,
     borderRadius: 8,
@@ -503,6 +711,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  companyDetails: {
+    flex: 1,
+  },
   companyName: {
     fontSize: 16,
     fontWeight: '600',
@@ -515,6 +726,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+  },
+  currentRoleBadge: {
+    backgroundColor: '#EEF2FF',
+    color: '#4338CA',
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginLeft: 12,
   },
   statsSection: {
     padding: 20,
@@ -760,6 +981,106 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     textTransform: 'capitalize',
+  },
+  companyModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  companyModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 360,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  companyModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  companyModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  companyModalClose: {
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  companyModalDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginBottom: 12,
+  },
+  companyModalList: {
+    maxHeight: 320,
+  },
+  companyModalListContent: {
+    paddingBottom: 8,
+  },
+  companyModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  companyModalItemActive: {
+    borderWidth: 1,
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
+  },
+  companyModalInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  companyModalName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  companyModalMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  companyModalCode: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  companyModalRole: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  companyModalEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  companyModalEmptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
   },
   // Modal styles
   modalOverlay: {

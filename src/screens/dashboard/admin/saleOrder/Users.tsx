@@ -502,7 +502,10 @@ const Users = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalContent}>
+            <ScrollView
+              style={styles.modalContent}
+              contentContainerStyle={styles.modalContentContainer}
+            >
               <TextInput
                 placeholder="Full Name *"
                 value={formData.name}
@@ -587,7 +590,7 @@ const Users = () => {
                 />
               </View>
               
-              <View style={styles.addressRow}>
+              <View style={[styles.addressRow, styles.addressRowLast]}>
                 <TextInput
                   placeholder="Pincode"
                   value={formData.address.pincode}
@@ -856,6 +859,9 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: 400,
   },
+  modalContentContainer: {
+    paddingBottom: 32,
+  },
   input: {
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -938,6 +944,10 @@ const styles = StyleSheet.create({
   addressRow: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 16,
+  },
+  addressRowLast: {
+    marginBottom: 0,
   },
   halfInput: {
     flex: 1,

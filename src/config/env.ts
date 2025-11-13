@@ -11,9 +11,17 @@ import {
   ENVIRONMENT,
 } from '@env';
 
+// Debug logging for environment variables
+console.log('🔍 Environment variables loaded:', {
+  API_BASE_URL,
+  API_TIMEOUT,
+  APP_NAME,
+  ENVIRONMENT,
+});
+
 // Environment configuration with values from .env file
 export const ENV = {
-  API_BASE_URL: API_BASE_URL ,
+  API_BASE_URL: API_BASE_URL || 'http://localhost:5000/api/v1',
   API_TIMEOUT: API_TIMEOUT || '10000',
   APP_NAME: APP_NAME || 'Royal Software',
   APP_VERSION: APP_VERSION || '1.0.0',

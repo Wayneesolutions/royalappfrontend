@@ -82,7 +82,7 @@ const DashboardHome = () => {
   const [stockData, setStockData] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
 
-  const { user, getCompanyData, getUsersByCompany, getStockSummary } = useAuth();
+  const { user, isAuthenticated, getCompanyData, getUsersByCompany, getStockSummary } = useAuth();
 
   // Helper function to get role colors
   const getRoleColor = (role: string) => {
@@ -100,7 +100,7 @@ const DashboardHome = () => {
 
   // Fetch user counts for each role
   const fetchUserCounts = async () => {
-    if (!user?.defaultCompany) return;
+    if (!isAuthenticated || !user?.defaultCompany) return;
 
     try {
       const roleCounts: {[key: string]: number} = {};
@@ -109,6 +109,13 @@ const DashboardHome = () => {
       for (const role of roles) {
         try {
           const result = await getUsersByCompany({ role, limit: 1 });
+          if (!result) {
+            roleCounts[role] = 0;
+            if (!isAuthenticated) {
+              break;
+            }
+            continue;
+          }
           roleCounts[role] = result?.pagination?.totalUsers || 0;
         } catch (err) {
           console.error(`Failed to fetch ${role} users:`, err);
@@ -124,10 +131,14 @@ const DashboardHome = () => {
 
   // Fetch recent users
   const fetchRecentUsers = async () => {
-    if (!user?.defaultCompany) return;
+    if (!isAuthenticated || !user?.defaultCompany) return;
 
     try {
       const result = await getUsersByCompany({ limit: 5 });
+      if (!result) {
+        setRecentUsers([]);
+        return;
+      }
       setRecentUsers(result?.users || []);
     } catch (err) {
       console.error('Failed to fetch recent users:', err);
@@ -136,13 +147,15 @@ const DashboardHome = () => {
 
   // Fetch stock data
   const fetchStockData = async () => {
-    if (!user?.defaultCompany) return;
-
+    if (!isAuthenticated || !user?.defaultCompany) return;
     try {
       const result = await getStockSummary();
       if (result?.success && result?.data) {
         setStockData(result.data);
         setChartData(result.data.chartData || []);
+      } else if (!result) {
+        setStockData(null);
+        setChartData([]);
       }
     } catch (err) {
       console.error('Failed to fetch stock data:', err);
@@ -152,7 +165,7 @@ const DashboardHome = () => {
   // Fetch company data when component mounts or user changes
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.defaultCompany) {
+      if (!isAuthenticated || !user?.defaultCompany) {
         setIsLoading(false);
         return;
       }
@@ -162,13 +175,14 @@ const DashboardHome = () => {
         setError(null);
         const data = await getCompanyData();
         setCompanyData(data);
-        
-        // Fetch user data and stock data in parallel
-        await Promise.all([
-          fetchUserCounts(),
-          fetchRecentUsers(),
-          fetchStockData()
-        ]);
+
+        if (isAuthenticated) {
+          await Promise.all([
+            fetchUserCounts(),
+            fetchRecentUsers(),
+            fetchStockData()
+          ]);
+        }
       } catch (err) {
         console.error('Failed to fetch company data:', err);
         setError('Failed to load company data');
@@ -178,7 +192,7 @@ const DashboardHome = () => {
     };
 
     fetchData();
-  }, [user?.defaultCompany, getCompanyData]);
+  }, [isAuthenticated, user?.defaultCompany, getCompanyData]);
 
   const renderIcon = (name: string, type: IconType, size = 24, color = '#486CD6') => {
     switch (type) {

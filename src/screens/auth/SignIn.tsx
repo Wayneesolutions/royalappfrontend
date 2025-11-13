@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { FontAwesome, AntDesign } from "@expo/vector-icons";
 import { RootStackParamList } from "../../navigation/types";
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
@@ -44,23 +43,6 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
         error instanceof Error ? error.message : 'Invalid credentials'
       );
     }
-  };
-
-// Demo credentials for testing different roles (tap to fill)
-  const demoCredentials = [
-    { role: 'SuperAdmin', username: 'superadmin', password: '123456' },
-    { role: 'Admin', username: 'admin', password: '123456' },
-    { role: 'RSM', username: 'rsm', password: '123456' },
-    { role: 'ASM', username: 'asm', password: '123456' },
-    { role: 'Distributor', username: 'distributor', password: '123456' },
-    { role: 'Dealer', username: 'dealer', password: '123456' },
-    { role: 'Sub Dealer', username: 'subdealer', password: '123456' },
-    { role: 'Salesman', username: 'salesman', password: '123456' },
-  ];
-
-  const fillDemoCredentials = (demoUsername: string, demoPassword: string) => {
-    setUsername(demoUsername);
-    setPassword(demoPassword);
   };
 
   return (
@@ -109,21 +91,6 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Demo Credentials Section */}
-        <View style={styles.demoSection}>
-          <Text style={styles.demoTitle}>Demo Credentials (Tap to fill):</Text>
-          <View style={styles.demoGrid}>
-            {demoCredentials.map((demo, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.demoButton}
-                onPress={() => fillDemoCredentials(demo.username, demo.password)}
-              >
-                <Text style={styles.demoButtonText}>{demo.role}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -221,40 +188,6 @@ const styles = StyleSheet.create({
     color: '#077BC3',
     fontSize: 16,
     fontWeight: '700',
-  },
-  // Demo credentials styles
-  demoSection: {
-    marginTop: 24,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  demoTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  demoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  demoButton: {
-    width: '48%',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 6,
-    padding: 8,
-    marginBottom: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  demoButtonText: {
-    fontSize: 11,
-    color: '#374151',
-    fontWeight: '500',
   },
   // Error styles
   errorContainer: {

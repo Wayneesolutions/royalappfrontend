@@ -15,34 +15,24 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { DEFAULT_GST_RATE } from '../../../utils/gst';
 
 interface Product {
   _id: string;
   productCode: string;
   productName: string;
-  description: string;
+  description?: string;
   category: string;
-  subCategory: string;
-  brand: string;
-  unit: string;
+  subCategory?: string;
+  brand?: string;
   price: number;
-  costPrice: number;
-  mrp: number;
-  discount: number;
-  taxRate: number;
-  stock: {
+  stock: number | {
     current: number;
-    minimum: number;
-    maximum: number;
+    minimum?: number;
+    maximum?: number;
   };
-  images: Array<{
-    url: string;
-    alt: string;
-    isPrimary: boolean;
-  }>;
-  specifications: any;
   isActive: boolean;
-  isAvailable: boolean;
+  gstRate?: number;
   createdBy?: {
     name: string;
     role: string;
@@ -54,6 +44,18 @@ interface Product {
   createdAt: string;
   updatedAt: string;
 }
+
+const getStockNumber = (stock: unknown): number => {
+  if (typeof stock === 'number') {
+    return stock;
+  }
+
+  if (stock && typeof (stock as any).current === 'number') {
+    return (stock as any).current;
+  }
+
+  return 0;
+};
 
 const ProductCatalog = () => {
   const navigation = useNavigation();
@@ -86,18 +88,9 @@ const ProductCatalog = () => {
     category: '',
     subCategory: '',
     brand: '',
-    unit: 'piece',
     price: '',
-    costPrice: '',
-    mrp: '',
-    discount: '',
-    taxRate: '',
-    stock: {
-      current: '',
-      minimum: '',
-      maximum: '',
-    },
-    isAvailable: true,
+    stock: '',
+    gstRate: DEFAULT_GST_RATE.toString(),
     isActive: true,
   });
 
@@ -216,6 +209,12 @@ const ProductCatalog = () => {
       return;
     }
 
+    if (isNaN(parseFloat(formData.gstRate)) || parseFloat(formData.gstRate) < 0) {
+      console.log('❌ Validation failed - invalid GST rate');
+      Alert.alert('Validation Error', 'Please enter a valid GST rate (0 or higher)');
+      return;
+    }
+
     console.log('✅ Validation passed, calling API...');
     try {
       setLoading(true);
@@ -227,18 +226,9 @@ const ProductCatalog = () => {
         category: formData.category.trim(),
         subCategory: formData.subCategory.trim(),
         brand: formData.brand.trim(),
-        unit: formData.unit.trim(),
         price: parseFloat(formData.price),
-        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
-        mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
-        discount: formData.discount ? parseFloat(formData.discount) : undefined,
-        taxRate: formData.taxRate ? parseFloat(formData.taxRate) : undefined,
-        stock: {
-          current: formData.stock.current ? parseInt(formData.stock.current) : 0,
-          minimum: formData.stock.minimum ? parseInt(formData.stock.minimum) : 0,
-          maximum: formData.stock.maximum ? parseInt(formData.stock.maximum) : 1000,
-        },
-        isAvailable: formData.isAvailable,
+        stock: formData.stock ? parseInt(formData.stock, 10) || 0 : 0,
+        gstRate: parseFloat(formData.gstRate),
         isActive: formData.isActive,
       };
 
@@ -296,6 +286,11 @@ const ProductCatalog = () => {
       Alert.alert('Validation Error', 'Please enter a valid price');
       return;
     }
+
+    if (isNaN(parseFloat(formData.gstRate)) || parseFloat(formData.gstRate) < 0) {
+      Alert.alert('Validation Error', 'Please enter a valid GST rate (0 or higher)');
+      return;
+    }
     
     try {
       setLoading(true);
@@ -306,18 +301,9 @@ const ProductCatalog = () => {
         category: formData.category.trim(),
         subCategory: formData.subCategory.trim(),
         brand: formData.brand.trim(),
-        unit: formData.unit.trim(),
         price: parseFloat(formData.price),
-        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
-        mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
-        discount: formData.discount ? parseFloat(formData.discount) : undefined,
-        taxRate: formData.taxRate ? parseFloat(formData.taxRate) : undefined,
-        stock: {
-          current: formData.stock.current ? parseInt(formData.stock.current) : 0,
-          minimum: formData.stock.minimum ? parseInt(formData.stock.minimum) : 0,
-          maximum: formData.stock.maximum ? parseInt(formData.stock.maximum) : 1000,
-        },
-        isAvailable: formData.isAvailable,
+        stock: formData.stock ? parseInt(formData.stock, 10) || 0 : 0,
+        gstRate: parseFloat(formData.gstRate),
         isActive: formData.isActive,
       };
 
@@ -402,18 +388,9 @@ const ProductCatalog = () => {
       category: '',
       subCategory: '',
       brand: '',
-      unit: 'piece',
       price: '',
-      costPrice: '',
-      mrp: '',
-      discount: '',
-      taxRate: '',
-      stock: {
-        current: '',
-        minimum: '',
-        maximum: '',
-      },
-      isAvailable: true,
+      stock: '',
+      gstRate: DEFAULT_GST_RATE.toString(),
       isActive: true,
     });
   };
@@ -424,22 +401,13 @@ const ProductCatalog = () => {
     setFormData({
       productCode: product.productCode,
       productName: product.productName,
-      description: product.description,
-      category: product.category,
-      subCategory: product.subCategory,
-      brand: product.brand,
-      unit: product.unit,
-      price: product.price.toString(),
-      costPrice: product.costPrice?.toString() || '',
-      mrp: product.mrp?.toString() || '',
-      discount: product.discount?.toString() || '',
-      taxRate: product.taxRate?.toString() || '',
-      stock: {
-        current: product.stock.current.toString(),
-        minimum: product.stock.minimum.toString(),
-        maximum: product.stock.maximum.toString(),
-      },
-      isAvailable: product.isAvailable,
+      description: product.description || '',
+      category: product.category || '',
+      subCategory: product.subCategory || '',
+      brand: product.brand || '',
+      price: product.price?.toString() || '',
+      stock: getStockNumber(product.stock).toString(),
+      gstRate: (product.gstRate ?? DEFAULT_GST_RATE).toString(),
       isActive: product.isActive,
     });
     setShowEditModal(true);
@@ -472,22 +440,15 @@ const ProductCatalog = () => {
           
           <View style={styles.priceContainer}>
             <Text style={styles.productPrice}>₹{item.price}</Text>
-            <Text style={styles.productUnit}>/ {item.unit}</Text>
           </View>
+
+          <Text style={styles.productGst}>
+            GST: {(item.gstRate ?? DEFAULT_GST_RATE)}%
+          </Text>
           
           <View style={styles.stockContainer}>
-            <View style={[
-              styles.stockBadge,
-              { backgroundColor: item.stock.current <= item.stock.minimum ? '#FEF3C7' : '#D1FAE5' }
-            ]}>
-              <Text style={[
-                styles.stockText,
-                { color: item.stock.current <= item.stock.minimum ? '#D97706' : '#059669' }
-              ]}>
-                {item.stock.current <= item.stock.minimum ? 'Low Stock' : 'In Stock'}
-              </Text>
-            </View>
-            <Text style={styles.stockQuantity}>{item.stock.current} {item.unit}</Text>
+            <Text style={styles.stockLabel}>Stock:</Text>
+            <Text style={styles.stockQuantity}>{getStockNumber(item.stock)}</Text>
           </View>
           
           <View style={styles.statusContainer}>
@@ -500,17 +461,6 @@ const ProductCatalog = () => {
                 { color: item.isActive ? '#059669' : '#DC2626' }
               ]}>
                 {item.isActive ? 'Active' : 'Inactive'}
-              </Text>
-            </View>
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: item.isAvailable ? '#D1FAE5' : '#FEE2E2' }
-            ]}>
-              <Text style={[
-                styles.statusText,
-                { color: item.isAvailable ? '#059669' : '#DC2626' }
-              ]}>
-                {item.isAvailable ? 'Available' : 'Unavailable'}
               </Text>
             </View>
           </View>
@@ -792,25 +742,14 @@ const ProductCatalog = () => {
               </View>
             </View>
             
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Brand</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.brand}
-                  onChangeText={(text) => setFormData({...formData, brand: text})}
-                  placeholder="Enter brand"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Unit *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.unit}
-                  onChangeText={(text) => setFormData({...formData, unit: text})}
-                  placeholder="piece, kg, liter, etc."
-                />
-              </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Brand</Text>
+              <TextInput
+                style={styles.formInput}
+                value={formData.brand}
+                onChangeText={(text) => setFormData({...formData, brand: text})}
+                placeholder="Enter brand"
+              />
             </View>
             
             <View style={styles.formRow}>
@@ -825,34 +764,11 @@ const ProductCatalog = () => {
                 />
               </View>
               <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Cost Price</Text>
+                <Text style={styles.formLabel}>Stock</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.costPrice}
-                  onChangeText={(text) => setFormData({...formData, costPrice: text})}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>MRP</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.mrp}
-                  onChangeText={(text) => setFormData({...formData, mrp: text})}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Discount %</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.discount}
-                  onChangeText={(text) => setFormData({...formData, discount: text})}
+                  value={formData.stock}
+                  onChangeText={(text) => setFormData({...formData, stock: text})}
                   placeholder="0"
                   keyboardType="numeric"
                 />
@@ -860,46 +776,12 @@ const ProductCatalog = () => {
             </View>
             
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Tax Rate %</Text>
+              <Text style={styles.formLabel}>GST Rate (%)</Text>
               <TextInput
                 style={styles.formInput}
-                value={formData.taxRate}
-                onChangeText={(text) => setFormData({...formData, taxRate: text})}
-                placeholder="0"
-                keyboardType="numeric"
-              />
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Current Stock</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.stock.current}
-                  onChangeText={(text) => setFormData({...formData, stock: {...formData.stock, current: text}})}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Minimum Stock</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.stock.minimum}
-                  onChangeText={(text) => setFormData({...formData, stock: {...formData.stock, minimum: text}})}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Maximum Stock</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.stock.maximum}
-                onChangeText={(text) => setFormData({...formData, stock: {...formData.stock, maximum: text}})}
-                placeholder="1000"
+                value={formData.gstRate}
+                onChangeText={(text) => setFormData({ ...formData, gstRate: text })}
+                placeholder="18"
                 keyboardType="numeric"
               />
             </View>
@@ -989,25 +871,14 @@ const ProductCatalog = () => {
               </View>
             </View>
             
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Brand</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.brand}
-                  onChangeText={(text) => setFormData({...formData, brand: text})}
-                  placeholder="Enter brand"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Unit *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.unit}
-                  onChangeText={(text) => setFormData({...formData, unit: text})}
-                  placeholder="piece, kg, liter, etc."
-                />
-              </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Brand</Text>
+              <TextInput
+                style={styles.formInput}
+                value={formData.brand}
+                onChangeText={(text) => setFormData({...formData, brand: text})}
+                placeholder="Enter brand"
+              />
             </View>
             
             <View style={styles.formRow}>
@@ -1022,34 +893,11 @@ const ProductCatalog = () => {
                 />
               </View>
               <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Cost Price</Text>
+                <Text style={styles.formLabel}>Stock</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.costPrice}
-                  onChangeText={(text) => setFormData({...formData, costPrice: text})}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>MRP</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.mrp}
-                  onChangeText={(text) => setFormData({...formData, mrp: text})}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Discount %</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.discount}
-                  onChangeText={(text) => setFormData({...formData, discount: text})}
+                  value={formData.stock}
+                  onChangeText={(text) => setFormData({...formData, stock: text})}
                   placeholder="0"
                   keyboardType="numeric"
                 />
@@ -1057,46 +905,12 @@ const ProductCatalog = () => {
             </View>
             
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Tax Rate %</Text>
+              <Text style={styles.formLabel}>GST Rate (%)</Text>
               <TextInput
                 style={styles.formInput}
-                value={formData.taxRate}
-                onChangeText={(text) => setFormData({...formData, taxRate: text})}
-                placeholder="0"
-                keyboardType="numeric"
-              />
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Current Stock</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.stock.current}
-                  onChangeText={(text) => setFormData({...formData, stock: {...formData.stock, current: text}})}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Minimum Stock</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.stock.minimum}
-                  onChangeText={(text) => setFormData({...formData, stock: {...formData.stock, minimum: text}})}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Maximum Stock</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.stock.maximum}
-                onChangeText={(text) => setFormData({...formData, stock: {...formData.stock, maximum: text}})}
-                placeholder="1000"
+                value={formData.gstRate}
+                onChangeText={(text) => setFormData({ ...formData, gstRate: text })}
+                placeholder="18"
                 keyboardType="numeric"
               />
             </View>
@@ -1191,36 +1005,15 @@ const ProductCatalog = () => {
                   
                   <View style={styles.detailsRow}>
                     <Text style={styles.detailsLabel}>Price</Text>
-                    <Text style={styles.detailsValue}>₹{selectedProduct.price} / {selectedProduct.unit}</Text>
+                    <Text style={styles.detailsValue}>₹{selectedProduct.price}</Text>
                   </View>
-                  
-                  {selectedProduct.costPrice && (
-                    <View style={styles.detailsRow}>
-                      <Text style={styles.detailsLabel}>Cost Price</Text>
-                      <Text style={styles.detailsValue}>₹{selectedProduct.costPrice}</Text>
-                    </View>
-                  )}
-                  
-                  {selectedProduct.mrp && (
-                    <View style={styles.detailsRow}>
-                      <Text style={styles.detailsLabel}>MRP</Text>
-                      <Text style={styles.detailsValue}>₹{selectedProduct.mrp}</Text>
-                    </View>
-                  )}
-                  
-                  {selectedProduct.discount && (
-                    <View style={styles.detailsRow}>
-                      <Text style={styles.detailsLabel}>Discount</Text>
-                      <Text style={styles.detailsValue}>₹{selectedProduct.discount}</Text>
-                    </View>
-                  )}
-                  
-                  {selectedProduct.taxRate && (
-                    <View style={styles.detailsRow}>
-                      <Text style={styles.detailsLabel}>Tax Rate</Text>
-                      <Text style={styles.detailsValue}>{selectedProduct.taxRate}%</Text>
-                    </View>
-                  )}
+
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>GST Rate</Text>
+                    <Text style={styles.detailsValue}>
+                      {(selectedProduct.gstRate ?? DEFAULT_GST_RATE)}%
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Stock Information */}
@@ -1228,33 +1021,8 @@ const ProductCatalog = () => {
                   <Text style={styles.detailsSectionTitle}>Stock Information</Text>
                   
                   <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Current Stock</Text>
-                    <Text style={styles.detailsValue}>{selectedProduct.stock.current} {selectedProduct.unit}</Text>
-                  </View>
-                  
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Minimum Stock</Text>
-                    <Text style={styles.detailsValue}>{selectedProduct.stock.minimum} {selectedProduct.unit}</Text>
-                  </View>
-                  
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Maximum Stock</Text>
-                    <Text style={styles.detailsValue}>{selectedProduct.stock.maximum} {selectedProduct.unit}</Text>
-                  </View>
-                  
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Stock Status</Text>
-                    <View style={[
-                      styles.detailsBadge,
-                      { backgroundColor: selectedProduct.stock.current <= selectedProduct.stock.minimum ? '#FEF3C7' : '#D1FAE5' }
-                    ]}>
-                      <Text style={[
-                        styles.detailsBadgeText,
-                        { color: selectedProduct.stock.current <= selectedProduct.stock.minimum ? '#D97706' : '#059669' }
-                      ]}>
-                        {selectedProduct.stock.current <= selectedProduct.stock.minimum ? 'Low Stock' : 'In Stock'}
-                      </Text>
-                    </View>
+                    <Text style={styles.detailsLabel}>Stock Available</Text>
+                    <Text style={styles.detailsValue}>{getStockNumber(selectedProduct.stock)}</Text>
                   </View>
                 </View>
 
@@ -1273,21 +1041,6 @@ const ProductCatalog = () => {
                         { color: selectedProduct.isActive ? '#059669' : '#DC2626' }
                       ]}>
                         {selectedProduct.isActive ? 'Active' : 'Inactive'}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Availability</Text>
-                    <View style={[
-                      styles.detailsBadge,
-                      { backgroundColor: selectedProduct.isAvailable ? '#D1FAE5' : '#FEE2E2' }
-                    ]}>
-                      <Text style={[
-                        styles.detailsBadgeText,
-                        { color: selectedProduct.isAvailable ? '#059669' : '#DC2626' }
-                      ]}>
-                        {selectedProduct.isAvailable ? 'Available' : 'Unavailable'}
                       </Text>
                     </View>
                   </View>
@@ -1506,6 +1259,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#059669',
   },
+  productGst: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 6,
+  },
   productUnit: {
     fontSize: 14,
     color: '#6B7280',
@@ -1515,6 +1273,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  stockLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginRight: 6,
   },
   stockBadge: {
     paddingHorizontal: 8,

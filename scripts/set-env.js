@@ -25,7 +25,7 @@ const envConfigs = {
     DEBUG_MODE: 'true',
   },
   production: {
-    API_BASE_URL: 'https://your-production-api.com/api/v1',
+    API_BASE_URL: 'https://royalapp.wayneesolutions.com/api/v1',
     API_TIMEOUT: '15000',
     APP_NAME: 'Royal Software',
     APP_VERSION: '1.0.0',
