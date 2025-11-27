@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../../context/AuthContext";
@@ -19,26 +20,110 @@ import { useNavigation } from "@react-navigation/native";
 interface Product {
   _id: string;
   productCode: string;
+  name: string;
   productName: string;
   description?: string;
   category: string;
   subCategory?: string;
   brand?: string;
-  unit: string;
-  price: number;
-  costPrice?: number;
-  mrp?: number;
-  discount: number;
-  taxRate: number;
-  stock: {
-    current: number;
-    minimum: number;
-    maximum: number;
+  partNo?: string;
+  itemAlias?: string;
+  parent?: string;
+  baseUnits?: string;
+  additionalUnits?: string;
+  stdPurcRate?: number;
+  stdSaleRate?: number;
+  price?: number;
+  stock?: number | {
+    current?: number;
+    minimum?: number;
+    maximum?: number;
   };
-  isActive: boolean;
-  isAvailable: boolean;
-  createdAt: string;
+  itemGstPer?: number;
+  gstRate?: number;
+  itemHsn?: string;
+  itemHsnDesc?: string;
+  openingBalance?: number;
+  itemOpRate?: number;
+  companyCode?: string;
+  isFinishItem?: boolean;
+  isActive?: boolean;
+  other1?: string;
+  other2?: string;
+  other3?: string;
+  other4?: string;
+  other5?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
+
+type ProductFormState = {
+  productCode: string;
+  name: string;
+  productName: string;
+  partNo: string;
+  itemAlias: string;
+  description: string;
+  parent: string;
+  category: string;
+  subCategory: string;
+  brand: string;
+  baseUnits: string;
+  additionalUnits: string;
+  stdPurcRate: string;
+  stdSaleRate: string;
+  price: string;
+  stock: string;
+  itemGstPer: string;
+  gstRate: string;
+  itemHsn: string;
+  itemHsnDesc: string;
+  openingBalance: string;
+  itemOpRate: string;
+  companyCode: string;
+  isFinishItem: boolean;
+  isActive: boolean;
+  other1: string;
+  other2: string;
+  other3: string;
+  other4: string;
+  other5: string;
+};
+
+const LOW_STOCK_THRESHOLD = 5;
+
+const emptyFormState = (): ProductFormState => ({
+  productCode: "",
+  name: "",
+  productName: "",
+  partNo: "",
+  itemAlias: "",
+  description: "",
+  parent: "",
+  category: "",
+  subCategory: "",
+  brand: "",
+  baseUnits: "",
+  additionalUnits: "",
+  stdPurcRate: "",
+  stdSaleRate: "",
+  price: "",
+  stock: "",
+  itemGstPer: "",
+  gstRate: "",
+  itemHsn: "",
+  itemHsnDesc: "",
+  openingBalance: "",
+  itemOpRate: "",
+  companyCode: "",
+  isFinishItem: false,
+  isActive: true,
+  other1: "",
+  other2: "",
+  other3: "",
+  other4: "",
+  other5: "",
+});
 
 const ProductManagement = () => {
   const { 
@@ -72,31 +157,105 @@ const ProductManagement = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Form states
-  const [formData, setFormData] = useState({
-    productCode: '',
-    productName: '',
-    description: '',
-    category: '',
-    subCategory: '',
-    brand: '',
-    unit: 'piece',
-    price: '',
-    costPrice: '',
-    mrp: '',
-    discount: '',
-    taxRate: '',
-    stock: {
-      current: '',
-      minimum: '',
-      maximum: ''
-    }
-  });
+  const [formData, setFormData] = useState<ProductFormState>(emptyFormState());
 
   // Stock update state
   const [stockUpdate, setStockUpdate] = useState({
     quantity: '',
     operation: 'add' as 'add' | 'subtract'
   });
+
+  const derivedSelectedProduct = selectedProduct
+    ? {
+        stockValue: getStockValue(selectedProduct.stock),
+        priceValue:
+          selectedProduct.price ??
+          selectedProduct.stdSaleRate ??
+          selectedProduct.stdPurcRate ??
+          0,
+        createdAtLabel: selectedProduct.createdAt
+          ? new Date(selectedProduct.createdAt).toLocaleString()
+          : undefined,
+        updatedAtLabel: selectedProduct.updatedAt
+          ? new Date(selectedProduct.updatedAt).toLocaleString()
+          : undefined,
+      }
+    : null;
+
+  const updateFormValue = (
+    field: keyof ProductFormState,
+    value: string | boolean,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const formatCurrency = (value?: number | null) => {
+    if (value === undefined || value === null || Number.isNaN(Number(value))) {
+      return '0.00';
+    }
+    return Number(value).toFixed(2);
+  };
+
+  const DetailRow = ({
+    label,
+    value,
+  }: {
+    label: string;
+    value?: string | number | boolean | null;
+  }) => {
+    if (
+      value === undefined ||
+      value === null ||
+      value === ''
+    ) {
+      return null;
+    }
+    const displayValue =
+      typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value;
+    return (
+      <View style={styles.detailsRow}>
+        <Text style={styles.detailsLabel}>{label}</Text>
+        <Text style={styles.detailsValue}>{displayValue}</Text>
+      </View>
+    );
+  };
+
+  const toNumber = (value: string) => {
+    if (value === undefined || value === null || value.trim() === '') {
+      return undefined;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const toInteger = (value: string) => {
+    if (value === undefined || value === null || value.trim() === '') {
+      return undefined;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+const toTrimmed = (value: string) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+};
+
+function getStockValue(stock: Product['stock']) {
+  if (typeof stock === 'number') {
+    return stock;
+  }
+  if (stock && typeof stock === 'object' && typeof stock.current === 'number') {
+    return stock.current;
+  }
+  return 0;
+}
 
   // Fetch data
   const fetchData = async () => {
@@ -148,66 +307,77 @@ const ProductManagement = () => {
 
   // Reset form
   const resetForm = () => {
-    setFormData({
-      productCode: '',
-      productName: '',
-      description: '',
-      category: '',
-      subCategory: '',
-      brand: '',
-      unit: 'piece',
-      price: '',
-      costPrice: '',
-      mrp: '',
-      discount: '',
-      taxRate: '',
-      stock: {
-        current: '',
-        minimum: '',
-        maximum: ''
-      }
-    });
+    setFormData(emptyFormState());
   };
 
   // Create product
   const handleCreateProduct = async () => {
-    // Validate required fields
-    if (!formData.productCode || !formData.productName || !formData.category || !formData.price) {
-      Alert.alert('Validation Error', 'Please fill in all required fields (Product Code, Product Name, Category, and Price)');
+    const productCode = toTrimmed(formData.productCode);
+    const resolvedName = toTrimmed(formData.name) || toTrimmed(formData.productName);
+    const resolvedCategory = toTrimmed(formData.category);
+    const resolvedPrice = toNumber(formData.price);
+
+    if (!productCode || !resolvedName || !resolvedCategory) {
+      Alert.alert(
+        'Validation Error',
+        'Product Code, Product Name, and Category are required.',
+      );
       return;
     }
 
-    // Validate price is a valid number
-    if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price');
+    if (resolvedPrice === undefined || resolvedPrice <= 0) {
+      Alert.alert('Validation Error', 'Please enter a valid price greater than 0.');
       return;
     }
 
     try {
       setLoading(true);
-      
-      const productData = {
-        productCode: formData.productCode.trim(),
-        productName: formData.productName.trim(),
-        description: formData.description.trim(),
-        category: formData.category.trim(),
-        subCategory: formData.subCategory.trim(),
-        brand: formData.brand.trim(),
-        unit: formData.unit.trim(),
-        price: parseFloat(formData.price),
-        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
-        mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
-        discount: formData.discount ? parseFloat(formData.discount) : 0,
-        taxRate: formData.taxRate ? parseFloat(formData.taxRate) : 0,
-        stock: {
-          current: formData.stock.current ? parseInt(formData.stock.current) : 0,
-          minimum: formData.stock.minimum ? parseInt(formData.stock.minimum) : 0,
-          maximum: formData.stock.maximum ? parseInt(formData.stock.maximum) : 1000
-        }
+
+      const productData: Record<string, any> = {
+        productCode,
+        name: resolvedName,
+        productName: toTrimmed(formData.productName) || resolvedName,
+        partNo: toTrimmed(formData.partNo),
+        itemAlias: toTrimmed(formData.itemAlias),
+        description: toTrimmed(formData.description),
+        parent: toTrimmed(formData.parent),
+        category: resolvedCategory,
+        subCategory: toTrimmed(formData.subCategory),
+        brand: toTrimmed(formData.brand),
+        baseUnits: toTrimmed(formData.baseUnits),
+        additionalUnits: toTrimmed(formData.additionalUnits),
+        stdPurcRate: toNumber(formData.stdPurcRate),
+        stdSaleRate: toNumber(formData.stdSaleRate),
+        price: resolvedPrice,
+        stock: toInteger(formData.stock) ?? 0,
+        itemGstPer: toNumber(formData.itemGstPer),
+        gstRate: toNumber(formData.gstRate),
+        itemHsn: toTrimmed(formData.itemHsn),
+        itemHsnDesc: toTrimmed(formData.itemHsnDesc),
+        openingBalance: toNumber(formData.openingBalance),
+        itemOpRate: toNumber(formData.itemOpRate),
+        companyCode: toTrimmed(formData.companyCode),
+        isFinishItem: formData.isFinishItem,
+        isActive: formData.isActive,
+        other1: toTrimmed(formData.other1),
+        other2: toTrimmed(formData.other2),
+        other3: toTrimmed(formData.other3),
+        other4: toTrimmed(formData.other4),
+        other5: toTrimmed(formData.other5),
       };
+
+      Object.keys(productData).forEach((key) => {
+        if (productData[key] === undefined) {
+          delete productData[key];
+        }
+      });
 
       const response = await createProduct(productData);
       if (response?.success) {
+        const productLabel =
+          response.product?.name ||
+          response.product?.productName ||
+          resolvedName;
         // Success: Close modal, reset form, and refresh product list immediately
         console.log('✅ Success! Closing modal and refreshing product list...');
         setShowCreateModal(false);
@@ -216,8 +386,8 @@ const ProductManagement = () => {
         
         // Show success message after modal is closed
         Alert.alert(
-          'Success', 
-          `Product "${response.product?.productName || formData.productName}" created successfully!`
+          'Success',
+          `Product "${productLabel}" created successfully!`,
         );
       } else {
         // Handle specific error messages from API
@@ -238,42 +408,72 @@ const ProductManagement = () => {
   const handleUpdateProduct = async () => {
     if (!selectedProduct) return;
 
-    // Validate required fields
-    if (!formData.productName || !formData.category || !formData.price) {
-      Alert.alert('Validation Error', 'Please fill in all required fields (Product Name, Category, and Price)');
+    const productCode = toTrimmed(formData.productCode);
+    const resolvedName = toTrimmed(formData.name) || toTrimmed(formData.productName);
+    const resolvedCategory = toTrimmed(formData.category);
+    const resolvedPrice = toNumber(formData.price);
+
+    if (!productCode || !resolvedName || !resolvedCategory) {
+      Alert.alert(
+        'Validation Error',
+        'Product Code, Product Name, and Category are required.',
+      );
       return;
     }
 
-    // Validate price is a valid number
-    if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price');
+    if (resolvedPrice === undefined || resolvedPrice <= 0) {
+      Alert.alert('Validation Error', 'Please enter a valid price greater than 0.');
       return;
     }
 
     try {
       setLoading(true);
       
-      const updateData = {
-        productName: formData.productName.trim(),
-        description: formData.description.trim(),
-        category: formData.category.trim(),
-        subCategory: formData.subCategory.trim(),
-        brand: formData.brand.trim(),
-        unit: formData.unit.trim(),
-        price: parseFloat(formData.price),
-        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
-        mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
-        discount: formData.discount ? parseFloat(formData.discount) : 0,
-        taxRate: formData.taxRate ? parseFloat(formData.taxRate) : 0,
-        stock: {
-          current: formData.stock.current ? parseInt(formData.stock.current) : 0,
-          minimum: formData.stock.minimum ? parseInt(formData.stock.minimum) : 0,
-          maximum: formData.stock.maximum ? parseInt(formData.stock.maximum) : 1000
-        }
+      const updateData: Record<string, any> = {
+        productCode,
+        name: resolvedName,
+        productName: toTrimmed(formData.productName) || resolvedName,
+        partNo: toTrimmed(formData.partNo),
+        itemAlias: toTrimmed(formData.itemAlias),
+        description: toTrimmed(formData.description),
+        parent: toTrimmed(formData.parent),
+        category: resolvedCategory,
+        subCategory: toTrimmed(formData.subCategory),
+        brand: toTrimmed(formData.brand),
+        baseUnits: toTrimmed(formData.baseUnits),
+        additionalUnits: toTrimmed(formData.additionalUnits),
+        stdPurcRate: toNumber(formData.stdPurcRate),
+        stdSaleRate: toNumber(formData.stdSaleRate),
+        price: resolvedPrice,
+        stock: toInteger(formData.stock),
+        itemGstPer: toNumber(formData.itemGstPer),
+        gstRate: toNumber(formData.gstRate),
+        itemHsn: toTrimmed(formData.itemHsn),
+        itemHsnDesc: toTrimmed(formData.itemHsnDesc),
+        openingBalance: toNumber(formData.openingBalance),
+        itemOpRate: toNumber(formData.itemOpRate),
+        companyCode: toTrimmed(formData.companyCode),
+        isFinishItem: formData.isFinishItem,
+        isActive: formData.isActive,
+        other1: toTrimmed(formData.other1),
+        other2: toTrimmed(formData.other2),
+        other3: toTrimmed(formData.other3),
+        other4: toTrimmed(formData.other4),
+        other5: toTrimmed(formData.other5),
       };
+
+      Object.keys(updateData).forEach((key) => {
+        if (updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
 
       const response = await updateProduct(selectedProduct._id, updateData);
       if (response?.success) {
+        const productLabel =
+          response.product?.name ||
+          response.product?.productName ||
+          resolvedName;
         // Success: Close modal, reset form, and refresh product list immediately
         console.log('✅ Update Success! Closing modal and refreshing product list...');
         setShowEditModal(false);
@@ -283,8 +483,8 @@ const ProductManagement = () => {
         
         // Show success message after modal is closed
         Alert.alert(
-          'Success', 
-          `Product "${response.product?.productName || formData.productName}" updated successfully!`
+          'Success',
+          `Product "${productLabel}" updated successfully!`,
         );
       } else {
         // Handle specific error messages from API
@@ -380,23 +580,36 @@ const ProductManagement = () => {
   const openEditModal = (product: Product) => {
     setSelectedProduct(product);
     setFormData({
-      productCode: product.productCode,
-      productName: product.productName,
+      productCode: product.productCode || '',
+      name: product.name || product.productName || '',
+      productName: product.productName || '',
+      partNo: product.partNo || '',
+      itemAlias: product.itemAlias || '',
       description: product.description || '',
-      category: product.category,
+      parent: product.parent || '',
+      category: product.category || '',
       subCategory: product.subCategory || '',
       brand: product.brand || '',
-      unit: product.unit,
-      price: product.price.toString(),
-      costPrice: product.costPrice?.toString() || '',
-      mrp: product.mrp?.toString() || '',
-      discount: product.discount.toString(),
-      taxRate: product.taxRate.toString(),
-      stock: {
-        current: product.stock.current.toString(),
-        minimum: product.stock.minimum.toString(),
-        maximum: product.stock.maximum.toString()
-      }
+      baseUnits: product.baseUnits || '',
+      additionalUnits: product.additionalUnits || '',
+      stdPurcRate: product.stdPurcRate?.toString() || '',
+      stdSaleRate: product.stdSaleRate?.toString() || '',
+      price: (product.price ?? product.stdSaleRate ?? 0).toString(),
+      stock: getStockValue(product.stock).toString(),
+      itemGstPer: product.itemGstPer?.toString() || '',
+      gstRate: product.gstRate?.toString() || '',
+      itemHsn: product.itemHsn || '',
+      itemHsnDesc: product.itemHsnDesc || '',
+      openingBalance: product.openingBalance?.toString() || '',
+      itemOpRate: product.itemOpRate?.toString() || '',
+      companyCode: product.companyCode || '',
+      isFinishItem: Boolean(product.isFinishItem),
+      isActive: product.isActive !== undefined ? product.isActive : true,
+      other1: product.other1 || '',
+      other2: product.other2 || '',
+      other3: product.other3 || '',
+      other4: product.other4 || '',
+      other5: product.other5 || '',
     });
     setShowEditModal(true);
   };
@@ -411,79 +624,96 @@ const ProductManagement = () => {
   const filteredProducts = showLowStock ? lowStockProducts : products;
 
   // Render product item
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <View style={styles.productCard}>
-      <TouchableOpacity 
-        style={styles.productCardContent}
-        onPress={() => openDetailsModal(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.productHeader}>
-          <View style={styles.productInfo}>
-            <Text style={styles.productName}>{item.productName}</Text>
-            <Text style={styles.productCode}>{item.productCode}</Text>
-            <Text style={styles.productCategory}>{item.category}</Text>
-          </View>
-          <View style={styles.productPrice}>
-            <Text style={styles.priceText}>₹{item.price}</Text>
-            <Text style={styles.unitText}>/{item.unit}</Text>
-          </View>
-        </View>
+  const renderProductItem = ({ item }: { item: Product }) => {
+    const stockValue = getStockValue(item.stock);
+    const isLowStock = stockValue <= LOW_STOCK_THRESHOLD;
+    const priceValue = item.price ?? item.stdSaleRate ?? item.stdPurcRate ?? 0;
+    const unitLabel = item.baseUnits || item.additionalUnits || 'units';
 
-        <View style={styles.productDetails}>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Stock:</Text>
-            <Text style={[
-              styles.detailValue,
-              item.stock.current <= item.stock.minimum && styles.lowStockText
-            ]}>
-              {item.stock.current} / {item.stock.maximum}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Status:</Text>
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: item.isAvailable ? '#10B981' : '#EF4444' }
-            ]}>
-              <Text style={styles.statusText}>
-                {item.isAvailable ? 'Available' : 'Unavailable'}
-              </Text>
+    return (
+      <View style={styles.productCard}>
+        <TouchableOpacity
+          style={styles.productCardContent}
+          onPress={() => openDetailsModal(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.productHeader}>
+            <View style={styles.productInfo}>
+              <Text style={styles.productName}>{item.productName || item.name}</Text>
+              <Text style={styles.productCode}>{item.productCode}</Text>
+              <Text style={styles.productCategory}>{item.category}</Text>
+            </View>
+            <View style={styles.productPrice}>
+              <Text style={styles.priceText}>₹{formatCurrency(priceValue)}</Text>
+              <Text style={styles.unitText}>/{unitLabel}</Text>
             </View>
           </View>
-        </View>
-      </TouchableOpacity>
 
-      <View style={styles.productActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => openEditModal(item)}
-        >
-          <Ionicons name="create-outline" size={16} color="#3B82F6" />
-          <Text style={styles.actionButtonText}>Edit</Text>
+          <View style={styles.productDetails}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Stock:</Text>
+              <Text
+                style={[
+                  styles.detailValue,
+                  isLowStock && styles.lowStockText,
+                ]}
+              >
+                {stockValue} {unitLabel}
+              </Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Finish Item:</Text>
+              <Text style={styles.detailValue}>
+                {item.isFinishItem ? 'Yes' : 'No'}
+              </Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Status:</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: item.isActive ? '#10B981' : '#EF4444' },
+                ]}
+              >
+                <Text style={styles.statusText}>
+                  {item.isActive ? 'Active' : 'Inactive'}
+                </Text>
+              </View>
+            </View>
+          </View>
         </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.stockButton]}
-          onPress={() => {
-            setSelectedProduct(item);
-            setShowStockModal(true);
-          }}
-        >
-          <Ionicons name="cube-outline" size={16} color="#F59E0B" />
-          <Text style={styles.actionButtonText}>Stock</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteProduct(item)}
-        >
-          <Ionicons name="trash-outline" size={16} color="#EF4444" />
-          <Text style={styles.actionButtonText}>Delete</Text>
-        </TouchableOpacity>
+
+        <View style={styles.productActions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.editButton]}
+            onPress={() => openEditModal(item)}
+          >
+            <Ionicons name="create-outline" size={16} color="#3B82F6" />
+            <Text style={styles.actionButtonText}>Edit</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.stockButton]}
+            onPress={() => {
+              setSelectedProduct(item);
+              setShowStockModal(true);
+            }}
+          >
+            <Ionicons name="cube-outline" size={16} color="#F59E0B" />
+            <Text style={styles.actionButtonText}>Stock</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDeleteProduct(item)}
+          >
+            <Ionicons name="trash-outline" size={16} color="#EF4444" />
+            <Text style={styles.actionButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   // Render create/edit modal
   const renderProductModal = (isEdit: boolean = false) => (
@@ -503,7 +733,7 @@ const ProductManagement = () => {
     >
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.modalHeaderButton}
             onPress={() => {
               if (isEdit) {
@@ -520,7 +750,7 @@ const ProductManagement = () => {
           <Text style={styles.modalTitle}>
             {isEdit ? 'Edit Product' : 'Create Product'}
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.modalHeaderButton}
             onPress={isEdit ? handleUpdateProduct : handleCreateProduct}
             disabled={loading}
@@ -531,202 +761,333 @@ const ProductManagement = () => {
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
+        <ScrollView
           style={styles.modalContent}
           contentContainerStyle={styles.modalContentContainer}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Code *</Text>
+          <Text style={styles.sectionTitle}>Basic Information</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Product Code *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.productCode}
+              onChangeText={(text) => updateFormValue('productCode', text)}
+              placeholder="Enter product code"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Product Name *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.productName}
+              onChangeText={(text) => {
+                updateFormValue('productName', text);
+                if (!formData.name) {
+                  updateFormValue('name', text);
+                }
+              }}
+              placeholder="Enter product name"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Internal Name</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.name}
+              onChangeText={(text) => updateFormValue('name', text)}
+              placeholder="Optional internal reference name"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Description</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={formData.description}
+              onChangeText={(text) => updateFormValue('description', text)}
+              placeholder="Enter product description"
+              multiline
+              numberOfLines={3}
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>Part Number</Text>
               <TextInput
                 style={styles.input}
-                value={formData.productCode}
-                onChangeText={(text) => setFormData({ ...formData, productCode: text })}
-                placeholder="Enter product code"
+                value={formData.partNo}
+                onChangeText={(text) => updateFormValue('partNo', text)}
+                placeholder="Enter part number"
                 placeholderTextColor="#9CA3AF"
               />
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Name *</Text>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Item Alias</Text>
               <TextInput
                 style={styles.input}
-                value={formData.productName}
-                onChangeText={(text) => setFormData({ ...formData, productName: text })}
-                placeholder="Enter product name"
+                value={formData.itemAlias}
+                onChangeText={(text) => updateFormValue('itemAlias', text)}
+                placeholder="Enter alias"
                 placeholderTextColor="#9CA3AF"
               />
             </View>
+          </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Description</Text>
+          <Text style={styles.sectionTitle}>Classification</Text>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>Category *</Text>
               <TextInput
-                style={[styles.input, styles.textArea]}
-                value={formData.description}
-                onChangeText={(text) => setFormData({ ...formData, description: text })}
-                placeholder="Enter product description"
-                multiline
-                numberOfLines={3}
+                style={styles.input}
+                value={formData.category}
+                onChangeText={(text) => updateFormValue('category', text)}
+                placeholder="Enter category"
                 placeholderTextColor="#9CA3AF"
               />
             </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Category *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.category}
-                  onChangeText={(text) => setFormData({ ...formData, category: text })}
-                  placeholder="Enter category"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.inputLabel}>Sub Category</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.subCategory}
-                  onChangeText={(text) => setFormData({ ...formData, subCategory: text })}
-                  placeholder="Enter sub category"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Sub Category</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.subCategory}
+                onChangeText={(text) => updateFormValue('subCategory', text)}
+                placeholder="Enter sub category"
+                placeholderTextColor="#9CA3AF"
+              />
             </View>
+          </View>
 
-            <View style={styles.inputGroup}>
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
               <Text style={styles.inputLabel}>Brand</Text>
               <TextInput
                 style={styles.input}
                 value={formData.brand}
-                onChangeText={(text) => setFormData({ ...formData, brand: text })}
+                onChangeText={(text) => updateFormValue('brand', text)}
                 placeholder="Enter brand"
                 placeholderTextColor="#9CA3AF"
               />
             </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Unit *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.unit}
-                  onChangeText={(text) => setFormData({ ...formData, unit: text })}
-                  placeholder="piece, kg, liter, etc."
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.inputLabel}>Price *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.price}
-                  onChangeText={(text) => setFormData({ ...formData, price: text })}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Cost Price</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.costPrice}
-                  onChangeText={(text) => setFormData({ ...formData, costPrice: text })}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.inputLabel}>MRP</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.mrp}
-                  onChangeText={(text) => setFormData({ ...formData, mrp: text })}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Discount (%)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.discount}
-                  onChangeText={(text) => setFormData({ ...formData, discount: text })}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.inputLabel}>Tax Rate (%)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.taxRate}
-                  onChangeText={(text) => setFormData({ ...formData, taxRate: text })}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>Stock Information</Text>
-            
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Current Stock</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.stock.current}
-                  onChangeText={(text) => setFormData({ 
-                    ...formData, 
-                    stock: { ...formData.stock, current: text }
-                  })}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.inputLabel}>Minimum Stock</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.stock.minimum}
-                  onChangeText={(text) => setFormData({ 
-                    ...formData, 
-                    stock: { ...formData.stock, minimum: text }
-                  })}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Maximum Stock</Text>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Parent Category</Text>
               <TextInput
                 style={styles.input}
-                value={formData.stock.maximum}
-                onChangeText={(text) => setFormData({ 
-                  ...formData, 
-                  stock: { ...formData.stock, maximum: text }
-                })}
-                placeholder="1000"
+                value={formData.parent}
+                onChangeText={(text) => updateFormValue('parent', text)}
+                placeholder="Enter parent"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.sectionTitle}>Units & Pricing</Text>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>Base Units</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.baseUnits}
+                onChangeText={(text) => updateFormValue('baseUnits', text)}
+                placeholder="e.g. pcs, ltr"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Additional Units</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.additionalUnits}
+                onChangeText={(text) => updateFormValue('additionalUnits', text)}
+                placeholder="Optional"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>Std Purchase Rate</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.stdPurcRate}
+                onChangeText={(text) => updateFormValue('stdPurcRate', text)}
+                placeholder="0.00"
                 keyboardType="numeric"
                 placeholderTextColor="#9CA3AF"
               />
             </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Std Sale Rate</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.stdSaleRate}
+                onChangeText={(text) => updateFormValue('stdSaleRate', text)}
+                placeholder="0.00"
+                keyboardType="numeric"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>Price *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.price}
+                onChangeText={(text) => updateFormValue('price', text)}
+                placeholder="0.00"
+                keyboardType="numeric"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Available Stock</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.stock}
+                onChangeText={(text) => updateFormValue('stock', text)}
+                placeholder="0"
+                keyboardType="numeric"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.sectionTitle}>Tax & Compliance</Text>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>GST Rate (%)</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.gstRate}
+                onChangeText={(text) => updateFormValue('gstRate', text)}
+                placeholder="18"
+                keyboardType="numeric"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Item GST (%)</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.itemGstPer}
+                onChangeText={(text) => updateFormValue('itemGstPer', text)}
+                placeholder="18"
+                keyboardType="numeric"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>HSN Code</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.itemHsn}
+                onChangeText={(text) => updateFormValue('itemHsn', text)}
+                placeholder="Enter HSN"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>HSN Description</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.itemHsnDesc}
+                onChangeText={(text) => updateFormValue('itemHsnDesc', text)}
+                placeholder="Enter description"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.sectionTitle}>Inventory Details</Text>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>Opening Balance</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.openingBalance}
+                onChangeText={(text) => updateFormValue('openingBalance', text)}
+                placeholder="0"
+                keyboardType="numeric"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>Opening Rate</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.itemOpRate}
+                onChangeText={(text) => updateFormValue('itemOpRate', text)}
+                placeholder="0.00"
+                keyboardType="numeric"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.sectionTitle}>Status & Metadata</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Company Code Override</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.companyCode}
+              onChangeText={(text) => updateFormValue('companyCode', text)}
+              placeholder="Optional company code"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Finish Item</Text>
+            <Switch
+              value={formData.isFinishItem}
+              onValueChange={(value) => updateFormValue('isFinishItem', value)}
+            />
+          </View>
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Active</Text>
+            <Switch
+              value={formData.isActive}
+              onValueChange={(value) => updateFormValue('isActive', value)}
+            />
+          </View>
+
+          <Text style={styles.sectionTitle}>Custom Attributes</Text>
+
+          {(['other1', 'other2', 'other3', 'other4', 'other5'] as Array<
+            keyof Pick<ProductFormState, 'other1' | 'other2' | 'other3' | 'other4' | 'other5'>
+          >).map((field) => (
+            <View style={styles.inputGroup} key={field}>
+              <Text style={styles.inputLabel}>{field.toUpperCase()}</Text>
+              <TextInput
+                style={styles.input}
+                value={formData[field]}
+                onChangeText={(text) => updateFormValue(field, text)}
+                placeholder="Enter value"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          ))}
         </ScrollView>
       </View>
     </Modal>
@@ -772,7 +1133,8 @@ const ProductManagement = () => {
                 <Text style={styles.productName}>{selectedProduct.productName}</Text>
                 <Text style={styles.productCode}>{selectedProduct.productCode}</Text>
                 <Text style={styles.currentStock}>
-                  Current Stock: {selectedProduct.stock.current}
+                  Current Stock: {getStockValue(selectedProduct.stock)}{' '}
+                  {selectedProduct.baseUnits || selectedProduct.additionalUnits || 'units'}
                 </Text>
               </View>
 
@@ -860,178 +1222,169 @@ const ProductManagement = () => {
         </View>
 
         <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-          {selectedProduct && (
+          {selectedProduct && derivedSelectedProduct && (
             <>
-              {/* Product Image */}
               <View style={styles.detailsImageContainer}>
                 <View style={styles.detailsImagePlaceholder}>
                   <Ionicons name="cube" size={64} color="#6B7280" />
                 </View>
               </View>
 
-              {/* Basic Information */}
               <View style={styles.detailsSection}>
                 <Text style={styles.detailsSectionTitle}>Basic Information</Text>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Product Name</Text>
-                  <Text style={styles.detailsValue}>{selectedProduct.productName}</Text>
-                </View>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Product Code</Text>
-                  <Text style={styles.detailsValue}>{selectedProduct.productCode}</Text>
-                </View>
-                
+                <DetailRow
+                  label="Product Name"
+                  value={selectedProduct.productName || selectedProduct.name}
+                />
+                <DetailRow
+                  label="Internal Name"
+                  value={selectedProduct.name}
+                />
+                <DetailRow
+                  label="Product Code"
+                  value={selectedProduct.productCode}
+                />
                 <View style={styles.detailsRow}>
                   <Text style={styles.detailsLabel}>Description</Text>
-                  <Text style={styles.detailsValue}>{selectedProduct.description || 'No description'}</Text>
+                  <Text style={styles.detailsValue}>
+                    {selectedProduct.description || 'No description'}
+                  </Text>
                 </View>
               </View>
 
-              {/* Category Information */}
               <View style={styles.detailsSection}>
-                <Text style={styles.detailsSectionTitle}>Category Information</Text>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Category</Text>
-                  <Text style={styles.detailsValue}>{selectedProduct.category}</Text>
-                </View>
-                
-                {selectedProduct.subCategory && (
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Sub Category</Text>
-                    <Text style={styles.detailsValue}>{selectedProduct.subCategory}</Text>
-                  </View>
-                )}
-                
-                {selectedProduct.brand && (
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Brand</Text>
-                    <Text style={styles.detailsValue}>{selectedProduct.brand}</Text>
-                  </View>
-                )}
+                <Text style={styles.detailsSectionTitle}>Classification</Text>
+                <DetailRow label="Category" value={selectedProduct.category} />
+                <DetailRow
+                  label="Sub Category"
+                  value={selectedProduct.subCategory}
+                />
+                <DetailRow label="Brand" value={selectedProduct.brand} />
+                <DetailRow label="Parent" value={selectedProduct.parent} />
               </View>
 
-              {/* Pricing Information */}
               <View style={styles.detailsSection}>
-                <Text style={styles.detailsSectionTitle}>Pricing Information</Text>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Price</Text>
-                  <Text style={styles.detailsValue}>₹{selectedProduct.price} / {selectedProduct.unit}</Text>
-                </View>
-                
-                {selectedProduct.costPrice && (
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Cost Price</Text>
-                    <Text style={styles.detailsValue}>₹{selectedProduct.costPrice}</Text>
-                  </View>
-                )}
-                
-                {selectedProduct.mrp && (
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>MRP</Text>
-                    <Text style={styles.detailsValue}>₹{selectedProduct.mrp}</Text>
-                  </View>
-                )}
-                
-                {selectedProduct.discount && (
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Discount</Text>
-                    <Text style={styles.detailsValue}>₹{selectedProduct.discount}</Text>
-                  </View>
-                )}
-                
-                {selectedProduct.taxRate && (
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Tax Rate</Text>
-                    <Text style={styles.detailsValue}>{selectedProduct.taxRate}%</Text>
-                  </View>
-                )}
+                <Text style={styles.detailsSectionTitle}>Units & Pricing</Text>
+                <DetailRow
+                  label="Base Units"
+                  value={selectedProduct.baseUnits}
+                />
+                <DetailRow
+                  label="Additional Units"
+                  value={selectedProduct.additionalUnits}
+                />
+                <DetailRow
+                  label="Std Purchase Rate"
+                  value={
+                    selectedProduct.stdPurcRate !== undefined
+                      ? `₹${formatCurrency(selectedProduct.stdPurcRate)}`
+                      : undefined
+                  }
+                />
+                <DetailRow
+                  label="Std Sale Rate"
+                  value={
+                    selectedProduct.stdSaleRate !== undefined
+                      ? `₹${formatCurrency(selectedProduct.stdSaleRate)}`
+                      : undefined
+                  }
+                />
+                <DetailRow
+                  label="Price"
+                  value={`₹${formatCurrency(derivedSelectedProduct.priceValue)} / ${selectedProduct.baseUnits || 'units'}`}
+                />
+                <DetailRow
+                  label="Stock"
+                  value={`${derivedSelectedProduct.stockValue} ${selectedProduct.baseUnits || 'units'}`}
+                />
               </View>
 
-              {/* Stock Information */}
               <View style={styles.detailsSection}>
-                <Text style={styles.detailsSectionTitle}>Stock Information</Text>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Current Stock</Text>
-                  <Text style={styles.detailsValue}>{selectedProduct.stock.current} {selectedProduct.unit}</Text>
-                </View>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Minimum Stock</Text>
-                  <Text style={styles.detailsValue}>{selectedProduct.stock.minimum} {selectedProduct.unit}</Text>
-                </View>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Maximum Stock</Text>
-                  <Text style={styles.detailsValue}>{selectedProduct.stock.maximum} {selectedProduct.unit}</Text>
-                </View>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Stock Status</Text>
-                  <View style={[
-                    styles.detailsBadge,
-                    { backgroundColor: selectedProduct.stock.current <= selectedProduct.stock.minimum ? '#FEF3C7' : '#D1FAE5' }
-                  ]}>
-                    <Text style={[
-                      styles.detailsBadgeText,
-                      { color: selectedProduct.stock.current <= selectedProduct.stock.minimum ? '#D97706' : '#059669' }
-                    ]}>
-                      {selectedProduct.stock.current <= selectedProduct.stock.minimum ? 'Low Stock' : 'In Stock'}
-                    </Text>
-                  </View>
-                </View>
+                <Text style={styles.detailsSectionTitle}>Tax & Compliance</Text>
+                <DetailRow
+                  label="GST Rate (%)"
+                  value={selectedProduct.gstRate}
+                />
+                <DetailRow
+                  label="Item GST (%)"
+                  value={selectedProduct.itemGstPer}
+                />
+                <DetailRow label="HSN Code" value={selectedProduct.itemHsn} />
+                <DetailRow
+                  label="HSN Description"
+                  value={selectedProduct.itemHsnDesc}
+                />
               </View>
 
-              {/* Status Information */}
               <View style={styles.detailsSection}>
-                <Text style={styles.detailsSectionTitle}>Status Information</Text>
-                
+                <Text style={styles.detailsSectionTitle}>Inventory</Text>
+                <DetailRow
+                  label="Opening Balance"
+                  value={selectedProduct.openingBalance}
+                />
+                <DetailRow
+                  label="Opening Rate"
+                  value={
+                    selectedProduct.itemOpRate !== undefined
+                      ? `₹${formatCurrency(selectedProduct.itemOpRate)}`
+                      : undefined
+                  }
+                />
+                <DetailRow
+                  label="Finish Item"
+                  value={selectedProduct.isFinishItem}
+                />
                 <View style={styles.detailsRow}>
                   <Text style={styles.detailsLabel}>Active Status</Text>
-                  <View style={[
-                    styles.detailsBadge,
-                    { backgroundColor: selectedProduct.isActive ? '#D1FAE5' : '#FEE2E2' }
-                  ]}>
-                    <Text style={[
-                      styles.detailsBadgeText,
-                      { color: selectedProduct.isActive ? '#059669' : '#DC2626' }
-                    ]}>
+                  <View
+                    style={[
+                      styles.detailsBadge,
+                      {
+                        backgroundColor: selectedProduct.isActive
+                          ? '#D1FAE5'
+                          : '#FEE2E2',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.detailsBadgeText,
+                        {
+                          color: selectedProduct.isActive
+                            ? '#059669'
+                            : '#DC2626',
+                        },
+                      ]}
+                    >
                       {selectedProduct.isActive ? 'Active' : 'Inactive'}
                     </Text>
                   </View>
                 </View>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Availability</Text>
-                  <View style={[
-                    styles.detailsBadge,
-                    { backgroundColor: selectedProduct.isAvailable ? '#D1FAE5' : '#FEE2E2' }
-                  ]}>
-                    <Text style={[
-                      styles.detailsBadgeText,
-                      { color: selectedProduct.isAvailable ? '#059669' : '#DC2626' }
-                    ]}>
-                      {selectedProduct.isAvailable ? 'Available' : 'Unavailable'}
-                    </Text>
-                  </View>
-                </View>
               </View>
 
-              {/* Timestamps */}
               <View style={styles.detailsSection}>
-                <Text style={styles.detailsSectionTitle}>Timestamps</Text>
-                
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Created At</Text>
-                  <Text style={styles.detailsValue}>
-                    {new Date(selectedProduct.createdAt).toLocaleDateString()} {new Date(selectedProduct.createdAt).toLocaleTimeString()}
-                  </Text>
-                </View>
-                
+                <Text style={styles.detailsSectionTitle}>Metadata</Text>
+                <DetailRow
+                  label="Company Code"
+                  value={selectedProduct.companyCode}
+                />
+                {(['other1', 'other2', 'other3', 'other4', 'other5'] as Array<
+                  keyof Pick<Product, 'other1' | 'other2' | 'other3' | 'other4' | 'other5'>
+                >).map((field) => (
+                  <DetailRow
+                    key={field}
+                    label={field.toUpperCase()}
+                    value={selectedProduct[field]}
+                  />
+                ))}
+                <DetailRow
+                  label="Created At"
+                  value={derivedSelectedProduct.createdAtLabel}
+                />
+                <DetailRow
+                  label="Updated At"
+                  value={derivedSelectedProduct.updatedAtLabel}
+                />
               </View>
             </>
           )}
@@ -1501,6 +1854,17 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: 'top',
     paddingTop: 14,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
   },
   sectionTitle: {
     fontSize: 16,

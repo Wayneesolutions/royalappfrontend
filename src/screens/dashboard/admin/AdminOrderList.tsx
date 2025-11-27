@@ -20,6 +20,13 @@ interface OrderItem {
   productId: string;
   productCode: string;
   productName: string;
+  partNo?: string;
+  itemAlias?: string;
+  category?: string;
+  subCategory?: string;
+  brand?: string;
+  itemHsn?: string;
+  itemHsnDesc?: string;
   unit: string;
   unitPrice: number;
   quantity: number;
@@ -158,6 +165,26 @@ const formatCurrency = (value?: number | string | null) => {
     return order.dealerName || order.customerName || 'Unknown Dealer';
   };
 
+const getDealerEmail = (order: Order) => {
+  if (typeof order.dealerId === 'object' && order.dealerId?.email) {
+    return order.dealerId.email || 'N/A';
+  }
+  if (typeof order.customerId === 'object' && order.customerId?.email) {
+    return order.customerId.email || 'N/A';
+  }
+  return order.customerEmail || 'N/A';
+};
+
+const getDealerMobile = (order: Order) => {
+  if (typeof order.dealerId === 'object' && order.dealerId?.mobile) {
+    return order.dealerId.mobile || 'N/A';
+  }
+  if (typeof order.customerId === 'object' && order.customerId?.mobile) {
+    return order.customerId.mobile || 'N/A';
+  }
+  return order.customerMobile || 'N/A';
+};
+
   // Helper function to get subdealer name (shipping address)
   const getSubDealerName = (order: Order) => {
     if (typeof order.subDealerId === 'object' && order.subDealerId?.name) {
@@ -165,6 +192,24 @@ const formatCurrency = (value?: number | string | null) => {
     }
     return order.subDealerName || order.shippingAddress?.name || 'No Sub Dealer';
   };
+
+const getSubDealerEmail = (order: Order) => {
+  if (typeof order.subDealerId === 'object' && order.subDealerId?.email) {
+    return order.subDealerId.email || 'N/A';
+  }
+  const shippingEmail =
+    typeof order.shippingAddress === 'object'
+      ? (order.shippingAddress as any)?.email
+      : undefined;
+  return shippingEmail || 'N/A';
+};
+
+const getSubDealerMobile = (order: Order) => {
+  if (typeof order.subDealerId === 'object' && order.subDealerId?.mobile) {
+    return order.subDealerId.mobile || 'N/A';
+  }
+  return order.shippingAddress?.mobile || 'N/A';
+};
 
   // Helper function to get subdealer address
   const getSubDealerAddress = (order: Order) => {
@@ -474,16 +519,12 @@ const formatCurrency = (value?: number | string | null) => {
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Dealer Email</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.dealerId === 'object' ? selectedOrder.dealerId.email : selectedOrder.customerEmail || 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getDealerEmail(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.dealerId === 'object' ? selectedOrder.dealerId.mobile : selectedOrder.customerMobile || 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getDealerMobile(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>
@@ -505,16 +546,12 @@ const formatCurrency = (value?: number | string | null) => {
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Email</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' ? selectedOrder.subDealerId.email : 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getSubDealerEmail(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' ? selectedOrder.subDealerId.mobile : selectedOrder.shippingAddress?.mobile || 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getSubDealerMobile(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>
@@ -581,6 +618,15 @@ const formatCurrency = (value?: number | string | null) => {
                       <View style={styles.itemInfo}>
                         <Text style={styles.itemName}>{item.productName}</Text>
                         <Text style={styles.itemCode}>{item.productCode}</Text>
+                        {item.partNo ? (
+                          <Text style={styles.itemMeta}>Part No: {item.partNo}</Text>
+                        ) : null}
+                        {item.itemHsn ? (
+                          <Text style={styles.itemMeta}>HSN: {item.itemHsn}</Text>
+                        ) : null}
+                        {item.category ? (
+                          <Text style={styles.itemMeta}>Category: {item.category}</Text>
+                        ) : null}
                         <Text style={styles.itemPrice}>
                           {formatCurrency(item.unitPrice)} / {item.unit}
                         </Text>
@@ -1119,6 +1165,11 @@ const styles = StyleSheet.create({
   itemCode: {
     fontSize: 12,
     color: '#6B7280',
+    marginBottom: 2,
+  },
+  itemMeta: {
+    fontSize: 12,
+    color: '#4B5563',
     marginBottom: 2,
   },
   itemPrice: {

@@ -57,20 +57,55 @@ interface Product {
   _id: string;
   productCode: string;
   productName: string;
-  price: number;
-  unit?: string;
-  stock: number | {
-    current: number;
+  name?: string;
+  description?: string;
+  partNo?: string;
+  itemAlias?: string;
+  parent?: string;
+  category?: string;
+  subCategory?: string;
+  brand?: string;
+  baseUnits?: string;
+  additionalUnits?: string;
+  stdPurcRate?: number;
+  stdSaleRate?: number;
+  price?: number;
+  stock?: number | {
+    current?: number;
     minimum?: number;
     maximum?: number;
   };
+  itemGstPer?: number;
   gstRate?: number;
+  itemHsn?: string;
+  itemHsnDesc?: string;
+  openingBalance?: number;
+  itemOpRate?: number;
+  companyCode?: string;
+  unit?: string;
+  isFinishItem?: boolean;
+  isActive?: boolean;
+  other1?: string;
+  other2?: string;
+  other3?: string;
+  other4?: string;
+  other5?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface OrderItem {
   productId: string;
   productCode: string;
   productName: string;
+  partNo?: string;
+  itemAlias?: string;
+  category?: string;
+  subCategory?: string;
+  brand?: string;
+  itemHsn?: string;
+  itemHsnDesc?: string;
+  description?: string;
   unit: string;
   unitPrice: number;
   quantity: number;
@@ -87,6 +122,8 @@ interface OrderItem {
   totalTaxAmount: number;
   totalAmount: number;
   availableStock: number;
+  baseUnits?: string;
+  additionalUnits?: string;
 }
 
 interface ProductSelectionState {
@@ -121,6 +158,104 @@ const getUnitLabel = (unit?: string): string => {
 
   return DEFAULT_UNIT_LABEL;
 };
+
+const getProductUnitLabel = (product?: Product, fallbackUnit?: string): string =>
+  product?.baseUnits ||
+  product?.unit ||
+  product?.additionalUnits ||
+  fallbackUnit ||
+  DEFAULT_UNIT_LABEL;
+
+const coerceNumber = (value: any): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
+
+const normalizeProduct = (raw: any): Product => {
+  const stockValue =
+    raw?.stock ??
+    raw?.availableStock ??
+    raw?.currentStock ??
+    (typeof raw?.stock === 'number' ? raw.stock : undefined);
+
+  return {
+    _id: raw?._id ?? raw?.id ?? '',
+    productCode: raw?.productCode ?? '',
+    productName: raw?.productName ?? raw?.name ?? '',
+    name: raw?.name,
+    description: raw?.description,
+    partNo: raw?.partNo,
+    itemAlias: raw?.itemAlias,
+    parent: raw?.parent,
+    category: raw?.category,
+    subCategory: raw?.subCategory,
+    brand: raw?.brand,
+    baseUnits: raw?.baseUnits,
+    additionalUnits: raw?.additionalUnits,
+    stdPurcRate: coerceNumber(raw?.stdPurcRate),
+    stdSaleRate: coerceNumber(raw?.stdSaleRate),
+    price: coerceNumber(raw?.price),
+    stock:
+      typeof stockValue === 'object' || typeof stockValue === 'number'
+        ? stockValue
+        : coerceNumber(stockValue),
+    itemGstPer: coerceNumber(raw?.itemGstPer),
+    gstRate: coerceNumber(raw?.gstRate),
+    itemHsn: raw?.itemHsn,
+    itemHsnDesc: raw?.itemHsnDesc,
+    openingBalance: coerceNumber(raw?.openingBalance),
+    itemOpRate: coerceNumber(raw?.itemOpRate),
+    companyCode: raw?.companyCode,
+    unit: raw?.unit,
+    isFinishItem: raw?.isFinishItem,
+    isActive: raw?.isActive,
+    other1: raw?.other1,
+    other2: raw?.other2,
+    other3: raw?.other3,
+    other4: raw?.other4,
+    other5: raw?.other5,
+    createdAt: raw?.createdAt,
+    updatedAt: raw?.updatedAt,
+  };
+};
+
+const getProductPrice = (product?: Product): number => {
+  const candidates = [
+    product?.stdSaleRate,
+    product?.price,
+    product?.stdPurcRate,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return 0;
+};
+
+const getProductGstRate = (product?: Product): number =>
+  (typeof product?.itemGstPer === 'number' ? product.itemGstPer : undefined) ??
+  (typeof product?.gstRate === 'number' ? product.gstRate : undefined) ??
+  DEFAULT_GST_RATE;
+
+const getProductName = (product?: Product): string =>
+  (product?.name || product?.productName || '').trim();
+
+const getProductPartNo = (product?: Product): string =>
+  product?.partNo || product?.itemAlias || '';
+
+const getProductHsn = (product?: Product): string => product?.itemHsn || '';
+
+const getProductCategory = (product?: Product): string =>
+  product?.category || 'General';
 
 const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
 
@@ -359,14 +494,29 @@ const AdminCreateOrder = () => {
       console.log('🔍 Fetching products...');
       const productsResponse = await getProducts();
       console.log('📡 Products response:', productsResponse);
-      
-      if (productsResponse?.success) {
-        setProducts(productsResponse.products || []);
-        console.log('✅ Products loaded:', productsResponse.products?.length || 0);
-      } else {
-        console.log('❌ Failed to load products:', productsResponse?.message);
-        Alert.alert('Error', 'Failed to load products: ' + (productsResponse?.message || 'Unknown error'));
+
+      let productList: any[] = [];
+      if (Array.isArray(productsResponse)) {
+        productList = productsResponse;
+      } else if (Array.isArray(productsResponse?.products)) {
+        productList = productsResponse.products;
+      } else if (Array.isArray(productsResponse?.data?.products)) {
+        productList = productsResponse.data.products;
+      } else if (productsResponse?.success) {
+        const nested =
+          productsResponse.data?.products ||
+          productsResponse.data?.docs ||
+          productsResponse.data?.results ||
+          productsResponse.products ||
+          productsResponse.data;
+        if (Array.isArray(nested)) {
+          productList = nested;
+        }
       }
+
+      const normalizedProducts = productList.map(normalizeProduct);
+      setProducts(normalizedProducts);
+      console.log('✅ Products loaded:', normalizedProducts.length);
     } catch (error) {
       console.error('❌ Error fetching initial data:', error);
       Alert.alert('Error', 'Failed to load data: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -409,7 +559,8 @@ const AdminCreateOrder = () => {
     if (!response?.success || !response.product) {
       throw new Error(response?.message || 'Product not available at the moment.');
     }
-    return response.product as Product;
+  const rawProduct = response.product || response.data?.product || response.data;
+  return normalizeProduct(rawProduct);
   };
 
   const handleProductQuantityChange = (product: Product, rawValue: string) => {
@@ -702,9 +853,16 @@ const AdminCreateOrder = () => {
     }
 
     try {
-      const freshProduct = freshProductOverride ?? await getFreshProduct(product._id);
-      const unitLabel = getUnitLabel(freshProduct.unit);
-      const availableStock = getStockNumber(freshProduct.stock);
+      const freshProduct =
+        freshProductOverride ?? (await getFreshProduct(product._id));
+      const unitLabel = getProductUnitLabel(freshProduct, getUnitLabel(product.unit));
+      const availableStock = getStockNumber(freshProduct.stock ?? product.stock);
+      const resolvedPrice = getProductPrice(freshProduct);
+      const resolvedGstRate = getProductGstRate(freshProduct);
+      const resolvedName = getProductName(freshProduct);
+      const partNumber = getProductPartNo(freshProduct);
+      const hsnCode = getProductHsn(freshProduct);
+      const category = getProductCategory(freshProduct);
 
       if (quantity > availableStock) {
         Alert.alert(
@@ -725,27 +883,39 @@ const AdminCreateOrder = () => {
           updatedItems[existingIndex] = {
             ...previous,
             quantity,
-            unitPrice: freshProduct.price,
-            gstRate:
-              previous.gstRate ??
-              (typeof (freshProduct as any).gstRate === 'number'
-                ? (freshProduct as any).gstRate
-                : DEFAULT_GST_RATE),
+            unitPrice: resolvedPrice,
+            gstRate: previous.gstRate ?? resolvedGstRate,
             availableStock,
+            partNo: previous.partNo || partNumber,
+            itemHsn: previous.itemHsn || hsnCode,
+            category: previous.category || category,
+            itemAlias: previous.itemAlias || freshProduct.itemAlias,
+            baseUnits: previous.baseUnits || freshProduct.baseUnits,
+            additionalUnits: previous.additionalUnits || freshProduct.additionalUnits,
+            itemHsnDesc: previous.itemHsnDesc || freshProduct.itemHsnDesc,
+            brand: previous.brand || freshProduct.brand,
+            description: previous.description || freshProduct.description,
           };
         } else {
           updatedItems.push({
             productId: freshProduct._id,
             productCode: freshProduct.productCode,
-            productName: freshProduct.productName,
+            productName: resolvedName,
+            partNo: partNumber,
+            itemAlias: freshProduct.itemAlias,
+            category,
+            subCategory: freshProduct.subCategory,
+            brand: freshProduct.brand,
+            itemHsn: hsnCode,
+            itemHsnDesc: freshProduct.itemHsnDesc,
+            description: freshProduct.description,
+            baseUnits: freshProduct.baseUnits,
+            additionalUnits: freshProduct.additionalUnits,
             unit: unitLabel,
-            unitPrice: freshProduct.price,
+            unitPrice: resolvedPrice,
             quantity,
             discount: 0,
-            gstRate:
-              typeof (freshProduct as any).gstRate === 'number'
-                ? (freshProduct as any).gstRate
-                : DEFAULT_GST_RATE,
+            gstRate: resolvedGstRate,
             taxType: gstType,
             taxableValue: 0,
             cgstRate: 0,
@@ -888,6 +1058,19 @@ const AdminCreateOrder = () => {
           : normalizeAddress(selectedDealer.address),
         items: itemsWithQuantity.map(item => ({
           productId: item.productId,
+          productCode: item.productCode,
+          productName: item.productName,
+          partNo: item.partNo,
+          itemAlias: item.itemAlias,
+          category: item.category,
+          subCategory: item.subCategory,
+          brand: item.brand,
+          itemHsn: item.itemHsn,
+          itemHsnDesc: item.itemHsnDesc,
+          unit: item.unit,
+          baseUnits: item.baseUnits,
+          additionalUnits: item.additionalUnits,
+          description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           discount: item.discount ?? 0,
@@ -991,16 +1174,22 @@ const AdminCreateOrder = () => {
   const renderProductItem = ({ item }: { item: Product }) => {
     const selection = getSelectionState(item);
     const quantityNumber = parseInt(selection.quantity, 10) || 0;
+    const resolvedUnit = getProductUnitLabel(item, getUnitLabel(item.unit));
+    const resolvedPrice = getProductPrice(item);
+    const resolvedGst = getProductGstRate(item);
+    const partNumber = getProductPartNo(item);
+    const hsnCode = getProductHsn(item);
+    const category = getProductCategory(item);
     const existingItem = orderItems.find(
       (orderItem) =>
         orderItem.productId === item._id &&
-        orderItem.unitPrice === item.price &&
-        orderItem.unit === getUnitLabel(item.unit)
+        orderItem.unitPrice === resolvedPrice &&
+        orderItem.unit === resolvedUnit
     );
     const isSameProductDifferentPrice = orderItems.some(
       (orderItem) =>
         orderItem.productId === item._id &&
-        (orderItem.unitPrice !== item.price || orderItem.unit !== getUnitLabel(item.unit))
+        (orderItem.unitPrice !== resolvedPrice || orderItem.unit !== resolvedUnit)
     );
 
     const availableStockLabel =
@@ -1029,7 +1218,7 @@ const AdminCreateOrder = () => {
                 existingItem && styles.addedProductText,
               ]}
             >
-              {item.productName}
+              {getProductName(item)}
             </Text>
             <Text
               style={[
@@ -1037,7 +1226,25 @@ const AdminCreateOrder = () => {
                 existingItem && styles.addedProductSubtext,
               ]}
             >
-              {item.productCode} • ₹{item.price}
+              {item.productCode} • ₹{resolvedPrice.toFixed(2)}
+            </Text>
+            {partNumber ? (
+              <Text
+                style={[
+                  styles.dropdownItemSubtext,
+                  existingItem && styles.addedProductSubtext,
+                ]}
+              >
+                Part No: {partNumber}
+              </Text>
+            ) : null}
+            <Text
+              style={[
+                styles.dropdownItemSubtext,
+                existingItem && styles.addedProductSubtext,
+              ]}
+            >
+              Category: {category}
             </Text>
             <Text
               style={[
@@ -1045,10 +1252,21 @@ const AdminCreateOrder = () => {
                 existingItem && styles.addedProductSubtext,
               ]}
             >
-              GST: {(typeof item.gstRate === 'number' ? item.gstRate : DEFAULT_GST_RATE)}%
+              GST: {resolvedGst}%
             </Text>
+            {hsnCode ? (
+              <Text
+                style={[
+                  styles.dropdownItemSubtext,
+                  existingItem && styles.addedProductSubtext,
+                ]}
+              >
+                HSN: {hsnCode}
+              </Text>
+            ) : null}
             <Text style={styles.productAvailabilityText}>
-              Available: {availableStockLabel}
+            Available: {availableStockLabel}{' '}
+            {getProductUnitLabel(item)}
             </Text>
           </View>
           {existingItem ? (
@@ -1150,6 +1368,15 @@ const AdminCreateOrder = () => {
       <View style={styles.orderItemInfo}>
         <Text style={styles.orderItemName}>{item.productName}</Text>
         <Text style={styles.orderItemCode}>{item.productCode}</Text>
+        {item.partNo ? (
+          <Text style={styles.orderItemMeta}>Part No: {item.partNo}</Text>
+        ) : null}
+        {item.itemHsn ? (
+          <Text style={styles.orderItemMeta}>HSN: {item.itemHsn}</Text>
+        ) : null}
+        {item.category ? (
+          <Text style={styles.orderItemMeta}>Category: {item.category}</Text>
+        ) : null}
         <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
         <Text style={styles.orderItemStock}>
           Available: {item.availableStock} {item.unit}
@@ -1786,6 +2013,11 @@ const styles = StyleSheet.create({
   orderItemCode: {
     fontSize: 14,
     color: '#6B7280',
+    marginBottom: 4,
+  },
+  orderItemMeta: {
+    fontSize: 12,
+    color: '#4B5563',
     marginBottom: 4,
   },
   orderItemPrice: {

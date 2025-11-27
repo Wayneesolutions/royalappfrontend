@@ -67,6 +67,7 @@ interface Company {
   createdAt: string;
   maxUsers?: number;
   guid?: string;
+  tallySerialId?: string;
   admin: {
     name: string;
     phone: string;
@@ -230,6 +231,9 @@ const CompaniesListScreen = ({
                   <Text style={styles.companyCode}>Code: {company.code}</Text>
                   <Text style={styles.companyGuid}>
                     GUID: {company.guid ? company.guid : 'Not assigned'}
+                  </Text>
+                  <Text style={styles.companyGuid}>
+                    Tally Serial: {company.tallySerialId ? company.tallySerialId : 'Not assigned'}
                   </Text>
                 </View>
               </View>
@@ -641,6 +645,16 @@ const CompanyDetailsScreen = ({
                     <Text style={styles.infoLabel}>Company GUID</Text>
                   </View>
                   <Text style={styles.infoValue}>{company.guid || 'Not assigned'}</Text>
+                </View>
+
+                <View style={styles.infoItem}>
+                  <View style={styles.infoItemHeader}>
+                    <Settings size={16} color="#6b7280" />
+                    <Text style={styles.infoLabel}>Tally Serial ID</Text>
+                  </View>
+                  <Text style={styles.infoValue}>
+                    {company.tallySerialId || 'Not provided'}
+                  </Text>
                 </View>
                 
                 <View style={styles.infoItem}>
@@ -1345,6 +1359,7 @@ const CompanyFormScreen = ({
   });
   const [maxUsers, setMaxUsers] = useState<string>('100');
   const [guid, setGuid] = useState<string>(company?.guid ? String(company.guid) : '');
+  const [tallySerialId, setTallySerialId] = useState<string>(company?.tallySerialId || '');
   const [adminOptions, setAdminOptions] = useState<AdminOption[]>([]);
   const [selectedAdminId, setSelectedAdminId] = useState<string>('');
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
@@ -1361,6 +1376,7 @@ const CompanyFormScreen = ({
       setPincode(company.pincode || '');
       setMaxUsers(company.maxUsers?.toString() || '100');
       setGuid(company.guid?.toString() || '');
+      setTallySerialId(company.tallySerialId || '');
     }
   }, [isEdit, company]);
 
@@ -1380,6 +1396,7 @@ const CompanyFormScreen = ({
         country,
         pincode,
         guid,
+        tallySerialId,
       });
     } finally {
       setIsSubmitting(false);
@@ -1559,6 +1576,15 @@ const CompanyFormScreen = ({
               onChangeText={setGuid}
               placeholder="Unique GUID"
               keyboardType="numeric"
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.formLabel}>Tally Serial ID</Text>
+            <TextInput
+              style={styles.formInput}
+              value={tallySerialId}
+              onChangeText={setTallySerialId}
+              placeholder="Enter Tally serial ID"
+              autoCapitalize="characters"
               placeholderTextColor="#9ca3af"
             />
             <Text style={styles.formLabel}>Assign Admin (optional)</Text>
@@ -1748,6 +1774,7 @@ const CompanyManagementSystem = () => {
           name: c.companyName,
           code: c.companyCode,
           guid: c.guid ? String(c.guid) : '',
+          tallySerialId: c.tallySerialId || '',
           address: c.contactDetails?.address?.street || '',
           city: c.contactDetails?.address?.city || '',
           state: c.contactDetails?.address?.state || '',
@@ -1825,6 +1852,9 @@ const CompanyManagementSystem = () => {
         if (data.guid) {
           payload.guid = Number(data.guid);
         }
+        if (data.tallySerialId) {
+          payload.tallySerialId = data.tallySerialId.trim();
+        }
 
         const res = await apiService.superadminCreateCompany(payload as any);
         if (res.success && res.data) {
@@ -1866,6 +1896,9 @@ const CompanyManagementSystem = () => {
 
         if (data.guid) {
           payload.guid = Number(data.guid);
+        }
+        if (data.tallySerialId) {
+          payload.tallySerialId = data.tallySerialId.trim();
         }
 
         const res = await apiService.superadminUpdateCompany(selectedCompany.id, payload);

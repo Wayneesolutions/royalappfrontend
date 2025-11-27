@@ -45,6 +45,104 @@ const getUnitLabel = (unit?: string): string => {
   return DEFAULT_UNIT_LABEL;
 };
 
+const getProductUnitLabel = (product?: Product, fallbackUnit?: string): string =>
+  product?.baseUnits ||
+  product?.unit ||
+  product?.additionalUnits ||
+  fallbackUnit ||
+  DEFAULT_UNIT_LABEL;
+
+const coerceNumber = (value: any): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
+
+const normalizeProduct = (raw: any): Product => {
+  const stockValue =
+    raw?.stock ??
+    raw?.availableStock ??
+    raw?.currentStock ??
+    (typeof raw?.stock === 'number' ? raw.stock : undefined);
+
+  return {
+    _id: raw?._id ?? raw?.id ?? '',
+    productCode: raw?.productCode ?? '',
+    productName: raw?.productName ?? raw?.name ?? '',
+    name: raw?.name,
+    description: raw?.description,
+    partNo: raw?.partNo,
+    itemAlias: raw?.itemAlias,
+    parent: raw?.parent,
+    category: raw?.category,
+    subCategory: raw?.subCategory,
+    brand: raw?.brand,
+    baseUnits: raw?.baseUnits,
+    additionalUnits: raw?.additionalUnits,
+    stdPurcRate: coerceNumber(raw?.stdPurcRate),
+    stdSaleRate: coerceNumber(raw?.stdSaleRate),
+    price: coerceNumber(raw?.price),
+    unit: raw?.unit,
+    stock:
+      typeof stockValue === 'object' || typeof stockValue === 'number'
+        ? stockValue
+        : coerceNumber(stockValue),
+    isActive: raw?.isActive,
+    isFinishItem: raw?.isFinishItem,
+    gstRate: coerceNumber(raw?.gstRate),
+    itemGstPer: coerceNumber(raw?.itemGstPer),
+    itemHsn: raw?.itemHsn,
+    itemHsnDesc: raw?.itemHsnDesc,
+    openingBalance: coerceNumber(raw?.openingBalance),
+    itemOpRate: coerceNumber(raw?.itemOpRate),
+    companyCode: raw?.companyCode,
+    other1: raw?.other1,
+    other2: raw?.other2,
+    other3: raw?.other3,
+    other4: raw?.other4,
+    other5: raw?.other5,
+    createdAt: raw?.createdAt,
+    updatedAt: raw?.updatedAt,
+  };
+};
+
+const getProductPrice = (product?: Product): number => {
+  const candidates = [
+    product?.stdSaleRate,
+    product?.price,
+    product?.stdPurcRate,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return 0;
+};
+
+const getProductGstRate = (product?: Product): number =>
+  (typeof product?.itemGstPer === 'number' ? product.itemGstPer : undefined) ??
+  (typeof product?.gstRate === 'number' ? product.gstRate : undefined) ??
+  DEFAULT_GST_RATE;
+
+const getProductName = (product?: Product): string =>
+  (product?.name || product?.productName || '').trim();
+
+const getProductPartNo = (product?: Product): string =>
+  product?.partNo || product?.itemAlias || '';
+
+const getProductHsn = (product?: Product): string => product?.itemHsn || '';
+
+const getProductCategory = (product?: Product): string =>
+  product?.category || 'General';
+
 const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
 
 const normalizeAddress = (
@@ -57,31 +155,18 @@ const normalizeAddress = (
   country: address?.country || 'India',
 });
 
-const normalizeProduct = (product: any): Product => {
-  const parsedPrice =
-    typeof product?.price === 'number' ? product.price : parseFloat(product?.price ?? '0');
-  const resolvedPrice = Number.isFinite(parsedPrice) ? parsedPrice : 0;
-  const rawStock =
-    product?.stock ??
-    product?.currentStock ??
-    (typeof product?.availableStock === 'number' ? product.availableStock : undefined);
-
-  return {
-    _id: product?._id,
-    productCode: product?.productCode ?? '',
-    productName: product?.productName ?? '',
-    price: resolvedPrice,
-    unit: product?.unit,
-    stock: rawStock ?? 0,
-    isActive: product?.isActive,
-    gstRate: product?.gstRate,
-  };
-};
-
 interface OrderItem {
   productId: string;
   productCode: string;
   productName: string;
+  partNo?: string;
+  itemAlias?: string;
+  category?: string;
+  subCategory?: string;
+  brand?: string;
+  itemHsn?: string;
+  itemHsnDesc?: string;
+  description?: string;
   unit: string;
   unitPrice: number;
   quantity: number;
@@ -98,6 +183,8 @@ interface OrderItem {
   totalTaxAmount: number;
   totalAmount: number;
   availableStock: number;
+  baseUnits?: string;
+  additionalUnits?: string;
 }
 
 interface User {
@@ -119,15 +206,41 @@ interface Product {
   _id: string;
   productName: string;
   productCode: string;
-  price: number;
+  name?: string;
+  description?: string;
+  partNo?: string;
+  itemAlias?: string;
+  parent?: string;
+  category?: string;
+  subCategory?: string;
+  brand?: string;
+  baseUnits?: string;
+  additionalUnits?: string;
+  stdPurcRate?: number;
+  stdSaleRate?: number;
+  price?: number;
   unit?: string;
-  stock: number | {
+  stock?: number | {
     current?: number;
     minimum?: number;
     maximum?: number;
   };
   isActive?: boolean;
+  isFinishItem?: boolean;
   gstRate?: number;
+  itemGstPer?: number;
+  itemHsn?: string;
+  itemHsnDesc?: string;
+  openingBalance?: number;
+  itemOpRate?: number;
+  companyCode?: string;
+  other1?: string;
+  other2?: string;
+  other3?: string;
+  other4?: string;
+  other5?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface Order {
@@ -419,9 +532,14 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       const productIdObj = typeof it.productId === 'object' ? it.productId : undefined;
       const productIdStr = productIdObj?._id || it.productId;
       const productCode = it.productCode || productIdObj?.productCode || '';
-      const productName = it.productName || productIdObj?.productName || '';
-      const unit = getUnitLabel(it.unit || productIdObj?.unit);
-      const unitPrice = it.unitPrice ?? it.price ?? 0;
+      const productName = it.productName || productIdObj?.productName || productIdObj?.name || '';
+      const unit = getProductUnitLabel(productIdObj as Product, getUnitLabel(it.unit));
+      const unitPrice =
+        typeof it.unitPrice === 'number'
+          ? it.unitPrice
+          : typeof it.price === 'number'
+            ? it.price
+            : getProductPrice(productIdObj as Product);
       const quantity = it.quantity ?? 0;
       const discount = typeof it.discount === 'number' ? it.discount : 0;
       const gstRate =
@@ -436,11 +554,26 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           ? it.availableStock
           : getStockNumber(productIdObj?.stock) ||
             getStockNumber((it as any)?.stock);
+      const partNo = it.partNo || productIdObj?.partNo || productIdObj?.itemAlias;
+      const itemHsn = it.itemHsn || productIdObj?.itemHsn;
+      const category = it.category || productIdObj?.category;
+      const brand = it.brand || productIdObj?.brand;
+      const description = it.description || productIdObj?.description;
 
       return {
         productId: productIdStr,
         productCode,
         productName,
+        partNo,
+        itemAlias: it.itemAlias || productIdObj?.itemAlias,
+        category,
+        subCategory: it.subCategory || productIdObj?.subCategory,
+        brand,
+        itemHsn,
+        itemHsnDesc: it.itemHsnDesc || productIdObj?.itemHsnDesc,
+        description,
+        baseUnits: productIdObj?.baseUnits,
+        additionalUnits: productIdObj?.additionalUnits,
         unit,
         unitPrice,
         quantity,
@@ -577,27 +710,32 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         setOrderItems(prevItems =>
           applyGstToItems(
             prevItems.map(item => {
-            const match = normalizedProducts.find(prod => prod._id === item.productId);
-            if (!match) {
-              return item;
-            }
+              const match = normalizedProducts.find(prod => prod._id === item.productId);
+              if (!match) {
+                return item;
+              }
 
-            const updatedStock = getStockNumber(match.stock);
-            const updatedUnit = getUnitLabel(match.unit || item.unit);
-            const updatedPrice =
-              typeof match.price === 'number' && !Number.isNaN(match.price)
-                ? match.price
-                : item.unitPrice;
+              const updatedStock = getStockNumber(match.stock);
+              const updatedUnit = getProductUnitLabel(match, item.unit);
+              const updatedPrice = getProductPrice(match) || item.unitPrice;
 
-            return {
-              ...item,
-              availableStock: updatedStock > 0 ? updatedStock : item.availableStock,
-              unit: updatedUnit,
-              unitPrice: updatedPrice,
-            };
-          }),
-          gstType
-        )
+              return {
+                ...item,
+                availableStock: updatedStock > 0 ? updatedStock : item.availableStock,
+                unit: updatedUnit,
+                unitPrice: updatedPrice,
+                partNo: item.partNo || getProductPartNo(match),
+                itemHsn: item.itemHsn || getProductHsn(match),
+                category: item.category || getProductCategory(match),
+                itemAlias: item.itemAlias || match.itemAlias,
+                brand: item.brand || match.brand,
+                description: item.description || match.description,
+                baseUnits: item.baseUnits || match.baseUnits,
+                additionalUnits: item.additionalUnits || match.additionalUnits,
+              };
+            }),
+            gstType
+          )
         );
       }
       
@@ -674,29 +812,40 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
 
       const productResponse = await getProductById(product._id);
       const freshProduct = (productResponse?.success
-        ? (productResponse.data?.product || productResponse.product)
-        : null) || product;
+        ? normalizeProduct(productResponse.data?.product || productResponse.product || productResponse.data)
+        : normalizeProduct(product));
 
-      const resolvedUnit = getUnitLabel(freshProduct.unit || product.unit);
-      const resolvedPrice =
-        typeof freshProduct.price === 'number' ? freshProduct.price : product.price;
+      const resolvedUnit = getProductUnitLabel(freshProduct, getUnitLabel(product.unit));
+      const resolvedPrice = getProductPrice(freshProduct) || getProductPrice(product);
+      const resolvedGstRate = getProductGstRate(freshProduct);
       const resolvedStock = getStockNumber(
         (freshProduct.stock as Product['stock']) ?? product.stock
       );
+      const resolvedName = getProductName(freshProduct);
+      const partNumber = getProductPartNo(freshProduct);
+      const hsnCode = getProductHsn(freshProduct);
+      const category = getProductCategory(freshProduct);
       const initialQuantity = resolvedStock > 0 ? 1 : 0;
 
       const newItem: OrderItem = {
         productId: freshProduct._id,
         productCode: freshProduct.productCode,
-        productName: freshProduct.productName,
+        productName: resolvedName,
+        partNo: partNumber,
+        itemAlias: freshProduct.itemAlias,
+        category,
+        subCategory: freshProduct.subCategory,
+        brand: freshProduct.brand,
+        itemHsn: hsnCode,
+        itemHsnDesc: freshProduct.itemHsnDesc,
+        description: freshProduct.description,
+        baseUnits: freshProduct.baseUnits,
+        additionalUnits: freshProduct.additionalUnits,
         unit: resolvedUnit,
         unitPrice: resolvedPrice,
         quantity: initialQuantity,
         discount: 0,
-        gstRate:
-          typeof (freshProduct as any).gstRate === 'number'
-            ? (freshProduct as any).gstRate
-            : DEFAULT_GST_RATE,
+        gstRate: resolvedGstRate,
         taxType: gstType,
         taxableValue: 0,
         cgstRate: 0,
@@ -751,18 +900,29 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       let currentStock = item.availableStock;
       let unitLabel = item.unit;
       let unitPrice = item.unitPrice;
+      let metadataUpdates: Partial<OrderItem> = {};
 
       if (productResponse?.success) {
-        const product =
-          productResponse.data?.product || productResponse.product || productResponse?.data;
-        if (product) {
-          currentStock = getStockNumber(product.stock ?? item.availableStock);
-          unitLabel = getUnitLabel(product.unit || unitLabel);
-          if (typeof product.price === 'number') {
-            unitPrice = product.price;
-          }
-          console.log(`📊 Current stock from API: ${currentStock}`);
+        const product = normalizeProduct(
+          productResponse.data?.product || productResponse.product || productResponse?.data
+        );
+        currentStock = getStockNumber(product.stock ?? item.availableStock);
+        unitLabel = getProductUnitLabel(product, unitLabel);
+        const resolvedPrice = getProductPrice(product);
+        if (resolvedPrice) {
+          unitPrice = resolvedPrice;
         }
+        metadataUpdates = {
+          partNo: item.partNo || getProductPartNo(product),
+          itemHsn: item.itemHsn || getProductHsn(product),
+          category: item.category || getProductCategory(product),
+          itemAlias: item.itemAlias || product.itemAlias,
+          brand: item.brand || product.brand,
+          description: item.description || product.description,
+          baseUnits: item.baseUnits || product.baseUnits,
+          additionalUnits: item.additionalUnits || product.additionalUnits,
+        };
+        console.log(`📊 Current stock from API: ${currentStock}`);
       } else {
         console.log('⚠️ Failed to get fresh stock data, using existing:', item.availableStock);
         console.log('📦 Full response:', productResponse);
@@ -783,6 +943,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                   availableStock: currentStock,
                   unit: unitLabel,
                   unitPrice,
+                  ...metadataUpdates,
                 }
               : it
           ),
@@ -869,6 +1030,19 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           : normalizeAddress(selectedDealer.address),
         items: itemsWithQuantity.map(item => ({
           productId: item.productId,
+          productCode: item.productCode,
+          productName: item.productName,
+          partNo: item.partNo,
+          itemAlias: item.itemAlias,
+          category: item.category,
+          subCategory: item.subCategory,
+          brand: item.brand,
+          itemHsn: item.itemHsn,
+          itemHsnDesc: item.itemHsnDesc,
+          unit: item.unit,
+          baseUnits: item.baseUnits,
+          additionalUnits: item.additionalUnits,
+          description: item.description,
           unitPrice: item.unitPrice,
           quantity: item.quantity,
           discount: item.discount ?? 0,
@@ -947,6 +1121,15 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         <View style={styles.orderItemInfo}>
           <Text style={styles.orderItemName}>{item.productName}</Text>
           <Text style={styles.orderItemCode}>{item.productCode}</Text>
+          {item.partNo ? (
+            <Text style={styles.orderItemMeta}>Part No: {item.partNo}</Text>
+          ) : null}
+          {item.itemHsn ? (
+            <Text style={styles.orderItemMeta}>HSN: {item.itemHsn}</Text>
+          ) : null}
+          {item.category ? (
+            <Text style={styles.orderItemMeta}>Category: {item.category}</Text>
+          ) : null}
           <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
         </View>
         <TouchableOpacity
@@ -1051,7 +1234,12 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
     const existingOrderItem = orderItems.find(orderItem => orderItem.productId === item._id);
     const isAlreadyAdded = Boolean(existingOrderItem);
     const stockNumber = getStockNumber(item.stock);
-    const unitLabel = getUnitLabel(item.unit);
+    const unitLabel = getProductUnitLabel(item, getUnitLabel(item.unit));
+    const resolvedPrice = getProductPrice(item);
+    const resolvedGst = getProductGstRate(item);
+    const partNumber = getProductPartNo(item);
+    const hsnCode = getProductHsn(item);
+    const category = getProductCategory(item);
 
     return (
       <TouchableOpacity
@@ -1066,7 +1254,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             styles.productName,
             isAlreadyAdded && styles.addedProductText
           ]}>
-            {item.productName}
+            {getProductName(item)}
           </Text>
           <Text style={[
             styles.productCode,
@@ -1074,22 +1262,54 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           ]}>
             {item.productCode}
           </Text>
-          <Text style={[
-            styles.productPrice,
-            isAlreadyAdded && styles.addedProductSubtext
-          ]}>
-            ₹{item.price}
+          <Text
+            style={[
+              styles.productPrice,
+              isAlreadyAdded && styles.addedProductSubtext
+            ]}
+          >
+            ₹{resolvedPrice.toFixed(2)}
+          </Text>
+          {partNumber ? (
+            <Text
+              style={[
+                styles.dropdownItemMeta,
+                isAlreadyAdded && styles.addedProductSubtext
+              ]}
+            >
+              Part No: {partNumber}
+            </Text>
+          ) : null}
+          <Text
+            style={[
+              styles.dropdownItemMeta,
+              isAlreadyAdded && styles.addedProductSubtext
+            ]}
+          >
+            Category: {category}
           </Text>
           <Text style={[
             styles.dropdownItemMeta,
             isAlreadyAdded && styles.addedProductSubtext
           ]}>
-            GST: {(typeof item.gstRate === 'number' ? item.gstRate : DEFAULT_GST_RATE)}%
+            GST: {resolvedGst}%
           </Text>
-          <Text style={[
-            styles.productStock,
-            isAlreadyAdded && styles.addedProductSubtext
-          ]}>
+          {hsnCode ? (
+            <Text
+              style={[
+                styles.dropdownItemMeta,
+                isAlreadyAdded && styles.addedProductSubtext
+              ]}
+            >
+              HSN: {hsnCode}
+            </Text>
+          ) : null}
+          <Text
+            style={[
+              styles.productStock,
+              isAlreadyAdded && styles.addedProductSubtext
+            ]}
+          >
             Stock: {stockNumber} {unitLabel}
           </Text>
           {isAlreadyAdded && (
@@ -1730,6 +1950,11 @@ const styles = StyleSheet.create({
   orderItemCode: {
     fontSize: 14,
     color: '#6B7280',
+    marginBottom: 2,
+  },
+  orderItemMeta: {
+    fontSize: 12,
+    color: '#4B5563',
     marginBottom: 2,
   },
   orderItemPrice: {

@@ -52,6 +52,7 @@ export interface CreateCompanyRequest {
   companyCode: string;
   maxUser: number;
   guid: number;
+  tallySerialId?: string;
   contactDetails?: any;
 }
 
