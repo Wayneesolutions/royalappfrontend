@@ -513,7 +513,7 @@ const DistributorOrderList = () => {
         <Text style={styles.headerTitle}>My Orders</Text>
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => navigation.navigate('AdminCreateOrder' as never)}
+          onPress={() => navigation.navigate('DistributorCreateOrder' as never)}
         >
           <Ionicons name="add" size={24} color="#3B82F6" />
         </TouchableOpacity>
@@ -565,7 +565,7 @@ const DistributorOrderList = () => {
             </Text>
             <TouchableOpacity
               style={styles.emptyStateButton}
-              onPress={() => navigation.navigate('AdminCreateOrder' as never)}
+              onPress={() => navigation.navigate('DistributorCreateOrder' as never)}
             >
               <Text style={styles.emptyStateButtonText}>Create Your First Order</Text>
             </TouchableOpacity>
