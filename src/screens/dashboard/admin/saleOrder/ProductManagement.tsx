@@ -127,6 +127,7 @@ const emptyFormState = (): ProductFormState => ({
 
 const ProductManagement = () => {
   const { 
+    user,
     getProducts, 
     createProduct, 
     updateProduct, 
@@ -136,6 +137,9 @@ const ProductManagement = () => {
     getLowStockProducts 
   } = useAuth();
   const navigation = useNavigation();
+  
+  // Check if user can create products (admin can, zonal, rsm and asm cannot)
+  const canCreateProduct = user?.role !== 'zonal' && user?.role !== 'rsm' && user?.role !== 'asm';
 
   // State management
   const [products, setProducts] = useState<Product[]>([]);
@@ -1413,12 +1417,14 @@ function getStockValue(stock: Product['stock']) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Product Management</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
+        {canCreateProduct && (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Filters */}

@@ -133,10 +133,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const result = await dispatch(loginUser({ email, password }));
       if (loginUser.rejected.match(result)) {
-        throw new Error(result.payload as string);
+        const errorMessage = result.payload as string;
+        // Only log non-network errors, network errors are handled silently
+        if (!errorMessage.includes('Network error')) {
+          console.error('Login failed:', errorMessage);
+        }
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      console.error('Login failed:', error);
+      // Re-throw to be handled by the UI
       throw error;
     }
   };

@@ -149,20 +149,33 @@ class ApiService {
         return response;
       },
       async (error: AxiosError) => {
-        if (__DEV__) {
-          console.error('❌ API Error:', {
-            status: error.response?.status,
-            statusText: error.response?.statusText,
-            url: error.config?.url,
-            baseURL: error.config?.baseURL,
-            message: error.message,
-            data: error.response?.data
-          });
+        // Only log non-network errors in detail
+        if (error.response) {
+          // Server responded with error status
+          if (__DEV__) {
+            console.error('❌ API Error:', {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              url: error.config?.url,
+              baseURL: error.config?.baseURL,
+              message: error.message,
+              data: error.response.data
+            });
+          }
+          
+          if (error.response.status === 401) {
+            this.clearAuthHeaders();
+          }
+        } else if (error.request) {
+          // Network error - silently handle, error will be returned to caller
+          // No console logging to avoid noise
+        } else {
+          // Setup error
+          if (__DEV__) {
+            console.error('❌ API Setup Error:', error.message);
+          }
         }
         
-        if (error.response?.status === 401) {
-          this.clearAuthHeaders();
-        }
         return Promise.reject(error);
       }
     );
@@ -221,7 +234,25 @@ class ApiService {
 
       return data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      // Return error response instead of throwing to avoid undefined upstream
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return {
+          success: false,
+          message: message
+        } as any;
+      } else if (axiosError.request) {
+        return {
+          success: false,
+          message: `Network error. Please check your connection and ensure the backend server is running at ${API_BASE_URL}`
+        } as any;
+      } else {
+        return {
+          success: false,
+          message: axiosError.message || 'Unknown error'
+        } as any;
+      }
     }
   }
 
@@ -294,7 +325,7 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/superadmin/update-admin/${adminId}`, data);
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      throw this.handleApiError(error as AxiosError);
     }
   }
 
@@ -413,7 +444,25 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/company-data', { params });
       return response.data;
     } catch (error) {
-      this.handleApiError(error as AxiosError);
+      // Return error response instead of throwing to avoid undefined upstream
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return {
+          success: false,
+          message: message
+        } as any;
+      } else if (axiosError.request) {
+        return {
+          success: false,
+          message: `Network error. Please check your connection and ensure the backend server is running at ${API_BASE_URL}`
+        } as any;
+      } else {
+        return {
+          success: false,
+          message: axiosError.message || 'Unknown error'
+        } as any;
+      }
     }
   }
 
@@ -519,6 +568,7 @@ class ApiService {
     password: string;
     role: string;
     userName?: string;
+    parentUserId?: string;
     address?: {
       street?: string;
       city?: string;
@@ -550,6 +600,7 @@ class ApiService {
     mobile: string;
     role: string;
     userName?: string;
+    parentUserId?: string;
     isActive?: boolean;
     address?: {
       street?: string;
