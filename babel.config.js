@@ -1,5 +1,6 @@
 module.exports = function (api) {
-  api.cache(true);
+  // Disable cache temporarily to force reload of .env file
+  api.cache(false);
 
   return {
     presets: [

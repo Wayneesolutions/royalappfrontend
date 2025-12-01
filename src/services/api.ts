@@ -484,6 +484,20 @@ class ApiService {
     }
   }
 
+  async adminGetUsersForParentSelection(excludeUserId?: string): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const params = excludeUserId ? { excludeUserId } : {};
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/users-for-parent', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   // General user endpoints (accessible by all roles)
   async getUserUsersByCompany(params?: { 
     companyId?: string; 

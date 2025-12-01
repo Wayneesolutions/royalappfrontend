@@ -41,10 +41,12 @@ interface User {
   }>;
   hierarchy?: {
     parentUser?: {
+      _id?: string;
       name: string;
       email: string;
       role: string;
-    };
+    } | string;
+    level?: number;
   };
   createdBy?: {
     name: string;
@@ -54,7 +56,7 @@ interface User {
 }
 
 const Users = () => {
-  const { user, getUsersByCompany, createUser, editUser, deleteUser } = useAuth();
+  const { user, getUsersByCompany, getUsersForParentSelection, createUser, editUser, deleteUser } = useAuth();
   const route = useRoute();
   const routeParams = route.params as { role?: string } | undefined;
   
@@ -121,210 +123,45 @@ const Users = () => {
   const roleOrder = ['zonal', 'rsm', 'asm', 'dealers', 'distibutors', 'subdealer', 'salesman'];
   
   // Static mock users for testing parent selection
-  const getStaticUsers = (): User[] => {
-    return [
-      {
-        _id: 'admin1',
-        name: 'John Admin',
-        email: 'admin@example.com',
-        mobile: '9876543210',
-        role: 'admin',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'zonal1',
-        name: 'Sarah Zonal',
-        email: 'zonal@example.com',
-        mobile: '9876543211',
-        role: 'zonal',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'zonal2',
-        name: 'Mike Zonal Manager',
-        email: 'mike.zonal@example.com',
-        mobile: '9876543212',
-        role: 'zonal',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'rsm1',
-        name: 'David RSM',
-        email: 'rsm@example.com',
-        mobile: '9876543213',
-        role: 'rsm',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'rsm2',
-        name: 'Lisa Regional Manager',
-        email: 'lisa.rsm@example.com',
-        mobile: '9876543214',
-        role: 'rsm',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'asm1',
-        name: 'Robert ASM',
-        email: 'asm@example.com',
-        mobile: '9876543215',
-        role: 'asm',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'asm2',
-        name: 'Emma Area Manager',
-        email: 'emma.asm@example.com',
-        mobile: '9876543216',
-        role: 'asm',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'dealer1',
-        name: 'Rajesh Dealer',
-        email: 'dealer@example.com',
-        mobile: '9876543217',
-        role: 'dealers',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'dealer2',
-        name: 'Priya Dealer',
-        email: 'priya.dealer@example.com',
-        mobile: '9876543218',
-        role: 'dealers',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'subdealer1',
-        name: 'Amit Sub Dealer',
-        email: 'subdealer@example.com',
-        mobile: '9876543219',
-        role: 'subdealer',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'subdealer2',
-        name: 'Sunita Sub Dealer',
-        email: 'sunita.sub@example.com',
-        mobile: '9876543220',
-        role: 'subdealer',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'dist1',
-        name: 'Kumar Distributor',
-        email: 'dist@example.com',
-        mobile: '9876543221',
-        role: 'distibutors',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'salesman1',
-        name: 'Vikram Salesman',
-        email: 'salesman@example.com',
-        mobile: '9876543222',
-        role: 'salesman',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: 'salesman2',
-        name: 'Anjali Sales Rep',
-        email: 'anjali.sales@example.com',
-        mobile: '9876543223',
-        role: 'salesman',
-        isActive: true,
-        companies: [],
-        createdAt: new Date().toISOString()
-      },
-    ];
-  };
-
-  // Fetch all users for parent selection
+  // Fetch all users for parent selection from backend
   const fetchAllUsersForParent = async () => {
     try {
       setLoadingParents(true);
       
-      // Use static data for testing
-      const staticUsers = getStaticUsers();
-      let filteredUsers: User[] = [];
+      // Get the user ID to exclude (if editing)
+      const excludeUserId = isEditMode && editingUser ? editingUser._id : undefined;
       
-      // Filter out the user being edited
-      filteredUsers = staticUsers.filter((u: User) => {
-        const isNotEditingUser = !isEditMode || !editingUser || u._id !== editingUser._id;
-        return isNotEditingUser;
-      });
+      // Fetch users from backend
+      const result = await getUsersForParentSelection(excludeUserId);
       
-      // Also try to fetch real users and merge
-      try {
-        const result = await getUsersByCompany({ limit: 1000 });
-        if (result && result.users) {
-          const realUsers = result.users.filter((u: User) => {
-            const isNotEditingUser = !isEditMode || !editingUser || u._id !== editingUser._id;
-            return isNotEditingUser;
-          });
-          
-          // Merge static and real users, avoiding duplicates
-          realUsers.forEach((realUser: User) => {
-            if (!filteredUsers.some(u => u._id === realUser._id)) {
-              filteredUsers.push(realUser);
-            }
-          });
-        }
-      } catch (err) {
-        console.log('Using static data only:', err);
+      if (result && result.users && Array.isArray(result.users)) {
+        // Format users to match the expected structure
+        const formattedUsers: User[] = result.users.map((u: any) => ({
+          _id: u._id,
+          name: u.name,
+          email: u.email || '',
+          mobile: u.mobile || '',
+          role: u.role,
+          userName: u.userName || '',
+          isActive: u.isActive !== false, // Default to true if not specified
+          companies: [],
+          hierarchy: u.hierarchy || {},
+          createdAt: u.createdAt || new Date().toISOString()
+        }));
+        
+        setAllUsers(formattedUsers);
+      } else {
+        console.warn('No users returned from backend, using empty list');
+        setAllUsers([]);
       }
-      
-      // Also include current logged-in user if not being edited
-      if (user) {
-        const isNotEditingUser = !isEditMode || !editingUser || user._id !== editingUser._id;
-        const alreadyInList = filteredUsers.some(u => u._id === user._id);
-        if (isNotEditingUser && !alreadyInList) {
-          filteredUsers.push({
-            _id: user._id,
-            name: user.name,
-            email: user.email || '',
-            mobile: user.mobile || '',
-            role: user.role,
-            isActive: true,
-            companies: [],
-            createdAt: new Date().toISOString()
-          } as User);
-        }
-      }
-      
-      setAllUsers(filteredUsers);
     } catch (err) {
       console.error('Failed to fetch users for parent selection:', err);
-      // Fallback to static data
-      const staticUsers = getStaticUsers();
-      setAllUsers(staticUsers);
+      // On error, set empty array instead of static data
+      setAllUsers([]);
+      Alert.alert(
+        'Error',
+        'Failed to load users for parent selection. Please try again.'
+      );
     } finally {
       setLoadingParents(false);
     }
@@ -403,39 +240,102 @@ const Users = () => {
 
   // Get parent user name from hierarchy
   const getParentUserName = (user: User): string => {
-    if (user.hierarchy?.parentUser) {
+    try {
+      // Check if hierarchy exists
+      if (!user.hierarchy) {
+        return 'No Parent';
+      }
+
+      // Check if parentUser exists
       const parentUser = user.hierarchy.parentUser;
+      if (!parentUser) {
+        return 'No Parent';
+      }
+
+      // Handle if parentUser is a string (ID)
       if (typeof parentUser === 'string') {
-        // If it's just an ID, try to find in allUsers or users list
+        // Try to find in allUsers or users list
         const parent = allUsers.find(u => u._id === parentUser) || 
                        users.find(u => u._id === parentUser);
         return parent ? parent.name : 'Unknown';
-      } else {
-        return parentUser?.name || 'Unknown';
       }
+
+      // Handle if parentUser is an object
+      if (typeof parentUser === 'object' && parentUser !== null) {
+        // Check if it has name property
+        if ('name' in parentUser && parentUser.name) {
+          return String(parentUser.name);
+        }
+        // If no name, try to find by _id
+        if ('_id' in parentUser && parentUser._id) {
+          const parent = allUsers.find(u => u._id === parentUser._id) || 
+                         users.find(u => u._id === parentUser._id);
+          return parent ? parent.name : 'Unknown';
+        }
+      }
+
+      return 'No Parent';
+    } catch (error) {
+      console.error('Error in getParentUserName:', error, 'for user:', user.name);
+      return 'No Parent';
     }
-    return 'No Parent';
   };
 
   // Get parent user role from hierarchy
   const getParentUserRole = (user: User): string => {
-    if (user.hierarchy?.parentUser) {
+    try {
+      if (!user.hierarchy?.parentUser) {
+        return '';
+      }
+
       const parentUser = user.hierarchy.parentUser;
+      
+      // Handle if parentUser is a string (ID)
       if (typeof parentUser === 'string') {
         const parent = allUsers.find(u => u._id === parentUser) || 
                        users.find(u => u._id === parentUser);
-        return parent ? getRoleLabel(parent.role) : 'Unknown';
-      } else {
-        return getRoleLabel(parentUser?.role || '');
+        return parent ? getRoleLabel(parent.role) : '';
       }
+
+      // Handle if parentUser is an object
+      if (typeof parentUser === 'object' && parentUser !== null) {
+        if ('role' in parentUser && parentUser.role) {
+          return getRoleLabel(String(parentUser.role));
+        }
+        // If no role, try to find by _id
+        if ('_id' in parentUser && parentUser._id) {
+          const parent = allUsers.find(u => u._id === parentUser._id) || 
+                         users.find(u => u._id === parentUser._id);
+          return parent ? getRoleLabel(parent.role) : '';
+        }
+      }
+
+      return '';
+    } catch (error) {
+      console.error('Error in getParentUserRole:', error, 'for user:', user.name);
+      return '';
     }
-    return '';
   };
 
   // Fetch users when component mounts or company changes
   useEffect(() => {
     fetchUsers();
   }, [user?.defaultCompany, selectedRole]);
+
+  // Debug: Log users when they change
+  useEffect(() => {
+    if (__DEV__ && users.length > 0) {
+      console.log('Users state updated:', users.length, 'users');
+      const firstUserWithHierarchy = users.find(u => u.hierarchy?.parentUser);
+      if (firstUserWithHierarchy) {
+        console.log('First user with hierarchy:', {
+          name: firstUserWithHierarchy.name,
+          hierarchy: firstUserWithHierarchy.hierarchy,
+          parentUser: firstUserWithHierarchy.hierarchy?.parentUser
+        });
+      }
+    }
+  }, [users]);
 
   // Fetch all users for parent selection when modal opens
   useEffect(() => {
@@ -455,6 +355,10 @@ const Users = () => {
       }
       
       const result = await getUsersByCompany(params);
+      if (__DEV__) {
+        console.log('fetchUsers - result:', JSON.stringify(result, null, 2));
+        console.log('fetchUsers - first user hierarchy:', result?.users?.[0]?.hierarchy);
+      }
       setUsers(result.users || []);
     } catch (err) {
       console.error('Failed to fetch users:', err);
@@ -691,6 +595,17 @@ const Users = () => {
   };
 
   const renderUserCard = ({ item }: { item: User }) => {
+    // Debug: Log the actual item data
+    if (__DEV__ && item.name === 'Zsm') {
+      console.log('Rendering Zsm user card:', {
+        name: item.name,
+        hierarchy: item.hierarchy,
+        parentUser: item.hierarchy?.parentUser,
+        parentUserType: typeof item.hierarchy?.parentUser,
+        parentUserName: item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object' ? (item.hierarchy.parentUser as any).name : 'N/A'
+      });
+    }
+    
     const parentName = getParentUserName(item);
     const parentRole = getParentUserRole(item);
     
@@ -724,24 +639,37 @@ const Users = () => {
             <Ionicons name="call" size={16} color="#6B7280" />
             <Text style={styles.detailText}>{item.mobile}</Text>
           </View>
-          {parentName !== 'No Parent' && (
-            <View style={styles.hierarchyRow}>
-              <View style={styles.hierarchyChain}>
-                <Ionicons name="arrow-up" size={14} color="#6B7280" />
-                <View style={styles.hierarchyInfo}>
-                  <Text style={styles.hierarchyLabel}>Reports to:</Text>
-                  <View style={styles.hierarchyParent}>
-                    <Text style={styles.hierarchyParentName}>{parentName}</Text>
-                    {parentRole && (
-                      <View style={[styles.hierarchyParentBadge, { backgroundColor: getRoleColor(allUsers.find(u => u._id === (item.hierarchy?.parentUser as any)?._id || u.name === parentName)?.role || users.find(u => u._id === (item.hierarchy?.parentUser as any)?._id || u.name === parentName)?.role || '') }]}>
-                        <Text style={styles.hierarchyParentBadgeText}>{parentRole}</Text>
+          <View style={styles.detailRow}>
+            <Ionicons name="person" size={16} color="#6B7280" />
+            <View style={styles.parentUserContainer}>
+              {(() => {
+                // Direct check of hierarchy data as fallback
+                const directParentName = item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object' 
+                  ? (item.hierarchy.parentUser as any)?.name 
+                  : null;
+                const displayName = parentName !== 'No Parent' ? parentName : (directParentName || 'No Parent User');
+                const directParentRole = item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object'
+                  ? (item.hierarchy.parentUser as any)?.role
+                  : null;
+                const displayRole = parentRole || (directParentRole ? getRoleLabel(directParentRole) : '');
+                
+                return (
+                  <>
+                    <Text style={styles.detailText}>{displayName}</Text>
+                    {displayName !== 'No Parent User' && displayRole && (
+                      <View style={[styles.parentRoleBadge, { backgroundColor: getRoleColor(
+                        item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object'
+                          ? String((item.hierarchy.parentUser as any).role || '')
+                          : ''
+                      ) }]}>
+                        <Text style={styles.parentRoleBadgeText}>{displayRole}</Text>
                       </View>
                     )}
-                  </View>
-                </View>
-              </View>
+                  </>
+                );
+              })()}
             </View>
-          )}
+          </View>
           <View style={styles.detailRow}>
             <Ionicons name="business" size={16} color="#6B7280" />
             <Text style={styles.detailText}>
@@ -1376,6 +1304,12 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 14,
     color: '#6B7280',
+    flex: 1,
+  },
+  parentUserContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     flex: 1,
   },
   errorContainer: {

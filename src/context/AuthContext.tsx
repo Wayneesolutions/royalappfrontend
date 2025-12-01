@@ -19,6 +19,7 @@ interface AuthContextType {
   switchCompany: (companyId: string) => Promise<void>;
   getCompanyData: (companyId?: string) => Promise<any>;
   getUsersByCompany: (params?: { companyId?: string; role?: string; page?: number; limit?: number; }) => Promise<any>;
+  getUsersForParentSelection: (excludeUserId?: string) => Promise<any>;
   getUsersByRole: (role: string) => Promise<any>;
   createUser: (userData: any) => Promise<any>;
   editUser: (userId: string, userData: any) => Promise<any>;
@@ -254,6 +255,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return null;
       }
       console.error('Failed to get users by company:', error);
+      throw error;
+    }
+  };
+
+  const getUsersForParentSelection = async (excludeUserId?: string): Promise<any> => {
+    if (!isAuthenticated || !user) {
+      return null;
+    }
+
+    try {
+      if (user?.role === 'admin') {
+        const result = await apiService.adminGetUsersForParentSelection(excludeUserId);
+        if (!result?.success || !result.data) {
+          return null;
+        }
+        return result.data;
+      } else {
+        // For non-admin roles, use regular getUsersByCompany
+        const result = await getUsersByCompany({ limit: 1000 });
+        if (!result || !result.users) {
+          return null;
+        }
+        // Filter out excluded user if provided
+        const users = excludeUserId 
+          ? result.users.filter((u: any) => u._id !== excludeUserId)
+          : result.users;
+        return { users, total: users.length };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      const normalized = message.toLowerCase();
+      if (normalized.includes('unauthorized') || normalized.includes('not authenticated')) {
+        return null;
+      }
+      console.error('Failed to get users for parent selection:', error);
       throw error;
     }
   };
@@ -1152,6 +1188,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     switchCompany,
     getCompanyData,
     getUsersByCompany,
+    getUsersForParentSelection,
     getUsersByRole,
     createUser,
     editUser,
