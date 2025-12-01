@@ -1,1171 +1,1037 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  ScrollView,
-  StyleSheet,
   TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Dimensions,
+  Image,
   ActivityIndicator,
-  Alert,
-  RefreshControl,
-  Modal,
+  Alert
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useAuth } from '../../../context/AuthContext';
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+  AntDesign,
+} from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../../navigation/types';
+import Profile from '../../../../assets/images/profile.png'
+import DashboardHeader from '../admin/AdminHeader';
+import { useAuth } from '../../../context/AuthContext';
 
-interface DashboardStats {
-  totalRSMs: number;
-  totalASMs: number;
-  totalSalesmen: number;
-  totalDealers: number;
-  totalDistributors: number;
-  totalSales: number;
-  pendingOrders: number;
-  completedOrders: number;
+const { width } = Dimensions.get('window');
+
+type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
+
+type IconType = 'Ionicons' | 'MaterialCommunityIcons' | 'AntDesign';
+
+interface MenuItem {
+  label: string;
+  icon: string;
+  iconType: IconType;
+  navigationScreen: keyof RootStackParamList;
 }
 
+interface Member {
+  id: string;
+  name: string;
+  role: string;
+  color: string;
+  navigationScreen: keyof RootStackParamList;
+  count: number;
+}
+
+const getMembers = (userCounts: {[key: string]: number}): Member[] => [
+  { id: '1', name: 'Zonal', role: 'zonal', color: '#3B82F6', navigationScreen: 'ZonalScreen' as keyof RootStackParamList, count: userCounts.zonal || 0 },
+  { id: '2', name: 'RSM', role: 'rsm', color: '#10B981', navigationScreen: 'RSMScreen' as keyof RootStackParamList, count: userCounts.rsm || 0 },
+  { id: '3', name: 'ASM', role: 'asm', color: '#F59E0B', navigationScreen: 'ASMScreen' as keyof RootStackParamList, count: userCounts.asm || 0 },
+  { id: '4', name: 'Sales', role: 'salesman', color: '#EF4444', navigationScreen: 'SalesScreen' as keyof RootStackParamList, count: userCounts.salesman || 0 },
+  { id: '5', name: 'Dealer', role: 'dealers', color: '#8B5CF6', navigationScreen: 'DealerScreen' as keyof RootStackParamList, count: userCounts.dealers || 0 },
+  { id: '6', name: 'Sub Dealer', role: 'subdealer', color: '#EC4899', navigationScreen: 'DealerScreen' as keyof RootStackParamList, count: userCounts.subdealer || 0 },
+  { id: '7', name: 'Distributors', role: 'distibutors', color: '#06B6D4', navigationScreen: 'DistributorsScreen' as keyof RootStackParamList, count: userCounts.distibutors || 0 },
+];
+
+// Menu items - EXCLUDING User Management and Product Management (no create product/user)
+const menuItems: MenuItem[] = [
+  { label: 'Create Order', icon: 'add-circle-outline', iconType: 'Ionicons', navigationScreen: 'AdminCreateOrder' },
+  { label: 'My Orders', icon: 'list-outline', iconType: 'Ionicons', navigationScreen: 'AdminOrderList' },
+  { label: 'Order Monitoring', icon: 'eye-outline', iconType: 'Ionicons', navigationScreen: 'SaleOrders' },
+  { label: 'Sales Overview', icon: 'trending-up-outline', iconType: 'Ionicons', navigationScreen: 'Sales' },
+  { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },
+  { label: 'Ledger', icon: 'book-outline', iconType: 'Ionicons', navigationScreen: 'LedgerScreen' },
+  { label: 'Target Management', icon: 'target', iconType: 'MaterialCommunityIcons', navigationScreen: 'TargetScreen' },
+  { label: 'Assign Targets', icon: 'add-circle-outline', iconType: 'Ionicons', navigationScreen: 'TargetAssignmentScreen' },
+  { label: 'Pending Orders', icon: 'time-outline', iconType: 'Ionicons', navigationScreen: 'PendingOrdersScreen' },
+  { label: 'Approved Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ApprovedOrdersScreen' },
+];
+
+// Chart data will be fetched from API
+
 const DashboardHome = () => {
-  const { user, getUsersByCompany, logout, getZonalDashboardData, getZonalRecentActivity, switchCompany } = useAuth();
-  const navigation = useNavigation();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalRSMs: 0,
-    totalASMs: 0,
-    totalSalesmen: 0,
-    totalDealers: 0,
-    totalDistributors: 0,
-    totalSales: 0,
-    pendingOrders: 0,
-    completedOrders: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [topPerformers, setTopPerformers] = useState<any[]>([]);
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [showCompanyModal, setShowCompanyModal] = useState(false);
-  const [switchingCompany, setSwitchingCompany] = useState(false);
+  const navigation = useNavigation<NavigationProps>();
+  const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [companyData, setCompanyData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userCounts, setUserCounts] = useState<{[key: string]: number}>({});
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [stockData, setStockData] = useState<any>(null);
+  const [chartData, setChartData] = useState<any[]>([]);
 
-  const isMounted = useRef(true);
+  const { user, isAuthenticated, getCompanyData, getUsersByCompany, getStockSummary } = useAuth();
 
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
+  // Helper function to get role colors
+  const getRoleColor = (role: string) => {
+    const colors: { [key: string]: string } = {
+      'zonal': '#3B82F6',
+      'rsm': '#10B981',
+      'asm': '#F59E0B',
+      'salesman': '#EF4444',
+      'dealers': '#8B5CF6',
+      'subdealer': '#06B6D4',
+      'distibutors': '#84CC16',
     };
-  }, []);
-
-  const getCompanyId = (companyRef: any) => {
-    if (!companyRef) return null;
-    if (typeof companyRef === 'string') return companyRef;
-    if (typeof companyRef === 'object' && companyRef._id) return companyRef._id.toString();
-    return null;
+    return colors[role] || '#6B7280';
   };
 
-  const formatRoleLabel = (role?: string) => {
-    if (!role) return 'Unknown';
-    const roleMap: Record<string, string> = {
-      superadmin: 'Super Admin',
-      admin: 'Admin',
-      zonal: 'Zonal Manager',
-      rsm: 'Regional Manager',
-      asm: 'Area Manager',
-      salesman: 'Salesman',
-      dealers: 'Dealer',
-      distibutors: 'Distributor',
-      subdealer: 'Sub Dealer',
-    };
-    return roleMap[role] || role.charAt(0).toUpperCase() + role.slice(1);
-  };
-
-  const availableCompanies = useMemo(
-    () => (user?.companies || []).filter((entry: any) => entry?.companyId && entry.isActive),
-    [user?.companies]
-  );
-  const currentCompanyId = getCompanyId(user?.defaultCompany);
-  const currentCompanyAssignment = useMemo(
-    () => availableCompanies.find((entry: any) => getCompanyId(entry.companyId) === currentCompanyId),
-    [availableCompanies, currentCompanyId]
-  );
-  const currentCompany =
-    typeof user?.defaultCompany === 'object' && user?.defaultCompany !== null
-      ? user?.defaultCompany
-      : currentCompanyAssignment?.companyId;
-  const currentCompanyRole = currentCompanyAssignment?.role || user?.role;
-  const hasCompanySwitch = availableCompanies.length > 0;
-
-  const fetchDashboardData = async () => {
-    if (!user?.defaultCompany) {
-      setLoading(false);
-      return;
-    }
+  // Fetch user counts for each role
+  const fetchUserCounts = async () => {
+    if (!isAuthenticated || !user?.defaultCompany) return;
 
     try {
-      setLoading(true);
+      const roleCounts: {[key: string]: number} = {};
+      const roles = ['zonal', 'rsm', 'asm', 'salesman', 'dealers', 'subdealer', 'distibutors'];
       
-      // Fetch Zonal dashboard data
-      const result = await getZonalDashboardData();
-      
-      if (result?.success && result?.data) {
-        const data = result.data;
-        setDashboardData(data);
-        
-        // Update stats with real data
-        setStats({
-          totalRSMs: data.teamOverview.roleCounts.rsm || 0,
-          totalASMs: data.teamOverview.roleCounts.asm || 0,
-          totalSalesmen: data.teamOverview.roleCounts.salesman || 0,
-          totalDealers: data.teamOverview.roleCounts.dealers || 0,
-          totalDistributors: data.teamOverview.roleCounts.distibutors || 0,
-          totalSales: data.salesSummary.totalSales || 0,
-          pendingOrders: data.salesSummary.pendingOrders || 0,
-          completedOrders: data.salesSummary.completedOrders || 0,
-        });
-        
-        // Set additional data
-        setTopPerformers(data.topPerformers || []);
-        setRecentOrders(data.recentOrders || []);
-      }
-
-      // Fetch recent activity
-      try {
-        const activityResult = await getZonalRecentActivity({ limit: 10, days: 7 });
-        if (activityResult?.success && activityResult?.data?.activities) {
-          setRecentActivity(activityResult.data.activities);
+      for (const role of roles) {
+        try {
+          const result = await getUsersByCompany({ role, limit: 1 });
+          if (!result) {
+            roleCounts[role] = 0;
+            if (!isAuthenticated) {
+              break;
+            }
+            continue;
+          }
+          roleCounts[role] = result?.pagination?.totalUsers || 0;
+        } catch (err) {
+          console.error(`Failed to fetch ${role} users:`, err);
+          roleCounts[role] = 0;
         }
-      } catch (activityError) {
-        console.error('Failed to fetch recent activity:', activityError);
-        // Don't show error for activity, just use empty array
-        setRecentActivity([]);
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      Alert.alert('Error', 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
+      
+      setUserCounts(roleCounts);
+    } catch (err) {
+      console.error('Failed to fetch user counts:', err);
     }
   };
 
+  // Fetch recent users
+  const fetchRecentUsers = async () => {
+    if (!isAuthenticated || !user?.defaultCompany) return;
+
+    try {
+      const result = await getUsersByCompany({ limit: 5 });
+      if (!result) {
+        setRecentUsers([]);
+        return;
+      }
+      setRecentUsers(result?.users || []);
+    } catch (err) {
+      console.error('Failed to fetch recent users:', err);
+    }
+  };
+
+  // Fetch stock data
+  const fetchStockData = async () => {
+    if (!isAuthenticated || !user?.defaultCompany) return;
+    try {
+      const result = await getStockSummary();
+      if (result?.success && result?.data) {
+        setStockData(result.data);
+        setChartData(result.data.chartData || []);
+      } else if (!result) {
+        setStockData(null);
+        setChartData([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch stock data:', err);
+    }
+  };
+
+  // Fetch company data when component mounts or user changes
   useEffect(() => {
-    fetchDashboardData();
-  }, [user?.defaultCompany]);
+    const fetchData = async () => {
+      if (!isAuthenticated || !user?.defaultCompany) {
+        setIsLoading(false);
+        return;
+      }
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchDashboardData();
-    setRefreshing(false);
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await getCompanyData();
+        setCompanyData(data);
+
+        if (isAuthenticated) {
+          await Promise.all([
+            fetchUserCounts(),
+            fetchRecentUsers(),
+            fetchStockData()
+          ]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch company data:', err);
+        setError('Failed to load company data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated, user?.defaultCompany, getCompanyData]);
+
+  const renderIcon = (name: string, type: IconType, size = 24, color = '#486CD6') => {
+    switch (type) {
+      case 'Ionicons':
+        return <Ionicons name={name as any} size={size} color={color} />;
+      case 'MaterialCommunityIcons':
+        return <MaterialCommunityIcons name={name as any} size={size} color={color} />;
+      case 'AntDesign':
+        return <AntDesign name={name as any} size={size} color={color} />;
+      default:
+        return null;
+    }
   };
 
-  const handleLogout = () => {
-    setShowLogoutModal(true);
-  };
-
-  const confirmLogout = async () => {
-    setShowLogoutModal(false);
+  // Generic navigation helper function
+  const navigateToScreen = (screenName: string) => {
     try {
-      await logout();
-      // Navigation will be handled automatically by AppNavigator based on auth state
-    } catch (error) {
-      console.error('Logout error:', error);
-      Alert.alert('Error', 'Failed to logout. Please try again.');
-    }
-  };
-
-  const cancelLogout = () => {
-    setShowLogoutModal(false);
-  };
-
-  const handleCompanyChange = async (targetCompanyId: string) => {
-    if (!targetCompanyId) {
-      return;
-    }
-
-    if (targetCompanyId === currentCompanyId) {
-      if (isMounted.current) {
-        setShowCompanyModal(false);
+      // Check if the screen exists in RootStackParamList
+      if (screenName in navigation.getState().routeNames || true) {
+        (navigation as any).navigate(screenName);
+      } else {
+        console.log(`Screen ${screenName} not found in navigation stack`);
       }
-      return;
+    } catch (error) {
+      console.log(`Navigation to ${screenName} not available yet`);
+      // You can show an alert or toast here if needed
     }
+  };
 
-    if (isMounted.current) {
-      setSwitchingCompany(true);
-    }
+  // Navigation handler for field members
+  const handleMemberPress = (member: Member) => {
+    setSelectedMember(member.id);
+    // Navigate to Users screen with role filter (but Users screen won't have create functionality)
+    navigation.navigate('Users' as any, { role: member.role });
+  };
 
+  // Navigation handler for menu items
+  const handleMenuPress = (menuItem: MenuItem) => {
+    navigateToScreen(menuItem.navigationScreen);
+  };
+
+  // Profile press handler
+  const handleProfilePress = () => {
     try {
-      await switchCompany(targetCompanyId);
-      if (isMounted.current) {
-        setShowCompanyModal(false);
-      }
+      navigation.navigate('ProfileScreen');
     } catch (error) {
-      if (isMounted.current) {
-        Alert.alert('Error', error instanceof Error ? error.message : 'Failed to switch company. Please try again.');
-      }
-    } finally {
-      if (isMounted.current) {
-        setSwitchingCompany(false);
-      }
+      console.log('Navigation to ProfileScreen not available yet');
     }
   };
 
-  // Helper function to format time ago
-  const formatTimeAgo = (timestamp: string | Date) => {
-    const now = new Date();
-    const time = new Date(timestamp);
-    const diffInSeconds = Math.floor((now.getTime() - time.getTime()) / 1000);
 
-    if (diffInSeconds < 60) {
-      return 'Just now';
-    } else if (diffInSeconds < 3600) {
-      const minutes = Math.floor(diffInSeconds / 60);
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-    } else if (diffInSeconds < 86400) {
-      const hours = Math.floor(diffInSeconds / 3600);
-      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    } else {
-      const days = Math.floor(diffInSeconds / 86400);
-      return `${days} day${days > 1 ? 's' : ''} ago`;
-    }
-  };
 
-  const StatCard = ({ title, value, icon, color, onPress }: {
-    title: string;
-    value: number | string;
-    icon: string;
-    color: string;
-    onPress?: () => void;
-  }) => (
-    <TouchableOpacity style={[styles.statCard, { borderLeftColor: color }]} onPress={onPress}>
-      <View style={styles.statHeader}>
-        <View style={[styles.statIcon, { backgroundColor: color }]}>
-          <Ionicons name={icon as any} size={24} color="white" />
-        </View>
-        <Text style={styles.statValue}>{value}</Text>
-      </View>
-      <Text style={styles.statTitle}>{title}</Text>
-    </TouchableOpacity>
-  );
-
-  const QuickActionCard = ({ title, description, icon, color, onPress }: {
-    title: string;
-    description: string;
-    icon: string;
-    color: string;
-    onPress: () => void;
-  }) => (
-    <TouchableOpacity style={[styles.actionCard, { backgroundColor: color }]} onPress={onPress}>
-      <View style={styles.actionContent}>
-        <Ionicons name={icon as any} size={32} color="white" />
-        <View style={styles.actionText}>
-          <Text style={styles.actionTitle}>{title}</Text>
-          <Text style={styles.actionDescription}>{description}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  if (loading) {
+  // Show loading state
+  if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      <View style={styles.mainContainer}>
+        <DashboardHeader showNotifications={true} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0493D2" />
+          <Text style={styles.loadingText}>Loading company data...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    const isNoCompaniesError = error.includes('No companies assigned');
+    
+    return (
+      <View style={styles.mainContainer}>
+        <DashboardHeader showNotifications={true} />
+        <View style={styles.errorContainer}>
+          <Ionicons 
+            name={isNoCompaniesError ? "business-outline" : "alert-circle-outline"} 
+            size={48} 
+            color={isNoCompaniesError ? "#F59E0B" : "#EF4444"} 
+          />
+          <Text style={styles.errorText}>{error}</Text>
+          {isNoCompaniesError ? (
+            <Text style={styles.errorSubtext}>
+              Please contact your super admin to assign companies to your account.
+            </Text>
+          ) : (
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={() => {
+                setError(null);
+                setIsLoading(true);
+                // Retry logic will be handled by useEffect
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+    <View style={styles.mainContainer}>
+      <DashboardHeader
+        showNotifications={true}
+      />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View style={styles.welcomeSection}>
-              <Text style={styles.welcomeText}>Welcome back,</Text>
-              <Text style={styles.userName}>{user?.name || 'User'}</Text>
-              <Text style={styles.userRole}>{formatRoleLabel(user?.role)}</Text>
+
+        {/* Company Information Section */}
+        {companyData && (
+          <View style={styles.companyInfoSection}>
+            <Text style={styles.sectionTitle}>Company Overview</Text>
+            <View style={styles.sectionCard}>
+              <View style={styles.companyHeader}>
+                <View style={styles.companyIcon}>
+                  <Ionicons name="business" size={24} color="#0493D2" />
+                </View>
+                <View style={styles.companyDetails}>
+                  <Text style={styles.companyName}>{companyData.company?.companyName}</Text>
+                  <Text style={styles.companyCode}>Code: {companyData.company?.companyCode}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{companyData.statistics?.totalUsers || 0}</Text>
+                  <Text style={styles.statLabel}>Total Users</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{companyData.statistics?.maxUsersAllowed || 0}</Text>
+                  <Text style={styles.statLabel}>Max Users</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{companyData.statistics?.usagePercentage || 0}%</Text>
+                  <Text style={styles.statLabel}>Usage</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.headerActions}>
-              {hasCompanySwitch && (
+          </View>
+        )}
+
+        {/* Field Members Section */}
+        <View style={styles.fieldMembersSection}>
+          <Text style={styles.sectionTitle}>Your Field Members</Text>
+          <View style={styles.sectionCard}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.membersScrollContainer}
+            >
+              {getMembers(userCounts).map((member) => (
                 <TouchableOpacity
-                  style={styles.companySwitchButton}
-                  onPress={() => setShowCompanyModal(true)}
-                  activeOpacity={0.8}
-                  disabled={switchingCompany}
+                  key={member.id}
+                  style={styles.memberItem}
+                  onPress={() => handleMemberPress(member)}
+                  activeOpacity={0.7}
                 >
-                  <View style={styles.companySwitchLabel}>
-                    <Text style={styles.companySwitchName} numberOfLines={1}>
-                      {currentCompany?.companyName || 'Select Company'}
-                    </Text>
-                    <Text style={styles.companySwitchRole}>
-                      {formatRoleLabel(currentCompanyRole)}
-                    </Text>
+                  <View style={[styles.memberCircle, { backgroundColor: member.color }]}>
+                    <Ionicons name="person" size={20} color="white" />
                   </View>
-                  {switchingCompany ? (
-                    <ActivityIndicator size="small" color="#1F2937" />
-                  ) : (
-                    <Ionicons
-                      name={showCompanyModal ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color="#1F2937"
-                    />
-                  )}
+                  <Text style={styles.memberName}>{member.name}</Text>
+                  <Text style={styles.memberCount}>{member.count}</Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.logoutButton}
-                onPress={handleLogout}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="log-out-outline" size={24} color="#EF4444" />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.companyInfo}>
-            <View style={styles.companyDetails}>
-              <Text style={styles.companyName}>{currentCompany?.companyName || 'Company'}</Text>
-              <Text style={styles.companyCode}>{currentCompany?.companyCode || 'CODE'}</Text>
-            </View>
-            <Text style={styles.currentRoleBadge}>{formatRoleLabel(currentCompanyRole)}</Text>
-          </View>
-        </View>
-
-        {/* Stats Overview */}
-        <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Team Overview</Text>
-          <View style={styles.statsGrid}>
-            <StatCard
-              title="RSMs"
-              value={stats.totalRSMs}
-              icon="people"
-              color="#10B981"
-            />
-            <StatCard
-              title="ASMs"
-              value={stats.totalASMs}
-              icon="person"
-              color="#F59E0B"
-            />
-            <StatCard
-              title="Salesmen"
-              value={stats.totalSalesmen}
-              icon="person-add"
-              color="#EF4444"
-            />
-            <StatCard
-              title="Dealers"
-              value={stats.totalDealers}
-              icon="business"
-              color="#8B5CF6"
-            />
-            <StatCard
-              title="Distributors"
-              value={stats.totalDistributors}
-              icon="storefront"
-              color="#06B6D4"
-            />
-            <StatCard
-              title="Total Sales"
-              value={`₹${stats.totalSales.toLocaleString()}`}
-              icon="trending-up"
-              color="#059669"
-            />
-          </View>
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.actionsSection}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionsGrid}>
-            <QuickActionCard
-              title="View Team"
-              description="Manage your team members"
-              icon="people-outline"
-              color="#3B82F6"
-              onPress={() => (navigation as any).navigate('TeamManagementScreen')}
-            />
-            <QuickActionCard
-              title="Sales Report"
-              description="View sales performance"
-              icon="bar-chart-outline"
-              color="#10B981"
-              onPress={() => (navigation as any).navigate('SalesReportScreen')}
-            />
-            <QuickActionCard
-              title="Create Order"
-              description="Create new order"
-              icon="add-circle-outline"
-              color="#3B82F6"
-              onPress={() => (navigation as any).navigate('ZonalCreateOrder')}
-            />
-            <QuickActionCard
-              title="My Orders"
-              description="View all orders"
-              icon="list-outline"
-              color="#F59E0B"
-              onPress={() => (navigation as any).navigate('ZonalOrderList')}
-            />
-            <QuickActionCard
-              title="Pending Approvals"
-              description="Approve orders"
-              icon="checkmark-circle-outline"
-              color="#8B5CF6"
-              onPress={() => (navigation as any).navigate('PendingApprovalsScreen')}
-            />
-            <QuickActionCard
-              title="Targets"
-              description="Set and track targets"
-              icon="flag-outline"
-              color="#EF4444"
-              onPress={() => (navigation as any).navigate('TargetManagementScreen')}
-            />
-          </View>
-        </View>
-
-        {/* Top Performers */}
-        {topPerformers.length > 0 && (
-          <View style={styles.performersSection}>
-            <Text style={styles.sectionTitle}>Top Performers</Text>
-            <View style={styles.performersCard}>
-              {topPerformers.slice(0, 3).map((performer, index) => (
-                <View key={performer.userId} style={styles.performerItem}>
-                  <View style={styles.performerRank}>
-                    <Text style={styles.rankNumber}>{index + 1}</Text>
-                  </View>
-                  <View style={styles.performerInfo}>
-                    <Text style={styles.performerName}>{performer.userName}</Text>
-                    <Text style={styles.performerRole}>{performer.userRole}</Text>
-                  </View>
-                  <View style={styles.performerStats}>
-                    <Text style={styles.performerSales}>₹{performer.totalSales.toLocaleString()}</Text>
-                    <Text style={styles.performerOrders}>{performer.orderCount} orders</Text>
-                  </View>
-                </View>
               ))}
-            </View>
+            </ScrollView>
           </View>
-        )}
+        </View>
 
-        {/* Recent Orders */}
-        {recentOrders.length > 0 && (
-          <View style={styles.ordersSection}>
-            <Text style={styles.sectionTitle}>Recent Orders</Text>
-            <View style={styles.ordersCard}>
-              {recentOrders.slice(0, 3).map((order) => (
-                <View key={order._id} style={styles.orderItem}>
-                  <View style={styles.orderInfo}>
-                    <Text style={styles.orderNumber}>{order.orderNumber}</Text>
-                    <Text style={styles.orderCreator}>{order.createdBy.name}</Text>
-                  </View>
-                  <View style={styles.orderDetails}>
-                    <Text style={styles.orderAmount}>₹{order.finalAmount.toLocaleString()}</Text>
-                    <Text style={styles.orderStatus}>{order.status}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
+        {/* Users Management Section */}
+        <View style={styles.usersSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>User Management</Text>
+            <TouchableOpacity 
+              style={styles.viewAllButton}
+              onPress={() => navigateToScreen('Users')}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+              <Ionicons name="arrow-forward" size={16} color="#0493D2" />
+            </TouchableOpacity>
           </View>
-        )}
-
-        {/* Recent Activity */}
-        <View style={styles.activitySection}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <View style={styles.activityCard}>
-            {recentActivity.length > 0 ? (
-              recentActivity.slice(0, 5).map((activity) => (
-                <View key={activity.id} style={styles.activityItem}>
-                  <View style={[styles.activityIcon, { backgroundColor: activity.color }]}>
-                    <Ionicons name={activity.icon as any} size={16} color="white" />
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>{activity.title}</Text>
-                    <Text style={styles.activityDescription}>{activity.description}</Text>
-                    <Text style={styles.activityTime}>
-                      {formatTimeAgo(activity.timestamp)}
-                    </Text>
-                  </View>
+          <View style={styles.sectionCard}>
+            <View style={styles.usersStatsContainer}>
+              <View style={styles.userStatItem}>
+                <View style={styles.userStatIcon}>
+                  <Ionicons name="people" size={24} color="#3B82F6" />
                 </View>
-              ))
-            ) : (
-              <View style={styles.noActivityContainer}>
-                <Ionicons name="time-outline" size={32} color="#9CA3AF" />
-                <Text style={styles.noActivityText}>No recent activity</Text>
-                <Text style={styles.noActivitySubtext}>Activity from your team will appear here</Text>
+                <View style={styles.userStatInfo}>
+                  <Text style={styles.userStatValue}>{companyData?.statistics?.totalUsers || 0}</Text>
+                  <Text style={styles.userStatLabel}>Total Users</Text>
+                </View>
+              </View>
+              <View style={styles.userStatItem}>
+                <View style={styles.userStatIcon}>
+                  <Ionicons name="business" size={24} color="#10B981" />
+                </View>
+                <View style={styles.userStatInfo}>
+                  <Text style={styles.userStatValue}>{companyData?.statistics?.maxUsersAllowed || 0}</Text>
+                  <Text style={styles.userStatLabel}>Max Allowed</Text>
+                </View>
+              </View>
+              <View style={styles.userStatItem}>
+                <View style={styles.userStatIcon}>
+                  <Ionicons name="trending-up" size={24} color="#F59E0B" />
+                </View>
+                <View style={styles.userStatInfo}>
+                  <Text style={styles.userStatValue}>{companyData?.statistics?.usagePercentage || 0}%</Text>
+                  <Text style={styles.userStatLabel}>Usage</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* Quick Role Stats */}
+            {companyData?.statistics?.userByRole && companyData.statistics.userByRole.length > 0 && (
+              <View style={styles.roleStatsContainer}>
+                <Text style={styles.roleStatsTitle}>Users by Role</Text>
+                <View style={styles.roleStatsList}>
+                  {companyData.statistics.userByRole.map((roleStat: any, index: number) => (
+                    <View key={index} style={styles.roleStatItem}>
+                      <View style={[styles.roleStatDot, { backgroundColor: getRoleColor(roleStat._id) }]} />
+                      <Text style={styles.roleStatText}>
+                        {roleStat._id}: {roleStat.count}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+            
+            {/* Recent Users */}
+            {recentUsers.length > 0 && (
+              <View style={styles.recentUsersContainer}>
+                <Text style={styles.recentUsersTitle}>Recent Users</Text>
+                {recentUsers.slice(0, 3).map((user) => (
+                  <View key={user._id} style={styles.recentUserItem}>
+                    <View style={[styles.recentUserAvatar, { backgroundColor: getRoleColor(user.role) }]}>
+                      <Text style={styles.recentUserInitial}>{user.name.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.recentUserInfo}>
+                      <Text style={styles.recentUserName}>{user.name}</Text>
+                      <Text style={styles.recentUserRole}>{user.role.toUpperCase()}</Text>
+                    </View>
+                    <View style={[styles.recentUserStatus, { backgroundColor: user.isActive ? '#10B981' : '#EF4444' }]}>
+                      <Text style={styles.recentUserStatusText}>{user.isActive ? 'Active' : 'Inactive'}</Text>
+                    </View>
+                  </View>
+                ))}
               </View>
             )}
           </View>
         </View>
-      </ScrollView>
 
-      {/* Company Switch Modal */}
-      <Modal
-        visible={showCompanyModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => {
-          if (!switchingCompany) {
-            setShowCompanyModal(false);
-          }
-        }}
-      >
-        <View style={styles.companyModalOverlay}>
-          <View style={styles.companyModalContainer}>
-            <View style={styles.companyModalHeader}>
-              <Text style={styles.companyModalTitle}>Switch Company</Text>
-              <TouchableOpacity
-                onPress={() => !switchingCompany && setShowCompanyModal(false)}
-                disabled={switchingCompany}
-                style={styles.companyModalClose}
-              >
-                <Ionicons name="close" size={20} color="#475569" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.companyModalDivider} />
-            <ScrollView style={styles.companyModalList} contentContainerStyle={styles.companyModalListContent}>
-              {availableCompanies.length === 0 && (
-                <View style={styles.companyModalEmpty}>
-                  <Ionicons name="information-circle-outline" size={22} color="#94A3B8" />
-                  <Text style={styles.companyModalEmptyText}>No active companies assigned.</Text>
+        {/* Menu Items */}
+        <View style={styles.menuSection}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.menuItem}
+              onPress={() => handleMenuPress(item)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={styles.menuIconContainer}>
+                  {renderIcon(item.icon, item.iconType)}
                 </View>
-              )}
-              {availableCompanies.map((entry: any) => {
-                const company = entry.companyId;
-                const companyIdValue = getCompanyId(company);
-                const isCurrent = companyIdValue === currentCompanyId;
-                return (
-                  <TouchableOpacity
-                    key={companyIdValue}
-                    style={[styles.companyModalItem, isCurrent && styles.companyModalItemActive]}
-                    onPress={() => handleCompanyChange(companyIdValue as string)}
-                    activeOpacity={0.85}
-                    disabled={isCurrent || switchingCompany}
-                  >
-                    <View style={styles.companyModalInfo}>
-                      <Text style={styles.companyModalName} numberOfLines={1}>
-                        {company?.companyName || 'Company'}
-                      </Text>
-                      <View style={styles.companyModalMeta}>
-                        <Text style={styles.companyModalCode}>{company?.companyCode || '--'}</Text>
-                        <Text style={styles.companyModalRole}>{formatRoleLabel(entry.role)}</Text>
-                      </View>
-                    </View>
-                    {isCurrent ? (
-                      <Ionicons name="checkmark-circle" size={22} color="#10B981" />
-                    ) : switchingCompany ? (
-                      <ActivityIndicator size="small" color="#3B82F6" />
-                    ) : (
-                      <Ionicons name="arrow-forward-circle-outline" size={22} color="#3B82F6" />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ))}
         </View>
-      </Modal>
 
-      {/* Logout Confirmation Modal */}
-      <Modal
-        visible={showLogoutModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={cancelLogout}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Ionicons name="log-out-outline" size={32} color="#3B82F6" />
-              <Text style={styles.modalTitle}>Logout</Text>
+        {/* Daily Sales Breakdown */}
+        <View style={styles.chartSection}>
+          <Text style={styles.chartTitle}>Daily Sales Breakdown</Text>
+
+          {/* Chart */}
+          <View style={styles.chartContainer}>
+            <View style={styles.chart}>
+              {chartData.map((data, index) => (
+                <View key={index} style={styles.chartColumn}>
+                  <View style={styles.barsContainer}>
+                    <View
+                      style={[
+                        styles.barSafe,
+                        { height: data.safe }
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.barPending,
+                        { height: data.pending }
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.dayLabel}>{data.day}</Text>
+                </View>
+              ))}
             </View>
-            
-            <Text style={styles.modalMessage}>
-              Are you sure you want to logout? You will need to sign in again to access your account.
-            </Text>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={cancelLogout}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modalButton, styles.logoutButtonModal]}
-                onPress={confirmLogout}
-              >
-                <Text style={styles.logoutButtonText}>Logout</Text>
-              </TouchableOpacity>
+
+            {/* Legend */}
+            <View style={styles.chartLegend}>
+              <View style={[styles.legendItem, { backgroundColor: '#10B981' }]}>
+                <View style={[styles.legendColor, { backgroundColor: '#fff' }]} />
+                <Text style={styles.legendText}>
+                  Safe Stocks {stockData?.percentages?.safe || 0}%
+                </Text>
+              </View>
+              <View style={[styles.legendItem, { backgroundColor: '#3B82F6' }]}>
+                <View style={[styles.legendColor, { backgroundColor: '#fff' }]} />
+                <Text style={styles.legendText}>
+                  Pending Stocks {stockData?.percentages?.pending || 0}%
+                </Text>
+              </View>
             </View>
           </View>
         </View>
-      </Modal>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  mainContainer: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
-  scrollView: {
-    flex: 1,
+  scroll: {
+    backgroundColor: '#ecf0fe',
+  },
+  container: {
+    paddingBottom: 100,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#ecf0fe',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: '#6B7280',
   },
-  header: {
-    backgroundColor: 'white',
-    padding: 20,
-    paddingTop: 40,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  welcomeSection: {
+  errorContainer: {
     flex: 1,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  companySwitchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    maxWidth: 200,
-  },
-  companySwitchLabel: {
-    flex: 1,
-    marginRight: 8,
-  },
-  companySwitchName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  companySwitchRole: {
-    fontSize: 10,
-    color: '#475569',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  logoutButton: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    marginLeft: 16,
-    minWidth: 48,
-    minHeight: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
+    backgroundColor: '#ecf0fe',
+    paddingHorizontal: 20,
   },
-  welcomeText: {
+  errorText: {
+    marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 4,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 12,
   },
-  userName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  userRole: {
+  errorSubtext: {
     fontSize: 14,
-    color: '#3B82F6',
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
   },
-  companyInfo: {
+  retryButton: {
+    backgroundColor: '#0493D2',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  companyInfoSection: {
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  companyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  companyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   companyDetails: {
     flex: 1,
   },
   companyName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#1F2937',
+    marginBottom: 4,
   },
   companyCode: {
-    fontSize: 14,
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  currentRoleBadge: {
-    backgroundColor: '#EEF2FF',
-    color: '#4338CA',
     fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    marginLeft: 12,
+    color: '#6B7280',
   },
-  statsSection: {
-    padding: 20,
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
-  sectionTitle: {
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#1F2937',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  usersSection: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  statsGrid: {
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#0493D2',
+    fontWeight: '600',
+  },
+  usersStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
+  },
+  userStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  userStatIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userStatInfo: {
+    alignItems: 'center',
+  },
+  userStatValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  userStatLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  roleStatsContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 16,
+  },
+  roleStatsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  roleStatsList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 12,
   },
-  statCard: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    width: '48%',
-    marginBottom: 12,
-    borderLeftWidth: 4,
+  roleStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  roleStatDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  roleStatText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  profileSection: {
+    paddingTop: 30,
+    paddingBottom: 30,
+    paddingHorizontal: 20,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  profileImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#0493D2',
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  statHeader: {
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#10B981',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    color: 'black',
+    marginBottom: 4,
+  },
+  profileRole: {
+    fontSize: 14,
+    color: 'black',
+  },
+  fieldMembersSection: {
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  sectionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+    textAlign: 'left',
+    paddingLeft: 6
+  },
+  membersScrollContainer: {
+    paddingVertical: 4,
+  },
+  memberItem: {
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  memberCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+    borderWidth: 2,
+    borderColor: '#486CD6',
+    shadowColor: '#486CD6',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  memberName: {
+    fontSize: 11,
+    color: '#4B5563',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  menuSection: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
     marginBottom: 8,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  statIcon: {
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  menuIconContainer: {
+    width: 36,
+    height: 36,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuLabel: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+    flex: 1,
+  },
+  chartSection: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  chartTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  chartContainer: {
+    alignItems: 'center',
+  },
+  chart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 120,
+    marginBottom: 24,
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 10,
+  },
+  chartColumn: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  barsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 8,
+    justifyContent: 'center',
+  },
+  barSafe: {
+    width: 12,
+    backgroundColor: '#10B981',
+    marginRight: 2,
+    borderRadius: 2,
+    minHeight: 4,
+  },
+  barPending: {
+    width: 12,
+    backgroundColor: '#3B82F6',
+    borderRadius: 2,
+    minHeight: 4,
+  },
+  dayLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  legendColor: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabIcon: {
     width: 40,
     height: 40,
+    backgroundColor: '#EFF6FF',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  statTitle: {
-    fontSize: 14,
+  // New styles for field members with counts
+  memberCount: {
+    fontSize: 12,
+    fontWeight: '600',
     color: '#6B7280',
-    fontWeight: '500',
+    marginTop: 2,
   },
-  actionsSection: {
-    padding: 20,
-    paddingTop: 0,
+  // Recent users styles
+  recentUsersContainer: {
+    marginTop: 16,
   },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  actionCard: {
-    width: '48%',
-    marginBottom: 12,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  actionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionText: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  actionTitle: {
+  recentUsersTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'white',
-    marginBottom: 4,
-  },
-  actionDescription: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  activitySection: {
-    padding: 20,
-    paddingTop: 0,
-    paddingBottom: 40,
-  },
-  activityCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  activityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 14,
-    fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 2,
-  },
-  activityDescription: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  activityTime: {
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  // Top Performers styles
-  performersSection: {
-    marginBottom: 24,
-  },
-  performersCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  performerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  performerRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#3B82F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  rankNumber: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  performerInfo: {
-    flex: 1,
-  },
-  performerName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  performerRole: {
-    fontSize: 12,
-    color: '#6B7280',
-    textTransform: 'capitalize',
-  },
-  performerStats: {
-    alignItems: 'flex-end',
-  },
-  performerSales: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-    marginBottom: 2,
-  },
-  performerOrders: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  // Recent Orders styles
-  ordersSection: {
-    marginBottom: 24,
-  },
-  ordersCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  orderItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  orderInfo: {
-    flex: 1,
-  },
-  orderNumber: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  orderCreator: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  orderDetails: {
-    alignItems: 'flex-end',
-  },
-  orderAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-    marginBottom: 2,
-  },
-  orderStatus: {
-    fontSize: 12,
-    color: '#6B7280',
-    textTransform: 'capitalize',
-  },
-  companyModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  companyModalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 360,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  companyModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  companyModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  companyModalClose: {
-    padding: 6,
-    borderRadius: 999,
-    backgroundColor: '#E2E8F0',
-  },
-  companyModalDivider: {
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginBottom: 12,
-  },
-  companyModalList: {
-    maxHeight: 320,
-  },
-  companyModalListContent: {
-    paddingBottom: 8,
-  },
-  companyModalItem: {
+  recentUserItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  companyModalItemActive: {
-    borderWidth: 1,
-    borderColor: '#10B981',
-    backgroundColor: '#ECFDF5',
-  },
-  companyModalInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  companyModalName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 4,
-  },
-  companyModalMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  companyModalCode: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  companyModalRole: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
-  companyModalEmpty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-    gap: 8,
-  },
-  companyModalEmptyText: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    margin: 20,
-    minWidth: 300,
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginLeft: 12,
-  },
-  modalMessage: {
-    fontSize: 16,
-    color: '#6B7280',
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F9FAFB',
     borderRadius: 8,
+    marginBottom: 8,
+  },
+  recentUserAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
   },
-  cancelButton: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  logoutButtonModal: {
-    backgroundColor: '#3B82F6',
-  },
-  logoutButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+  recentUserInitial: {
     color: 'white',
-  },
-  // No Activity styles
-  noActivityContainer: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  noActivityText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  noActivitySubtext: {
     fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
+    fontWeight: '600',
+  },
+  recentUserInfo: {
+    flex: 1,
+  },
+  recentUserName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  recentUserRole: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  recentUserStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  recentUserStatusText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'white',
   },
 });
 
 export default DashboardHome;
+

@@ -58,6 +58,9 @@ const Users = () => {
   const route = useRoute();
   const routeParams = route.params as { role?: string } | undefined;
   
+  // Check if user can create users (admin can, zonal, rsm and asm cannot)
+  const canCreateUser = user?.role !== 'zonal' && user?.role !== 'rsm' && user?.role !== 'asm';
+  
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,6 +78,7 @@ const Users = () => {
     mobile: "",
     password: "",
     role: "",
+    parentUserId: "",
     address: {
       street: "",
       city: "",
@@ -84,20 +88,361 @@ const Users = () => {
     }
   });
 
+  // State for parent user selection
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [loadingParents, setLoadingParents] = useState(false);
+  const [showParentSelector, setShowParentSelector] = useState(false);
+  const [parentSearchQuery, setParentSearchQuery] = useState('');
+  const [selectedParentRole, setSelectedParentRole] = useState<string>('');
+
   const availableRoles = [
+    { value: 'zonal', label: 'Zonal Manager', level: 2 },
+    { value: 'rsm', label: 'Regional Sales Manager', level: 3 },
+    { value: 'asm', label: 'Area Sales Manager', level: 4 },
+    { value: 'dealers', label: 'Dealer', level: 6 },
+    { value: 'distibutors', label: 'Distributor', level: 6 },
+    { value: 'subdealer', label: 'Sub Dealer', level: 7 },
+    { value: 'salesman', label: 'Salesman', level: 5 },
+  ];
+
+  // All roles that can be selected as parent
+  const parentRoles = [
+    { value: 'admin', label: 'Admin' },
     { value: 'zonal', label: 'Zonal Manager' },
     { value: 'rsm', label: 'Regional Sales Manager' },
     { value: 'asm', label: 'Area Sales Manager' },
-    { value: 'salesman', label: 'Salesman' },
     { value: 'dealers', label: 'Dealer' },
     { value: 'subdealer', label: 'Sub Dealer' },
     { value: 'distibutors', label: 'Distributor' },
+    { value: 'salesman', label: 'Salesman' },
   ];
+
+  // Role hierarchy order for display
+  const roleOrder = ['zonal', 'rsm', 'asm', 'dealers', 'distibutors', 'subdealer', 'salesman'];
+  
+  // Static mock users for testing parent selection
+  const getStaticUsers = (): User[] => {
+    return [
+      {
+        _id: 'admin1',
+        name: 'John Admin',
+        email: 'admin@example.com',
+        mobile: '9876543210',
+        role: 'admin',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'zonal1',
+        name: 'Sarah Zonal',
+        email: 'zonal@example.com',
+        mobile: '9876543211',
+        role: 'zonal',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'zonal2',
+        name: 'Mike Zonal Manager',
+        email: 'mike.zonal@example.com',
+        mobile: '9876543212',
+        role: 'zonal',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'rsm1',
+        name: 'David RSM',
+        email: 'rsm@example.com',
+        mobile: '9876543213',
+        role: 'rsm',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'rsm2',
+        name: 'Lisa Regional Manager',
+        email: 'lisa.rsm@example.com',
+        mobile: '9876543214',
+        role: 'rsm',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'asm1',
+        name: 'Robert ASM',
+        email: 'asm@example.com',
+        mobile: '9876543215',
+        role: 'asm',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'asm2',
+        name: 'Emma Area Manager',
+        email: 'emma.asm@example.com',
+        mobile: '9876543216',
+        role: 'asm',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'dealer1',
+        name: 'Rajesh Dealer',
+        email: 'dealer@example.com',
+        mobile: '9876543217',
+        role: 'dealers',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'dealer2',
+        name: 'Priya Dealer',
+        email: 'priya.dealer@example.com',
+        mobile: '9876543218',
+        role: 'dealers',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'subdealer1',
+        name: 'Amit Sub Dealer',
+        email: 'subdealer@example.com',
+        mobile: '9876543219',
+        role: 'subdealer',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'subdealer2',
+        name: 'Sunita Sub Dealer',
+        email: 'sunita.sub@example.com',
+        mobile: '9876543220',
+        role: 'subdealer',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'dist1',
+        name: 'Kumar Distributor',
+        email: 'dist@example.com',
+        mobile: '9876543221',
+        role: 'distibutors',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'salesman1',
+        name: 'Vikram Salesman',
+        email: 'salesman@example.com',
+        mobile: '9876543222',
+        role: 'salesman',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: 'salesman2',
+        name: 'Anjali Sales Rep',
+        email: 'anjali.sales@example.com',
+        mobile: '9876543223',
+        role: 'salesman',
+        isActive: true,
+        companies: [],
+        createdAt: new Date().toISOString()
+      },
+    ];
+  };
+
+  // Fetch all users for parent selection
+  const fetchAllUsersForParent = async () => {
+    try {
+      setLoadingParents(true);
+      
+      // Use static data for testing
+      const staticUsers = getStaticUsers();
+      let filteredUsers: User[] = [];
+      
+      // Filter out the user being edited
+      filteredUsers = staticUsers.filter((u: User) => {
+        const isNotEditingUser = !isEditMode || !editingUser || u._id !== editingUser._id;
+        return isNotEditingUser;
+      });
+      
+      // Also try to fetch real users and merge
+      try {
+        const result = await getUsersByCompany({ limit: 1000 });
+        if (result && result.users) {
+          const realUsers = result.users.filter((u: User) => {
+            const isNotEditingUser = !isEditMode || !editingUser || u._id !== editingUser._id;
+            return isNotEditingUser;
+          });
+          
+          // Merge static and real users, avoiding duplicates
+          realUsers.forEach((realUser: User) => {
+            if (!filteredUsers.some(u => u._id === realUser._id)) {
+              filteredUsers.push(realUser);
+            }
+          });
+        }
+      } catch (err) {
+        console.log('Using static data only:', err);
+      }
+      
+      // Also include current logged-in user if not being edited
+      if (user) {
+        const isNotEditingUser = !isEditMode || !editingUser || user._id !== editingUser._id;
+        const alreadyInList = filteredUsers.some(u => u._id === user._id);
+        if (isNotEditingUser && !alreadyInList) {
+          filteredUsers.push({
+            _id: user._id,
+            name: user.name,
+            email: user.email || '',
+            mobile: user.mobile || '',
+            role: user.role,
+            isActive: true,
+            companies: [],
+            createdAt: new Date().toISOString()
+          } as User);
+        }
+      }
+      
+      setAllUsers(filteredUsers);
+    } catch (err) {
+      console.error('Failed to fetch users for parent selection:', err);
+      // Fallback to static data
+      const staticUsers = getStaticUsers();
+      setAllUsers(staticUsers);
+    } finally {
+      setLoadingParents(false);
+    }
+  };
+
+  // Group parent users by role
+  const groupParentUsersByRole = () => {
+    const grouped: { [key: string]: User[] } = {};
+    
+    let filtered = allUsers;
+    
+    // Filter by selected parent role if any
+    if (selectedParentRole) {
+      filtered = filtered.filter(u => u.role === selectedParentRole);
+    }
+    
+    // Filter by search query if any
+    if (parentSearchQuery) {
+      filtered = filtered.filter(u =>
+        u.name.toLowerCase().includes(parentSearchQuery.toLowerCase()) ||
+        u.email?.toLowerCase().includes(parentSearchQuery.toLowerCase()) ||
+        u.mobile.includes(parentSearchQuery)
+      );
+    }
+    
+    filtered.forEach((user) => {
+      if (!grouped[user.role]) {
+        grouped[user.role] = [];
+      }
+      grouped[user.role].push(user);
+    });
+
+    // Sort groups by role hierarchy order (all roles)
+    const sortedGroups: { [key: string]: User[] } = {};
+    roleOrder.forEach((role) => {
+      if (grouped[role]) {
+        sortedGroups[role] = grouped[role].sort((a, b) => a.name.localeCompare(b.name));
+      }
+    });
+    
+    // Also include admin if present
+    if (grouped['admin']) {
+      sortedGroups['admin'] = grouped['admin'].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return sortedGroups;
+  };
+
+  // Get role label
+  const getRoleLabel = (role: string) => {
+    const roleObj = availableRoles.find(r => r.value === role);
+    return roleObj ? roleObj.label : role.toUpperCase();
+  };
+
+  // Group users by role for main list display
+  const groupUsersByRoleForDisplay = () => {
+    const grouped: { [key: string]: User[] } = {};
+    
+    filteredUsers.forEach((user) => {
+      if (!grouped[user.role]) {
+        grouped[user.role] = [];
+      }
+      grouped[user.role].push(user);
+    });
+
+    // Sort groups by role hierarchy order
+    const sortedGroups: { [key: string]: User[] } = {};
+    roleOrder.forEach((role) => {
+      if (grouped[role]) {
+        sortedGroups[role] = grouped[role].sort((a, b) => a.name.localeCompare(b.name));
+      }
+    });
+
+    return sortedGroups;
+  };
+
+  // Get parent user name from hierarchy
+  const getParentUserName = (user: User): string => {
+    if (user.hierarchy?.parentUser) {
+      const parentUser = user.hierarchy.parentUser;
+      if (typeof parentUser === 'string') {
+        // If it's just an ID, try to find in allUsers or users list
+        const parent = allUsers.find(u => u._id === parentUser) || 
+                       users.find(u => u._id === parentUser);
+        return parent ? parent.name : 'Unknown';
+      } else {
+        return parentUser?.name || 'Unknown';
+      }
+    }
+    return 'No Parent';
+  };
+
+  // Get parent user role from hierarchy
+  const getParentUserRole = (user: User): string => {
+    if (user.hierarchy?.parentUser) {
+      const parentUser = user.hierarchy.parentUser;
+      if (typeof parentUser === 'string') {
+        const parent = allUsers.find(u => u._id === parentUser) || 
+                       users.find(u => u._id === parentUser);
+        return parent ? getRoleLabel(parent.role) : 'Unknown';
+      } else {
+        return getRoleLabel(parentUser?.role || '');
+      }
+    }
+    return '';
+  };
 
   // Fetch users when component mounts or company changes
   useEffect(() => {
     fetchUsers();
   }, [user?.defaultCompany, selectedRole]);
+
+  // Fetch all users for parent selection when modal opens
+  useEffect(() => {
+    if (modalVisible) {
+      fetchAllUsersForParent();
+    }
+  }, [modalVisible]);
 
   const fetchUsers = async () => {
     try {
@@ -131,6 +476,11 @@ const Users = () => {
       return;
     }
 
+    if (!formData.parentUserId) {
+      Alert.alert("Missing Parent User", "Please select a parent user. Every user must have a parent in the hierarchy.");
+      return;
+    }
+
     if (!user?.defaultCompany?._id) {
       Alert.alert("Error", "No company selected. Please select a company first.");
       return;
@@ -144,6 +494,7 @@ const Users = () => {
         mobile: formData.mobile,
         password: formData.password,
         role: formData.role,
+        parentUserId: formData.parentUserId,
         userName: formData.email || undefined, // Use email as username if provided
         address: {
           street: formData.address.street || "",
@@ -162,6 +513,7 @@ const Users = () => {
         mobile: "", 
         password: "", 
         role: "",
+        parentUserId: "",
         address: {
           street: "",
           city: "",
@@ -186,12 +538,21 @@ const Users = () => {
     
     setEditingUser(userToEdit);
     setIsEditMode(true);
+    
+    // Get parent user ID from hierarchy
+    const parentUserId = userToEdit.hierarchy?.parentUser 
+      ? (typeof userToEdit.hierarchy.parentUser === 'string' 
+          ? userToEdit.hierarchy.parentUser 
+          : (userToEdit.hierarchy.parentUser as any)?._id)
+      : "";
+    
     setFormData({
       name: userToEdit.name,
       email: userToEdit.email || "",
       mobile: userToEdit.mobile,
       password: "", // Don't pre-fill password for security
       role: userToEdit.role,
+      parentUserId: parentUserId,
       address: {
         street: userToEdit.address?.street || "",
         city: userToEdit.address?.city || "",
@@ -201,19 +562,8 @@ const Users = () => {
       }
     });
     
-    console.log('🔍 Form data set:', {
-      name: userToEdit.name,
-      email: userToEdit.email || "",
-      mobile: userToEdit.mobile,
-      role: userToEdit.role,
-      address: {
-        street: userToEdit.address?.street || "",
-        city: userToEdit.address?.city || "",
-        state: userToEdit.address?.state || "",
-        pincode: userToEdit.address?.pincode || "",
-        country: userToEdit.address?.country || "India"
-      }
-    });
+    // Fetch all users for parent selection when editing
+    fetchAllUsersForParent();
     
     setModalVisible(true);
   };
@@ -226,11 +576,17 @@ const Users = () => {
       return;
     }
 
+    if (!formData.parentUserId) {
+      Alert.alert("Missing Parent User", "Please select a parent user. Every user must have a parent in the hierarchy.");
+      return;
+    }
+
     console.log('🔍 Updating user with data:', {
       name: formData.name,
       email: formData.email,
       mobile: formData.mobile,
       role: formData.role,
+      parentUserId: formData.parentUserId,
       address: formData.address
     });
 
@@ -241,6 +597,7 @@ const Users = () => {
         email: formData.email || undefined,
         mobile: formData.mobile,
         role: formData.role,
+        parentUserId: formData.parentUserId,
         userName: formData.email || undefined,
         isActive: editingUser.isActive,
         address: {
@@ -262,6 +619,7 @@ const Users = () => {
         mobile: "", 
         password: "", 
         role: "",
+        parentUserId: "",
         address: {
           street: "",
           city: "",
@@ -273,6 +631,9 @@ const Users = () => {
       setModalVisible(false);
       setEditingUser(null);
       setIsEditMode(false);
+      setShowParentSelector(false);
+      setParentSearchQuery('');
+      setSelectedParentRole('');
       fetchUsers(); // Refresh the list
     } catch (err) {
       console.error('Failed to update user:', err);
@@ -329,49 +690,68 @@ const Users = () => {
     return colors[role] || '#6B7280';
   };
 
-  const renderUserCard = ({ item }: { item: User }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.userInfo}>
-          <Text style={styles.name}>{item.name}</Text>
-          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) }]}>
-            <Text style={styles.roleText}>{item.role.toUpperCase()}</Text>
+  const renderUserCard = ({ item }: { item: User }) => {
+    const parentName = getParentUserName(item);
+    const parentRole = getParentUserRole(item);
+    
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.userInfo}>
+            <Text style={styles.name}>{item.name}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) }]}>
+              <Text style={styles.roleText}>{getRoleLabel(item.role)}</Text>
+            </View>
           </View>
+          {canCreateUser && (
+            <View style={styles.actions}>
+              <TouchableOpacity onPress={() => handleEditUser(item)} style={styles.actionButton}>
+                <Ionicons name="pencil" size={18} color="#3B82F6" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDeleteUser(item)} style={styles.actionButton}>
+                <Ionicons name="trash" size={18} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={() => handleEditUser(item)} style={styles.actionButton}>
-            <Ionicons name="pencil" size={18} color="#3B82F6" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDeleteUser(item)} style={styles.actionButton}>
-            <Ionicons name="trash" size={18} color="#EF4444" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      <View style={styles.userDetails}>
-        <View style={styles.detailRow}>
-          <Ionicons name="mail" size={16} color="#6B7280" />
-          <Text style={styles.detailText}>{item.email}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="call" size={16} color="#6B7280" />
-          <Text style={styles.detailText}>{item.mobile}</Text>
-        </View>
-        {item.hierarchy?.parentUser && (
+        
+        <View style={styles.userDetails}>
           <View style={styles.detailRow}>
-            <Ionicons name="person" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>Reports to: {item.hierarchy.parentUser.name}</Text>
+            <Ionicons name="mail" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>{item.email || 'N/A'}</Text>
           </View>
-        )}
-        <View style={styles.detailRow}>
-          <Ionicons name="business" size={16} color="#6B7280" />
-          <Text style={styles.detailText}>
-            {item.companies[0]?.companyId?.companyName || 'No company assigned'}
-          </Text>
+          <View style={styles.detailRow}>
+            <Ionicons name="call" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>{item.mobile}</Text>
+          </View>
+          {parentName !== 'No Parent' && (
+            <View style={styles.hierarchyRow}>
+              <View style={styles.hierarchyChain}>
+                <Ionicons name="arrow-up" size={14} color="#6B7280" />
+                <View style={styles.hierarchyInfo}>
+                  <Text style={styles.hierarchyLabel}>Reports to:</Text>
+                  <View style={styles.hierarchyParent}>
+                    <Text style={styles.hierarchyParentName}>{parentName}</Text>
+                    {parentRole && (
+                      <View style={[styles.hierarchyParentBadge, { backgroundColor: getRoleColor(allUsers.find(u => u._id === (item.hierarchy?.parentUser as any)?._id || u.name === parentName)?.role || users.find(u => u._id === (item.hierarchy?.parentUser as any)?._id || u.name === parentName)?.role || '') }]}>
+                        <Text style={styles.hierarchyParentBadgeText}>{parentRole}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+          <View style={styles.detailRow}>
+            <Ionicons name="business" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>
+              {item.companies[0]?.companyId?.companyName || 'No company assigned'}
+            </Text>
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading && !refreshing) {
     return (
@@ -399,13 +779,15 @@ const Users = () => {
         {/* Header Section */}
         <View style={styles.headerSection}>
           <Text style={styles.heading}>Company Users</Text>
-          <TouchableOpacity 
-            style={styles.addBtn} 
-            onPress={() => setModalVisible(true)}
-          >
-            <Ionicons name="add" size={20} color="#fff" />
-            <Text style={styles.addBtnText}>Add User</Text>
-          </TouchableOpacity>
+          {canCreateUser && (
+            <TouchableOpacity 
+              style={styles.addBtn} 
+              onPress={() => setModalVisible(true)}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+              <Text style={styles.addBtnText}>Add User</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Filters Section */}
@@ -461,50 +843,98 @@ const Users = () => {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={filteredUsers}
-            renderItem={renderUserCard}
-            keyExtractor={(item) => item._id}
-            scrollEnabled={false}
-            showsVerticalScrollIndicator={false}
-          />
+          <View style={styles.usersListContainer}>
+            {Object.keys(groupUsersByRoleForDisplay()).map((role) => {
+              const roleUsers = groupUsersByRoleForDisplay()[role];
+              return (
+                <View key={role} style={styles.roleGroupContainer}>
+                  <View style={styles.roleGroupHeader}>
+                    <View style={[styles.roleGroupBadge, { backgroundColor: getRoleColor(role) }]}>
+                      <Text style={styles.roleGroupBadgeText}>{getRoleLabel(role)}</Text>
+                    </View>
+                    <Text style={styles.roleGroupCount}>({roleUsers.length} {roleUsers.length === 1 ? 'user' : 'users'})</Text>
+                  </View>
+                  {roleUsers.map((user) => (
+                    <View key={user._id}>
+                      {renderUserCard({ item: user })}
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
 
-      {/* Add User Modal */}
+      {/* Add User Sidebar - Bottom to Top */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
+        <TouchableOpacity 
+          style={styles.sidebarOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setModalVisible(false);
+            setEditingUser(null);
+            setIsEditMode(false);
+            setShowParentSelector(false);
+            setParentSearchQuery('');
+            setSelectedParentRole('');
+            setFormData({ 
+              name: "", 
+              email: "", 
+              mobile: "", 
+              password: "", 
+              role: "",
+              parentUserId: "",
+              address: {
+                street: "",
+                city: "",
+                state: "",
+                pincode: "",
+                country: "India"
+              }
+            });
+          }}
+        >
+            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sidebarContainer}>
+              {/* Drag Handle */}
+              <View style={styles.sidebarDragHandle} />
+              
+            <View style={styles.sidebarHeader}>
+              <Text style={styles.sidebarTitle}>
                 {isEditMode ? 'Edit User' : 'Add New User'}
               </Text>
               <TouchableOpacity onPress={() => {
                 setModalVisible(false);
                 setEditingUser(null);
                 setIsEditMode(false);
+                setShowParentSelector(false);
+                setParentSearchQuery('');
+                setSelectedParentRole('');
                 setFormData({ 
-        name: "", 
-        email: "", 
-        mobile: "", 
-        password: "", 
-        role: "",
-        address: {
-          street: "",
-          city: "",
-          state: "",
-          pincode: "",
-          country: "India"
-        }
-      });
+                  name: "", 
+                  email: "", 
+                  mobile: "", 
+                  password: "", 
+                  role: "",
+                  parentUserId: "",
+                  address: {
+                    street: "",
+                    city: "",
+                    state: "",
+                    pincode: "",
+                    country: "India"
+                  }
+                });
               }}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
             <ScrollView
-              style={styles.modalContent}
-              contentContainerStyle={styles.modalContentContainer}
+              style={styles.sidebarContent}
+              contentContainerStyle={styles.sidebarContentContainer}
+              showsVerticalScrollIndicator={true}
             >
               <TextInput
                 placeholder="Full Name *"
@@ -554,6 +984,160 @@ const Users = () => {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {/* Parent User Selection */}
+              <Text style={styles.roleLabel}>Select Parent User *</Text>
+              <Text style={styles.hintText}>
+                Select any user as parent. Every user must have a parent in the hierarchy.
+              </Text>
+              
+              <TouchableOpacity
+                style={styles.parentSelectorButton}
+                onPress={() => {
+                  if (!showParentSelector) {
+                    fetchAllUsersForParent();
+                  }
+                  setShowParentSelector(!showParentSelector);
+                }}
+              >
+                <View style={styles.parentSelectorContent}>
+                  <Ionicons name="people" size={20} color="#6B7280" />
+                  <Text style={[
+                    styles.parentSelectorText,
+                    !formData.parentUserId && styles.parentSelectorPlaceholder
+                  ]}>
+                    {formData.parentUserId
+                      ? allUsers.find(u => u._id === formData.parentUserId)?.name || 'Select parent user'
+                      : 'Select parent user'}
+                  </Text>
+                  <Ionicons 
+                    name={showParentSelector ? "chevron-up" : "chevron-down"} 
+                    size={20} 
+                    color="#6B7280" 
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {formData.parentUserId && (
+                <View style={styles.selectedParentInfo}>
+                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                  <Text style={styles.selectedParentText}>
+                    Parent: {allUsers.find(u => u._id === formData.parentUserId)?.name} 
+                    ({getRoleLabel(allUsers.find(u => u._id === formData.parentUserId)?.role || '')})
+                  </Text>
+                </View>
+              )}
+
+              {showParentSelector && (
+                <View style={styles.parentSelectorDropdown}>
+                  {/* Parent Role Filter */}
+                  <View style={styles.parentRoleFilterContainer}>
+                    <Text style={styles.parentRoleFilterLabel}>Filter by Role:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parentRoleFilters}>
+                      <TouchableOpacity
+                        style={[styles.parentRoleFilter, !selectedParentRole && styles.parentRoleFilterActive]}
+                        onPress={() => setSelectedParentRole('')}
+                      >
+                        <Text style={[styles.parentRoleFilterText, !selectedParentRole && styles.parentRoleFilterTextActive]}>
+                          All
+                        </Text>
+                      </TouchableOpacity>
+                      {parentRoles.map((role) => (
+                        <TouchableOpacity
+                          key={role.value}
+                          style={[styles.parentRoleFilter, selectedParentRole === role.value && styles.parentRoleFilterActive]}
+                          onPress={() => setSelectedParentRole(role.value)}
+                        >
+                          <Text style={[styles.parentRoleFilterText, selectedParentRole === role.value && styles.parentRoleFilterTextActive]}>
+                            {role.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {/* Search */}
+                  <View style={styles.parentSearchContainer}>
+                    <Ionicons name="search" size={16} color="#9CA3AF" />
+                    <TextInput
+                      style={styles.parentSearchInput}
+                      placeholder="Search by name, email, or mobile..."
+                      value={parentSearchQuery}
+                      onChangeText={setParentSearchQuery}
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+                  
+                  <ScrollView style={styles.parentListContainer} nestedScrollEnabled>
+                    {loadingParents ? (
+                      <View style={styles.parentLoadingContainer}>
+                        <ActivityIndicator size="small" color="#0493D2" />
+                        <Text style={styles.parentLoadingText}>Loading users...</Text>
+                      </View>
+                    ) : (() => {
+                      const groupedUsers = groupParentUsersByRole();
+                      const hasUsers = Object.keys(groupedUsers).length > 0;
+                      
+                      return hasUsers ? (
+                        Object.keys(groupedUsers).map((role) => {
+                          return (
+                            <View key={role} style={styles.parentRoleGroup}>
+                              <View style={styles.parentRoleHeader}>
+                                <View style={[styles.parentRoleBadge, { backgroundColor: getRoleColor(role) }]}>
+                                  <Text style={styles.parentRoleBadgeText}>{getRoleLabel(role)}</Text>
+                                </View>
+                                <Text style={styles.parentRoleCount}>({groupedUsers[role].length})</Text>
+                              </View>
+                              {groupedUsers[role].map((parentUser) => {
+                                return (
+                                  <TouchableOpacity
+                                    key={parentUser._id}
+                                    style={[
+                                      styles.parentUserItem,
+                                      formData.parentUserId === parentUser._id && styles.parentUserItemSelected
+                                    ]}
+                                    onPress={() => {
+                                      setFormData({ ...formData, parentUserId: parentUser._id });
+                                      setShowParentSelector(false);
+                                      setParentSearchQuery('');
+                                      setSelectedParentRole('');
+                                    }}
+                                  >
+                                    <View style={styles.parentUserInfo}>
+                                      <Text style={[
+                                        styles.parentUserName,
+                                        formData.parentUserId === parentUser._id && styles.parentUserNameSelected
+                                      ]}>
+                                        {parentUser.name}
+                                      </Text>
+                                      <Text style={styles.parentUserDetails}>
+                                        {parentUser.email || parentUser.mobile}
+                                      </Text>
+                                    </View>
+                                    {formData.parentUserId === parentUser._id && (
+                                      <Ionicons name="checkmark-circle" size={20} color="#0493D2" />
+                                    )}
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          );
+                        })
+                      ) : (
+                        <View style={styles.parentEmptyState}>
+                          <Ionicons name="people-outline" size={32} color="#9CA3AF" />
+                          <Text style={styles.parentEmptyText}>No users found</Text>
+                          <Text style={styles.parentEmptySubtext}>
+                            {parentSearchQuery || selectedParentRole 
+                              ? 'Try adjusting your filters' 
+                              : 'No users available for parent selection'}
+                          </Text>
+                        </View>
+                      );
+                    })()}
+                  </ScrollView>
+                </View>
+              )}
 
               {/* Address Section */}
               <Text style={styles.sectionLabel}>Address Information</Text>
@@ -614,7 +1198,7 @@ const Users = () => {
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View style={styles.sidebarActions}>
               <TouchableOpacity 
                 onPress={() => setModalVisible(false)} 
                 style={styles.cancelBtn}
@@ -635,8 +1219,9 @@ const Users = () => {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+            </View>
+            </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -831,52 +1416,71 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
   },
-  modalOverlay: {
+  sidebarOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
-  modalContainer: {
+  sidebarContainer: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    maxHeight: '80%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '95%',
+    maxHeight: '98%',
+    paddingBottom: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
   },
-  modalHeader: {
+  sidebarDragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  sidebarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
+    paddingTop: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  modalTitle: {
-    fontSize: 20,
+  sidebarTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#1F2937',
   },
-  modalContent: {
-    padding: 20,
-    maxHeight: 400,
+  sidebarContent: {
+    flex: 1,
+    padding: 24,
   },
-  modalContentContainer: {
-    paddingBottom: 32,
+  sidebarContentContainer: {
+    paddingBottom: 24,
   },
   input: {
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    marginBottom: 16,
+    marginBottom: 18,
     backgroundColor: '#fff',
+    minHeight: 50,
   },
   roleLabel: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 12,
+    marginBottom: 14,
+    marginTop: 4,
   },
   roleOptions: {
     flexDirection: 'row',
@@ -903,18 +1507,22 @@ const styles = StyleSheet.create({
   roleOptionTextSelected: {
     color: '#fff',
   },
-  modalActions: {
+  sidebarActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    padding: 20,
+    padding: 24,
+    paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    gap: 12,
+    gap: 16,
+    backgroundColor: '#fff',
   },
   cancelBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 10,
+    minHeight: 50,
+    justifyContent: 'center',
   },
   cancelText: {
     fontSize: 16,
@@ -923,11 +1531,13 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     backgroundColor: '#0493D2',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 120,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 10,
+    minWidth: 140,
+    minHeight: 50,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveText: {
     fontSize: 16,
@@ -935,11 +1545,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sectionLabel: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: '#374151',
-    marginTop: 20,
-    marginBottom: 12,
+    marginTop: 24,
+    marginBottom: 14,
   },
   addressRow: {
     flexDirection: 'row',
@@ -951,6 +1561,292 @@ const styles = StyleSheet.create({
   },
   halfInput: {
     flex: 1,
+  },
+  hintText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  parentSelectorButton: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 14,
+    backgroundColor: '#fff',
+    minHeight: 50,
+  },
+  parentSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  parentSelectorText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  parentSelectorPlaceholder: {
+    color: '#9CA3AF',
+  },
+  selectedParentInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 12,
+    gap: 6,
+  },
+  selectedParentText: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '500',
+  },
+  parentSelectorDropdown: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    marginBottom: 18,
+    maxHeight: 500,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  parentSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    gap: 8,
+  },
+  parentSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  parentListContainer: {
+    maxHeight: 450,
+  },
+  parentLoadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  parentLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  parentRoleGroup: {
+    marginBottom: 8,
+  },
+  parentRoleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    gap: 8,
+  },
+  parentRoleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  parentRoleBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  parentRoleCount: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  parentUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  parentUserItemSelected: {
+    backgroundColor: '#F0F9FF',
+  },
+  parentUserInfo: {
+    flex: 1,
+  },
+  parentUserName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  parentUserNameSelected: {
+    color: '#0493D2',
+    fontWeight: '600',
+  },
+  parentUserDetails: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  parentEmptyState: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  parentEmptyText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  parentEmptySubtext: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  hierarchyInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  hierarchyInfoText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#1E40AF',
+    lineHeight: 16,
+  },
+  parentUserHierarchy: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  parentRoleFilterContainer: {
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+  },
+  parentRoleFilterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  parentRoleFilters: {
+    flexDirection: 'row',
+  },
+  parentRoleFilter: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  parentRoleFilterActive: {
+    backgroundColor: '#0493D2',
+    borderColor: '#0493D2',
+  },
+  parentRoleFilterText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  parentRoleFilterTextActive: {
+    color: '#fff',
+  },
+  usersListContainer: {
+    gap: 20,
+  },
+  roleGroupContainer: {
+    marginBottom: 24,
+  },
+  roleGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E5E7EB',
+    gap: 8,
+  },
+  roleGroupBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  roleGroupBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  roleGroupCount: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  hierarchyRow: {
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3B82F6',
+  },
+  hierarchyChain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hierarchyInfo: {
+    flex: 1,
+  },
+  hierarchyLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  hierarchyParent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  hierarchyParentName: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '600',
+  },
+  hierarchyParentBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  hierarchyParentBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
   },
 });
 

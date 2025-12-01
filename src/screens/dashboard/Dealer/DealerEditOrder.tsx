@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,16 +14,177 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import {
+  DEFAULT_GST_RATE,
+  computeGstBreakdown,
+  determineGstType,
+  extractState,
+  GstType,
+} from '../../../utils/gst';
+
+const MODE_OPTIONS = ['Cash', 'Cheque', 'Bank Transfer', 'UPI', 'Credit Card', 'Credit', 'Other'];
+const DEFAULT_UNIT_LABEL = 'units';
+
+const getStockNumber = (stock: number | { current?: number; minimum?: number; maximum?: number } | undefined): number => {
+  if (typeof stock === 'number') {
+    return stock;
+  }
+
+  if (stock && typeof stock.current === 'number') {
+    return stock.current;
+  }
+
+  return 0;
+};
+
+const getUnitLabel = (unit?: string): string => {
+  if (unit && unit.trim().length > 0) {
+    return unit;
+  }
+
+  return DEFAULT_UNIT_LABEL;
+};
+
+const getProductUnitLabel = (product?: Product, fallbackUnit?: string): string =>
+  product?.baseUnits ||
+  product?.unit ||
+  product?.additionalUnits ||
+  fallbackUnit ||
+  DEFAULT_UNIT_LABEL;
+
+const coerceNumber = (value: any): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
+
+const normalizeProduct = (raw: any): Product => {
+  const stockValue =
+    raw?.stock ??
+    raw?.availableStock ??
+    raw?.currentStock ??
+    (typeof raw?.stock === 'number' ? raw.stock : undefined);
+
+  return {
+    _id: raw?._id ?? raw?.id ?? '',
+    productCode: raw?.productCode ?? '',
+    productName: raw?.productName ?? raw?.name ?? '',
+    name: raw?.name,
+    description: raw?.description,
+    partNo: raw?.partNo,
+    itemAlias: raw?.itemAlias,
+    parent: raw?.parent,
+    category: raw?.category,
+    subCategory: raw?.subCategory,
+    brand: raw?.brand,
+    baseUnits: raw?.baseUnits,
+    additionalUnits: raw?.additionalUnits,
+    stdPurcRate: coerceNumber(raw?.stdPurcRate),
+    stdSaleRate: coerceNumber(raw?.stdSaleRate),
+    price: coerceNumber(raw?.price),
+    unit: raw?.unit,
+    stock:
+      typeof stockValue === 'object' || typeof stockValue === 'number'
+        ? stockValue
+        : coerceNumber(stockValue),
+    isActive: raw?.isActive,
+    isFinishItem: raw?.isFinishItem,
+    gstRate: coerceNumber(raw?.gstRate),
+    itemGstPer: coerceNumber(raw?.itemGstPer),
+    itemHsn: raw?.itemHsn,
+    itemHsnDesc: raw?.itemHsnDesc,
+    openingBalance: coerceNumber(raw?.openingBalance),
+    itemOpRate: coerceNumber(raw?.itemOpRate),
+    companyCode: raw?.companyCode,
+    other1: raw?.other1,
+    other2: raw?.other2,
+    other3: raw?.other3,
+    other4: raw?.other4,
+    other5: raw?.other5,
+    createdAt: raw?.createdAt,
+    updatedAt: raw?.updatedAt,
+  };
+};
+
+const getProductPrice = (product?: Product): number => {
+  const candidates = [
+    product?.stdSaleRate,
+    product?.price,
+    product?.stdPurcRate,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return 0;
+};
+
+const getProductGstRate = (product?: Product): number =>
+  (typeof product?.itemGstPer === 'number' ? product.itemGstPer : undefined) ??
+  (typeof product?.gstRate === 'number' ? product.gstRate : undefined) ??
+  DEFAULT_GST_RATE;
+
+const getProductName = (product?: Product): string =>
+  (product?.name || product?.productName || '').trim();
+
+const getProductPartNo = (product?: Product): string =>
+  product?.partNo || product?.itemAlias || '';
+
+const getProductHsn = (product?: Product): string => product?.itemHsn || '';
+
+const getProductCategory = (product?: Product): string =>
+  product?.category || 'General';
+
+const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
+
+const normalizeAddress = (
+  address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }
+) => ({
+  street: address?.street || '',
+  city: address?.city || '',
+  state: address?.state || '',
+  pincode: address?.pincode || '',
+  country: address?.country || 'India',
+});
 
 interface OrderItem {
   productId: string;
   productCode: string;
   productName: string;
+  partNo?: string;
+  itemAlias?: string;
+  category?: string;
+  subCategory?: string;
+  brand?: string;
+  itemHsn?: string;
+  itemHsnDesc?: string;
+  description?: string;
   unit: string;
   unitPrice: number;
   quantity: number;
+  discount: number;
+  gstRate: number;
+  taxType: GstType;
+  taxableValue: number;
+  cgstRate: number;
+  cgstAmount: number;
+  sgstRate: number;
+  sgstAmount: number;
+  igstRate: number;
+  igstAmount: number;
+  totalTaxAmount: number;
   totalAmount: number;
   availableStock: number;
+  baseUnits?: string;
+  additionalUnits?: string;
 }
 
 interface User {
@@ -45,15 +206,41 @@ interface Product {
   _id: string;
   productName: string;
   productCode: string;
-  price: number;
-  unit: string;
-  stock: {
-    current: number;
-    minimum: number;
-    maximum: number;
+  name?: string;
+  description?: string;
+  partNo?: string;
+  itemAlias?: string;
+  parent?: string;
+  category?: string;
+  subCategory?: string;
+  brand?: string;
+  baseUnits?: string;
+  additionalUnits?: string;
+  stdPurcRate?: number;
+  stdSaleRate?: number;
+  price?: number;
+  unit?: string;
+  stock?: number | {
+    current?: number;
+    minimum?: number;
+    maximum?: number;
   };
-  isAvailable: boolean;
-  isActive: boolean;
+  isActive?: boolean;
+  isFinishItem?: boolean;
+  gstRate?: number;
+  itemGstPer?: number;
+  itemHsn?: string;
+  itemHsnDesc?: string;
+  openingBalance?: number;
+  itemOpRate?: number;
+  companyCode?: string;
+  other1?: string;
+  other2?: string;
+  other3?: string;
+  other4?: string;
+  other5?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface Order {
@@ -88,18 +275,35 @@ interface Order {
   shippingAddress: {
     subDealerId?: string;
     name: string;
-    address: string;
+    address: any;
     mobile: string;
   };
   items: OrderItem[];
   totalQuantity: number;
   totalAmount: number;
+  taxableValueTotal?: number;
+  cgstTotal?: number;
+  sgstTotal?: number;
+  igstTotal?: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  finalAmount?: number;
+  sellerState?: string;
+  buyerState?: string;
+  gstType?: GstType;
   notes?: string;
   status: string;
   orderType: string;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+  paymentMethod?: string;
+  modeSelection?: string;
+  mode?: string;
+  termsOfPayment?: string;
+  otherReference?: string;
+  termsOfDelivery1?: string;
+  termsOfDelivery2?: string;
 }
 
 const DealerEditOrder = () => {
@@ -110,6 +314,7 @@ const DealerEditOrder = () => {
   const { 
     user,
     getUsersByRole, 
+    getSubDealers,
     getProducts, 
     getProductById, 
     updateOrder 
@@ -129,23 +334,193 @@ const DealerEditOrder = () => {
     return parts.length > 0 ? parts.join(', ') : 'Address not specified';
   };
   
+const mapPaymentMethodToLabel = (value?: string) => {
+  if (!value) return '';
+  const normalized = value.toString().toLowerCase();
+  switch (normalized) {
+    case 'cash':
+      return 'Cash';
+    case 'cheque':
+    case 'check':
+      return 'Cheque';
+    case 'bank_transfer':
+    case 'bank transfer':
+    case 'bank-transfer':
+    case 'neft':
+    case 'rtgs':
+      return 'Bank Transfer';
+    case 'upi':
+      return 'UPI';
+    case 'card':
+    case 'credit card':
+    case 'debit card':
+      return 'Credit Card';
+    case 'credit':
+      return 'Credit';
+    default:
+      return value;
+  }
+};
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [updatingQuantity, setUpdatingQuantity] = useState<string | null>(null);
   
-  // Form state - dealer is auto-populated from logged-in user
+  // Form state
+  const [selectedDealer, setSelectedDealer] = useState<User | null>(null);
   const [selectedSubDealer, setSelectedSubDealer] = useState<User | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [orderNotes, setOrderNotes] = useState('');
+const [orderNotes, setOrderNotes] = useState('');
+const [mode, setMode] = useState('Cash');
+const [customMode, setCustomMode] = useState('');
+const [termsOfPayment, setTermsOfPayment] = useState('');
+const [otherReference, setOtherReference] = useState('');
+const [termsOfDelivery1, setTermsOfDelivery1] = useState('');
+const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
   
-  // Data state - no need to fetch dealers, use logged-in user
+  // Data state
+  const [dealers, setDealers] = useState<User[]>([]);
   const [subDealers, setSubDealers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   
   // UI state
+  const [showDealerDropdown, setShowDealerDropdown] = useState(false);
   const [showSubDealerDropdown, setShowSubDealerDropdown] = useState(false);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const deriveSellerState = useCallback(() => {
+    if ((order as any)?.sellerState) {
+      return extractState((order as any).sellerState);
+    }
+
+    if (!user) {
+      return '';
+    }
+
+    const defaultCompany =
+      (user as any)?.defaultCompany ??
+      (user as any)?.userDetails?.defaultCompany;
+
+    if (!defaultCompany || typeof defaultCompany === 'string') {
+      return '';
+    }
+
+    return (
+      extractState(defaultCompany.companyState) ||
+      extractState(defaultCompany?.contactDetails?.address?.state)
+    );
+  }, [order, user]);
+
+  const sellerState = useMemo(() => deriveSellerState(), [deriveSellerState]);
+
+  const buyerStateFromOrder = useMemo(() => {
+    const explicit = extractState((order as any)?.buyerState);
+    if (explicit) {
+      return explicit;
+    }
+
+    const shippingAddress = (order as any)?.shippingAddress;
+    const shippingState =
+      extractState(shippingAddress?.state) ||
+      extractState(shippingAddress?.address?.state);
+
+    const customerAddressState = extractState((order as any)?.customerAddress?.state);
+
+    return shippingState || customerAddressState || '';
+  }, [order]);
+
+  const buyerState = useMemo(() => {
+    if (selectedSubDealer?.address?.state) {
+      return extractState(selectedSubDealer.address.state);
+    }
+    if (selectedDealer?.address?.state) {
+      return extractState(selectedDealer.address.state);
+    }
+    return buyerStateFromOrder;
+  }, [selectedDealer, selectedSubDealer, buyerStateFromOrder]);
+
+  const gstType = useMemo(
+    () => determineGstType(sellerState, buyerState),
+    [sellerState, buyerState]
+  );
+
+  const applyGstToItems = useCallback(
+    (items: OrderItem[], type: GstType): OrderItem[] =>
+      items.map((item) => {
+        const tax = computeGstBreakdown({
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountPercent: item.discount ?? 0,
+          gstRate: item.gstRate ?? DEFAULT_GST_RATE,
+          gstType: type,
+        });
+
+        return {
+          ...item,
+          discount: item.discount ?? 0,
+          gstRate: tax.gstRate,
+          taxType: type,
+          taxableValue: tax.taxableValue,
+          cgstRate: tax.cgstRate,
+          cgstAmount: tax.cgstAmount,
+          sgstRate: tax.sgstRate,
+          sgstAmount: tax.sgstAmount,
+          igstRate: tax.igstRate,
+          igstAmount: tax.igstAmount,
+          totalTaxAmount: tax.totalTaxAmount,
+          totalAmount: tax.lineTotal,
+        };
+      }),
+    []
+  );
+
+  const calculateOrderSummary = useCallback(
+    (items: OrderItem[]) =>
+      items.reduce(
+        (acc, item) => {
+          acc.totalQuantity += item.quantity;
+          acc.grossAmount += item.unitPrice * item.quantity;
+          acc.taxableValue += item.taxableValue || 0;
+          acc.cgstTotal += item.cgstAmount || 0;
+          acc.sgstTotal += item.sgstAmount || 0;
+          acc.igstTotal += item.igstAmount || 0;
+          acc.taxTotal += item.totalTaxAmount || 0;
+          acc.totalAmount += item.totalAmount || 0;
+          return acc;
+        },
+        {
+          totalQuantity: 0,
+          grossAmount: 0,
+          taxableValue: 0,
+          cgstTotal: 0,
+          sgstTotal: 0,
+          igstTotal: 0,
+          taxTotal: 0,
+          totalAmount: 0,
+        }
+      ),
+    []
+  );
+
+  useEffect(() => {
+    setOrderItems((prev) => applyGstToItems(prev, gstType));
+  }, [gstType, applyGstToItems]);
+
+  const orderSummary = useMemo(
+    () => calculateOrderSummary(orderItems),
+    [orderItems, calculateOrderSummary]
+  );
+
+  const hasCgst = orderSummary.cgstTotal > 0.0001;
+  const hasSgst = orderSummary.sgstTotal > 0.0001;
+  const hasIgst = orderSummary.igstTotal > 0.0001;
+  const gstTypeLabel =
+    gstType === 'INTRA_STATE'
+      ? 'Intra-state (CGST + SGST/UTGST)'
+      : gstType === 'INTER_STATE'
+        ? 'Inter-state (IGST)'
+        : 'GST type unavailable';
 
   useEffect(() => {
     fetchInitialData();
@@ -155,27 +530,110 @@ const DealerEditOrder = () => {
   const initializeForm = () => {
     // Initialize form with existing order data and normalize items
     const normalizedItems: OrderItem[] = (order.items || []).map((it: any) => {
-      const productIdStr = typeof it.productId === 'object' ? it.productId?._id : it.productId;
-      const productCode = it.productCode || (typeof it.productId === 'object' ? it.productId?.productCode : '');
-      const productName = it.productName || (typeof it.productId === 'object' ? it.productId?.productName : '');
-      const unit = it.unit || '';
-      const unitPrice = it.unitPrice ?? it.price ?? 0;
+      const productIdObj = typeof it.productId === 'object' ? it.productId : undefined;
+      const productIdStr = productIdObj?._id || it.productId;
+      const productCode = it.productCode || productIdObj?.productCode || '';
+      const productName = it.productName || productIdObj?.productName || productIdObj?.name || '';
+      const unit = getProductUnitLabel(productIdObj as Product, getUnitLabel(it.unit));
+      const unitPrice =
+        typeof it.unitPrice === 'number'
+          ? it.unitPrice
+          : typeof it.price === 'number'
+            ? it.price
+            : getProductPrice(productIdObj as Product);
       const quantity = it.quantity ?? 0;
+      const discount = typeof it.discount === 'number' ? it.discount : 0;
+      const gstRate =
+        typeof it.gstRate === 'number'
+          ? it.gstRate
+          : typeof it.tax === 'number'
+            ? it.tax
+            : DEFAULT_GST_RATE;
       const totalAmount = (it.totalAmount ?? it.totalPrice ?? (unitPrice * quantity)) ?? 0;
+      const availableStock =
+        typeof it.availableStock === 'number'
+          ? it.availableStock
+          : getStockNumber(productIdObj?.stock) ||
+            getStockNumber((it as any)?.stock);
+      const partNo = it.partNo || productIdObj?.partNo || productIdObj?.itemAlias;
+      const itemHsn = it.itemHsn || productIdObj?.itemHsn;
+      const category = it.category || productIdObj?.category;
+      const brand = it.brand || productIdObj?.brand;
+      const description = it.description || productIdObj?.description;
+
       return {
         productId: productIdStr,
         productCode,
         productName,
+        partNo,
+        itemAlias: it.itemAlias || productIdObj?.itemAlias,
+        category,
+        subCategory: it.subCategory || productIdObj?.subCategory,
+        brand,
+        itemHsn,
+        itemHsnDesc: it.itemHsnDesc || productIdObj?.itemHsnDesc,
+        description,
+        baseUnits: productIdObj?.baseUnits,
+        additionalUnits: productIdObj?.additionalUnits,
         unit,
         unitPrice,
         quantity,
+        discount,
+        gstRate,
+        taxType: (it.taxType as GstType) ?? (order.gstType as GstType) ?? 'UNKNOWN',
+        taxableValue: 0,
+        cgstRate: 0,
+        cgstAmount: 0,
+        sgstRate: 0,
+        sgstAmount: 0,
+        igstRate: 0,
+        igstAmount: 0,
+        totalTaxAmount: 0,
         totalAmount,
-        availableStock: it.availableStock ?? 0,
-      } as OrderItem;
+        availableStock,
+      };
     });
 
-    setOrderItems(normalizedItems);
+    const initialSeller = extractState((order as any)?.sellerState) || deriveSellerState();
+    const initialBuyer = buyerStateFromOrder;
+    setOrderItems(
+      applyGstToItems(normalizedItems, determineGstType(initialSeller, initialBuyer))
+    );
+
     setOrderNotes(order.notes || '');
+    const backendModeSelection = (order.modeSelection || '').toString();
+    const backendMode = (order.mode || '').toString();
+    const backendPaymentMethod = mapPaymentMethodToLabel(order.paymentMethod);
+
+    let derivedMode = backendModeSelection || backendMode || backendPaymentMethod;
+    let derivedCustomMode = '';
+
+    if (derivedMode) {
+      const matchesOption = MODE_OPTIONS.includes(derivedMode);
+      if (!matchesOption) {
+        derivedCustomMode = derivedMode;
+        derivedMode = 'Other';
+      } else if (derivedMode === 'Other') {
+        const candidate =
+          backendMode && backendMode.toLowerCase() !== 'other'
+            ? backendMode
+            : (backendModeSelection && backendModeSelection.toLowerCase() !== 'other'
+                ? backendModeSelection
+                : '');
+        derivedCustomMode = candidate || '';
+      }
+    }
+
+    if (!derivedMode) {
+      derivedMode = 'Cash';
+    }
+
+    setMode(derivedMode);
+    setCustomMode(derivedCustomMode);
+    setTermsOfPayment(order.termsOfPayment || '');
+    setOtherReference(order.otherReference || '');
+    setTermsOfDelivery1(order.termsOfDelivery1 || '');
+    setTermsOfDelivery2(order.termsOfDelivery2 || '');
     
     console.log('🔍 Initializing form with order data:', {
       customerId: order.customerId,
@@ -189,68 +647,192 @@ const DealerEditOrder = () => {
     try {
       setLoading(true);
       
-      // Auto-populate dealer from logged-in user (no need to fetch dealers)
-      if (!user) {
-        Alert.alert('Error', 'User not logged in');
-        return;
+      // Dealers don't need to fetch other dealers - they are dealers themselves
+      // Set empty dealers array
+      setDealers([]);
+      
+      // Auto-set the current user as the dealer if not already set
+      if (user && !selectedDealer) {
+        const dealerData: Dealer = {
+          _id: (user as any)?._id || (user as any)?.userDetails?._id || (user as any)?.id,
+          name: (user as any)?.name || (user as any)?.userDetails?.name || 'Current User',
+          email: (user as any)?.email || (user as any)?.userDetails?.email,
+          mobile: (user as any)?.mobile || (user as any)?.userDetails?.mobile || '',
+          address: (user as any)?.address || (user as any)?.userDetails?.address,
+        };
+        setSelectedDealer(dealerData);
+        console.log('✅ Auto-selected current user as dealer:', dealerData);
       }
       
-      // Fetch sub dealers using getUsersByRole to get ALL subdealers in the company
-      const subDealersResponse = await getUsersByRole('subdealer');
-      let subDealersList = [];
-      if (Array.isArray(subDealersResponse)) {
-        subDealersList = subDealersResponse;
+      // Fetch sub dealers using getSubDealers (this filters by parent relationship)
+      console.log('🔍 Fetching sub dealers using getSubDealers...');
+      const subDealersResponse = await getSubDealers({ limit: 1000 }); // Get all subdealers
+      console.log('📡 Sub dealers response:', subDealersResponse);
+      
+      // Handle getSubDealers response format: {success: true, data: {subDealers: [...]}}
+      if (subDealersResponse?.success && subDealersResponse?.data?.subDealers) {
+        const subDealersList = Array.isArray(subDealersResponse.data.subDealers) 
+          ? subDealersResponse.data.subDealers 
+          : [];
+        setSubDealers(subDealersList);
+        console.log('✅ Sub dealers loaded:', subDealersList.length);
+      } else if (Array.isArray(subDealersResponse)) {
+        // Direct array response (fallback)
         setSubDealers(subDealersResponse);
-      } else if (subDealersResponse?.success) {
-        // Response with success field - handle nested data.users structure
-        subDealersList = subDealersResponse.data?.users || subDealersResponse.data || subDealersResponse.subDealers || subDealersResponse.users || [];
-        setSubDealers(Array.isArray(subDealersList) ? subDealersList : []);
-      } else if (subDealersResponse?.users && Array.isArray(subDealersResponse.users)) {
-        // Response structure: {users: [...], role: 'subdealer', count: 3}
-        subDealersList = subDealersResponse.users;
-        setSubDealers(subDealersResponse.users);
+        console.log('✅ Sub dealers loaded (direct array):', subDealersResponse.length);
+      } else if (subDealersResponse?.data && Array.isArray(subDealersResponse.data)) {
+        // Response with data array
+        setSubDealers(subDealersResponse.data);
+        console.log('✅ Sub dealers loaded (data array):', subDealersResponse.data.length);
       } else {
-        console.log('❌ Failed to load sub dealers:', subDealersResponse?.message || 'Unknown error');
+        console.log('⚠️ No sub dealers found or failed to load:', subDealersResponse?.message || 'Unknown error');
         setSubDealers([]);
       }
       
       // Fetch products
-      const productsResponse = await getProducts({ page: 1, limit: 1000, isActive: true });
-      if (productsResponse?.success) {
-        // Handle different response structures
-        const productsData = productsResponse.products || productsResponse.data?.products || productsResponse.data || [];
-        setProducts(Array.isArray(productsData) ? productsData : []);
-        console.log('✅ Products loaded:', Array.isArray(productsData) ? productsData.length : 0);
-      } else {
-        console.log('❌ Failed to load products:', productsResponse?.message);
-        Alert.alert('Error', 'Failed to load products: ' + (productsResponse?.message || 'Unknown error'));
-        setProducts([]);
-      }
-      
-      // Set subdealer from order data (if exists)
-      console.log('🔍 Setting subdealer from order data...');
-      
-      let subDealerId: string | undefined = undefined;
-      if (typeof order.subDealerId === 'string') {
-        subDealerId = order.subDealerId;
-      } else if (typeof order.subDealerId === 'object' && order.subDealerId?._id) {
-        subDealerId = order.subDealerId._id;
-      }
-      
-      if (!subDealerId) {
-        subDealerId = order.shippingAddress?.subDealerId;
-      }
-      
-      if (subDealerId) {
-        const currentSubDealer = subDealersList.find((s: any) => s._id === subDealerId);
-        if (currentSubDealer) {
-          setSelectedSubDealer(currentSubDealer);
-          console.log('✅ SubDealer set:', currentSubDealer.name);
-        } else {
-          console.log('❌ SubDealer not found in list:', subDealerId);
+      const productsResponse = await getProducts();
+      let productList: any[] = [];
+
+      if (Array.isArray(productsResponse)) {
+        productList = productsResponse;
+      } else if (Array.isArray(productsResponse?.products)) {
+        productList = productsResponse.products;
+      } else if (productsResponse?.success) {
+        const nested =
+          productsResponse.data?.products ||
+          productsResponse.data?.docs ||
+          productsResponse.data?.results ||
+          productsResponse.products ||
+          productsResponse.data;
+        if (Array.isArray(nested)) {
+          productList = nested;
         }
+      } else if (Array.isArray(productsResponse?.data?.products)) {
+        productList = productsResponse.data.products;
+      }
+
+      const normalizedProducts = productList.map(normalizeProduct);
+      setProducts(normalizedProducts);
+      setShowDealerDropdown(false);
+      setShowSubDealerDropdown(false);
+
+      // Sync order items with latest product info (stock, unit, price)
+      if (normalizedProducts.length > 0) {
+        setOrderItems(prevItems =>
+          applyGstToItems(
+            prevItems.map(item => {
+              const match = normalizedProducts.find(prod => prod._id === item.productId);
+              if (!match) {
+                return item;
+              }
+
+              const updatedStock = getStockNumber(match.stock);
+              const updatedUnit = getProductUnitLabel(match, item.unit);
+              const updatedPrice = getProductPrice(match) || item.unitPrice;
+
+              return {
+                ...item,
+                availableStock: updatedStock > 0 ? updatedStock : item.availableStock,
+                unit: updatedUnit,
+                unitPrice: updatedPrice,
+                partNo: item.partNo || getProductPartNo(match),
+                itemHsn: item.itemHsn || getProductHsn(match),
+                category: item.category || getProductCategory(match),
+                itemAlias: item.itemAlias || match.itemAlias,
+                brand: item.brand || match.brand,
+                description: item.description || match.description,
+                baseUnits: item.baseUnits || match.baseUnits,
+                additionalUnits: item.additionalUnits || match.additionalUnits,
+              };
+            }),
+            gstType
+          )
+        );
+      }
+      
+      // Find and set current dealer and subdealer from order data
+      console.log('🔍 Setting dealer and subdealer from order data...');
+      
+      // Set dealer - for dealers, use order data or current user
+      let dealerData: User | null = null;
+      
+      // Try to get dealer from order.dealerId (object)
+      if (typeof order.dealerId === 'object' && order.dealerId) {
+        dealerData = {
+          _id: order.dealerId._id,
+          name: order.dealerId.name || order.dealerName || 'Unknown',
+          email: order.dealerId.email || '',
+          mobile: order.dealerId.mobile || '',
+          address: (order.dealerId as any).address,
+          role: order.dealerId.role || 'dealers',
+        };
+      }
+      // Try to get dealer from order.customerId (object)
+      else if (typeof order.customerId === 'object' && order.customerId) {
+        dealerData = {
+          _id: order.customerId._id,
+          name: order.customerId.name || order.customerName || 'Unknown',
+          email: order.customerId.email || order.customerEmail || '',
+          mobile: order.customerId.mobile || order.customerMobile || '',
+          address: order.customerAddress || (order.customerId as any).address,
+          role: order.customerId.role || 'dealers',
+        };
+      }
+      // Fallback to current user if dealer not found in order
+      if (!dealerData && user) {
+        dealerData = {
+          _id: (user as any)?._id || (user as any)?.userDetails?._id || (user as any)?.id,
+          name: (user as any)?.name || (user as any)?.userDetails?.name || 'Current User',
+          email: (user as any)?.email || (user as any)?.userDetails?.email || '',
+          mobile: (user as any)?.mobile || (user as any)?.userDetails?.mobile || '',
+          address: (user as any)?.address || (user as any)?.userDetails?.address,
+          role: (user as any)?.role || (user as any)?.userDetails?.role || 'dealers',
+        };
+      }
+      
+      if (dealerData) {
+        setSelectedDealer(dealerData);
+        console.log('✅ Dealer set:', dealerData.name);
       } else {
-        console.log('ℹ️ No subdealer in order data');
+        console.log('⚠️ Could not set dealer from order or user data');
+      }
+      
+      // Set subdealer - try subDealerId first, then shippingAddress.subDealerId as fallback
+      let subDealerData: User | null = null;
+      
+      // Try to get subdealer from order.subDealerId (object)
+      if (typeof order.subDealerId === 'object' && order.subDealerId) {
+        subDealerData = {
+          _id: order.subDealerId._id,
+          name: order.subDealerId.name || order.subDealerName || 'Unknown',
+          email: order.subDealerId.email || '',
+          mobile: order.subDealerId.mobile || '',
+          address: order.subDealerId.address,
+          role: order.subDealerId.role || 'subdealer',
+        };
+      }
+      // Try to get subdealer from order data by ID
+      else {
+        let subDealerId: string | undefined = undefined;
+        if (typeof order.subDealerId === 'string') {
+          subDealerId = order.subDealerId;
+        } else if (!subDealerId) {
+          subDealerId = order.shippingAddress?.subDealerId;
+        }
+        
+        if (subDealerId && subDealers.length > 0) {
+          const currentSubDealer = subDealers.find((s: any) => s._id === subDealerId);
+          if (currentSubDealer) {
+            subDealerData = currentSubDealer;
+          }
+        }
+      }
+      
+      if (subDealerData) {
+        setSelectedSubDealer(subDealerData);
+        console.log('✅ SubDealer set:', subDealerData.name);
+      } else {
+        console.log('ℹ️ No subdealer in order data or not found in list');
       }
       
     } catch (error) {
@@ -262,83 +844,75 @@ const DealerEditOrder = () => {
   };
 
   const addProductToOrder = async (product: Product) => {
-    // Check if the exact same product (same ID, price, and unit) already exists
-    const existingItem = orderItems.find(item => 
-      item.productId === product._id && 
-      item.unitPrice === product.price && 
-      item.unit === product.unit
-    );
-    
-    if (existingItem) {
-      Alert.alert(
-        'Product Already Added', 
-        'This exact product (same price and unit) is already in the order. Would you like to increase its quantity by 1?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Increase Quantity',
-            onPress: () => updateQuantityForVariant(product._id, existingItem.unitPrice, existingItem.unit, existingItem.quantity + 1)
-          }
-        ]
-      );
-      return;
-    }
-    
-    // Check if the same product ID exists but with different price/unit
-    const sameProductDifferentPrice = orderItems.find(item => 
-      item.productId === product._id && 
-      (item.unitPrice !== product.price || item.unit !== product.unit)
-    );
-    
-    if (sameProductDifferentPrice) {
-      Alert.alert(
-        'Same Product, Different Price/Unit', 
-        `This product already exists with different pricing (₹${sameProductDifferentPrice.unitPrice}/${sameProductDifferentPrice.unit}). Do you want to add this variant (₹${product.price}/${product.unit})?`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Add Variant',
-            onPress: async () => {
-              // Proceed with adding the new variant
-              await addProductVariant(product);
-            }
-          }
-        ]
-      );
-      return;
-    }
-    
-    // If no duplicates found, add the product normally
-    await addProductVariant(product);
-  };
-
-  const addProductVariant = async (product: Product) => {
     try {
-      // Get fresh product data
+      const existingItem = orderItems.find(item => item.productId === product._id);
+
+      if (existingItem) {
+        await updateQuantity(product._id, existingItem.quantity + 1);
+        setShowProductDropdown(false);
+        return;
+      }
+
       const productResponse = await getProductById(product._id);
       const freshProduct = (productResponse?.success
-        ? (productResponse.data?.product || productResponse.product)
-        : null) || product;
+        ? normalizeProduct(productResponse.data?.product || productResponse.product || productResponse.data)
+        : normalizeProduct(product));
+
+      const resolvedUnit = getProductUnitLabel(freshProduct, getUnitLabel(product.unit));
+      const resolvedPrice = getProductPrice(freshProduct) || getProductPrice(product);
+      const resolvedGstRate = getProductGstRate(freshProduct);
+      const resolvedStock = getStockNumber(
+        (freshProduct.stock as Product['stock']) ?? product.stock
+      );
+      const resolvedName = getProductName(freshProduct);
+      const partNumber = getProductPartNo(freshProduct);
+      const hsnCode = getProductHsn(freshProduct);
+      const category = getProductCategory(freshProduct);
+      const initialQuantity = resolvedStock > 0 ? 1 : 0;
 
       const newItem: OrderItem = {
         productId: freshProduct._id,
         productCode: freshProduct.productCode,
-        productName: freshProduct.productName,
-        unit: freshProduct.unit,
-        unitPrice: freshProduct.price,
-        quantity: 0,
+        productName: resolvedName,
+        partNo: partNumber,
+        itemAlias: freshProduct.itemAlias,
+        category,
+        subCategory: freshProduct.subCategory,
+        brand: freshProduct.brand,
+        itemHsn: hsnCode,
+        itemHsnDesc: freshProduct.itemHsnDesc,
+        description: freshProduct.description,
+        baseUnits: freshProduct.baseUnits,
+        additionalUnits: freshProduct.additionalUnits,
+        unit: resolvedUnit,
+        unitPrice: resolvedPrice,
+        quantity: initialQuantity,
+        discount: 0,
+        gstRate: resolvedGstRate,
+        taxType: gstType,
+        taxableValue: 0,
+        cgstRate: 0,
+        cgstAmount: 0,
+        sgstRate: 0,
+        sgstAmount: 0,
+        igstRate: 0,
+        igstAmount: 0,
+        totalTaxAmount: 0,
         totalAmount: 0,
-        availableStock: freshProduct.stock?.current ?? product.stock.current,
+        availableStock: resolvedStock,
       };
-      
-      setOrderItems(prevItems => [...prevItems, newItem]);
+
+      setOrderItems((prevItems) =>
+        applyGstToItems([...prevItems, newItem], gstType)
+      );
       setShowProductDropdown(false);
+
+      if (initialQuantity === 0) {
+        Alert.alert(
+          'Info',
+          'Selected product currently has no available stock. Quantity is set to 0.'
+        );
+      }
     } catch (error) {
       console.error('Error adding product to order:', error);
       Alert.alert('Error', 'Failed to add product to order');
@@ -346,26 +920,51 @@ const DealerEditOrder = () => {
   };
 
   const updateQuantity = async (productId: string, newQuantity: number) => {
-    const item = orderItems.find(item => item.productId === productId);
-    if (!item) return;
-    
-    if (newQuantity < 0) return;
-    
+    const item = orderItems.find((orderItem) => orderItem.productId === productId);
+    if (!item) {
+      return;
+    }
+
+    if (newQuantity < 0) {
+      return;
+    }
+    if (newQuantity === item.quantity) {
+      return;
+    }
+
     setUpdatingQuantity(productId);
-    
+
     try {
       console.log(`🔄 Updating quantity for product ${productId} to ${newQuantity}`);
-      
-      // Check stock availability by calling API
+
       const productResponse = await getProductById(productId);
       console.log('📦 Product response:', productResponse);
-      
-      let currentStock = item.availableStock; // fallback to existing stock
-      
-      if (productResponse?.success && productResponse.product) {
-        // Extract stock from the response
-        const product = productResponse.product;
-        currentStock = product.stock?.current || product.currentStock || item.availableStock;
+
+      let currentStock = item.availableStock;
+      let unitLabel = item.unit;
+      let unitPrice = item.unitPrice;
+      let metadataUpdates: Partial<OrderItem> = {};
+
+      if (productResponse?.success) {
+        const product = normalizeProduct(
+          productResponse.data?.product || productResponse.product || productResponse?.data
+        );
+        currentStock = getStockNumber(product.stock ?? item.availableStock);
+        unitLabel = getProductUnitLabel(product, unitLabel);
+        const resolvedPrice = getProductPrice(product);
+        if (resolvedPrice) {
+          unitPrice = resolvedPrice;
+        }
+        metadataUpdates = {
+          partNo: item.partNo || getProductPartNo(product),
+          itemHsn: item.itemHsn || getProductHsn(product),
+          category: item.category || getProductCategory(product),
+          itemAlias: item.itemAlias || product.itemAlias,
+          brand: item.brand || product.brand,
+          description: item.description || product.description,
+          baseUnits: item.baseUnits || product.baseUnits,
+          additionalUnits: item.additionalUnits || product.additionalUnits,
+        };
         console.log(`📊 Current stock from API: ${currentStock}`);
       } else {
         console.log('⚠️ Failed to get fresh stock data, using existing:', item.availableStock);
@@ -373,24 +972,29 @@ const DealerEditOrder = () => {
       }
 
       if (newQuantity > currentStock) {
-        Alert.alert('Insufficient Stock', `Only ${currentStock} ${item.unit} available in stock.`);
+        Alert.alert('Insufficient Stock', `Only ${currentStock} ${unitLabel} available in stock.`);
         return;
       }
 
-      const totalAmount = newQuantity * item.unitPrice;
-      const updatedItems = orderItems.map(it => 
-        it.productId === productId 
-          ? { 
-              ...it, 
-              quantity: newQuantity, 
-              totalAmount: totalAmount,
-              availableStock: currentStock
-            }
-          : it
+      setOrderItems((prevItems) =>
+        applyGstToItems(
+          prevItems.map((it) =>
+            it.productId === productId
+              ? {
+                  ...it,
+                  quantity: newQuantity,
+                  availableStock: currentStock,
+                  unit: unitLabel,
+                  unitPrice,
+                  ...metadataUpdates,
+                }
+              : it
+          ),
+          gstType
+        )
       );
 
-      setOrderItems(updatedItems);
-      console.log(`✅ Quantity updated to ${newQuantity}, total amount: ₹${totalAmount}`);
+      console.log(`✅ Quantity updated to ${newQuantity}`);
     } catch (error) {
       console.error('💥 Error updating quantity:', error);
       Alert.alert('Error', 'Failed to update quantity. Please try again.');
@@ -399,79 +1003,16 @@ const DealerEditOrder = () => {
     }
   };
 
-  // Update quantity for an exact variant (productId + unitPrice + unit)
-  const updateQuantityForVariant = async (
-    productId: string,
-    unitPrice: number,
-    unit: string,
-    newQuantity: number
-  ) => {
-    const idx = orderItems.findIndex(
-      it => it.productId === productId && it.unitPrice === unitPrice && it.unit === unit
-    );
-    if (idx === -1) return;
-    const target = orderItems[idx];
-    if (newQuantity < 0) return;
-    try {
-      console.log(`🔄 Updating variant quantity for product ${productId} to ${newQuantity}`);
-      
-      // Check stock availability by calling API
-      const productResponse = await getProductById(productId);
-      console.log('📦 Variant product response:', productResponse);
-      
-      let currentStock = target.availableStock; // fallback to existing stock
-      
-      if (productResponse?.success && productResponse.product) {
-        // Extract stock from the response
-        const product = productResponse.product;
-        currentStock = product.stock?.current || product.currentStock || target.availableStock;
-        console.log(`📊 Current stock from API for variant: ${currentStock}`);
-      } else {
-        console.log('⚠️ Failed to get fresh stock data for variant, using existing:', target.availableStock);
-        console.log('📦 Variant response:', productResponse);
-      }
-
-      if (newQuantity > currentStock) {
-        Alert.alert('Insufficient Stock', `Only ${currentStock} ${target.unit} available.`);
-        return;
-      }
-
-      setOrderItems(prev => {
-        const copy = [...prev];
-        copy[idx] = {
-          ...copy[idx],
-          quantity: newQuantity,
-          totalAmount: newQuantity * copy[idx].unitPrice,
-          availableStock: currentStock
-        };
-        return copy;
-      });
-      
-      console.log(`✅ Variant quantity updated to ${newQuantity}, total amount: ₹${newQuantity * target.unitPrice}`);
-    } catch (e) {
-      console.error('💥 Error updating variant quantity:', e);
-      Alert.alert('Error', 'Failed to update quantity. Please try again.');
-    }
-  };
-
   const removeProduct = (productId: string) => {
     setOrderItems(prevItems => prevItems.filter(item => item.productId !== productId));
-  };
-
-  const calculateTotalQuantity = () => {
-    return orderItems.reduce((total, item) => total + item.quantity, 0);
-  };
-
-  const calculateTotalAmount = () => {
-    return orderItems.reduce((total, item) => total + item.totalAmount, 0);
   };
 
   const handleUpdateOrder = async () => {
     console.log('🚀 handleUpdateOrder called');
     
-    if (!user) {
-      console.log('❌ No user logged in');
-      Alert.alert('Validation Error', 'User not logged in');
+    if (!selectedDealer) {
+      console.log('❌ No dealer selected');
+      Alert.alert('Validation Error', 'Please select a dealer');
       return;
     }
     
@@ -481,6 +1022,11 @@ const DealerEditOrder = () => {
       Alert.alert('Validation Error', 'Please set quantity for at least one product');
       return;
     }
+
+  if (mode === 'Other' && !customMode.trim()) {
+    Alert.alert('Validation Error', 'Please specify the payment mode when selecting Other.');
+    return;
+  }
     
     console.log('✅ Validation passed, proceeding with update...');
     
@@ -492,7 +1038,7 @@ const DealerEditOrder = () => {
       for (const item of itemsWithQuantity) {
         const productResponse = await getProductById(item.productId);
         if (productResponse?.success) {
-          const currentStock = productResponse.product.stock.current;
+          const currentStock = getStockNumber(productResponse.product?.stock);
           if (item.quantity > currentStock) {
             Alert.alert(
               'Stock Validation Failed', 
@@ -504,42 +1050,72 @@ const DealerEditOrder = () => {
         }
       }
       
-      // Use logged-in user as dealer
-      const orderData = {
-        customerId: user._id,
-        customerName: user.name,
-        customerEmail: user.email,
-        customerMobile: user.mobile,
-        dealerId: user._id, // Save dealer ID separately
-        dealerName: user.name,
+      const trimmedCustomMode = customMode.trim();
+      const trimmedTermsOfPayment = termsOfPayment.trim();
+      const trimmedOtherReference = otherReference.trim();
+      const trimmedTermsOfDelivery1 = termsOfDelivery1.trim();
+      const trimmedTermsOfDelivery2 = termsOfDelivery2.trim();
+      const modePayload = mode === 'Other' ? (trimmedCustomMode || 'Other') : mode;
+
+      const finalSummary = calculateOrderSummary(itemsWithQuantity);
+      const orderData: any = {
+        customerId: selectedDealer._id,
+        customerName: selectedDealer.name,
+        customerEmail: selectedDealer.email,
+        customerMobile: selectedDealer.mobile,
+        customerAddress: normalizeAddress(selectedDealer.address),
+        dealerId: selectedDealer._id, // Save dealer ID separately
+        dealerName: selectedDealer.name,
         subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately
         subDealerName: selectedSubDealer ? selectedSubDealer.name : null,
-        shippingAddress: selectedSubDealer ? {
-          subDealerId: selectedSubDealer._id,
-          name: selectedSubDealer.name,
-          address: formatAddress(selectedSubDealer.address),
-          mobile: selectedSubDealer.mobile,
-        } : {
-          subDealerId: null,
-          name: user.name,
-          address: formatAddress(user.address),
-          mobile: user.mobile,
-        },
+        shippingAddress: selectedSubDealer
+          ? normalizeAddress(selectedSubDealer.address)
+          : normalizeAddress(selectedDealer.address),
         items: itemsWithQuantity.map(item => ({
           productId: item.productId,
           productCode: item.productCode,
           productName: item.productName,
+          partNo: item.partNo,
+          itemAlias: item.itemAlias,
+          category: item.category,
+          subCategory: item.subCategory,
+          brand: item.brand,
+          itemHsn: item.itemHsn,
+          itemHsnDesc: item.itemHsnDesc,
           unit: item.unit,
+          baseUnits: item.baseUnits,
+          additionalUnits: item.additionalUnits,
+          description: item.description,
           unitPrice: item.unitPrice,
           quantity: item.quantity,
-          totalPrice: item.totalAmount, // Send totalPrice instead of totalAmount
+          discount: item.discount ?? 0,
+          gstRate: item.gstRate ?? DEFAULT_GST_RATE,
         })),
-        totalQuantity: calculateTotalQuantity(),
-        totalAmount: calculateTotalAmount(),
+        totalQuantity: finalSummary.totalQuantity,
+        totalAmount: finalSummary.totalAmount,
+        taxableValueTotal: finalSummary.taxableValue,
+        cgstTotal: finalSummary.cgstTotal,
+        sgstTotal: finalSummary.sgstTotal,
+        igstTotal: finalSummary.igstTotal,
+        taxAmount: finalSummary.taxTotal,
         notes: orderNotes,
         status: order.status, // Keep current status
         orderType: order.orderType,
+        paymentMethod: modePayload,
+        modeSelection: mode,
+        mode: modePayload,
+        termsOfPayment: trimmedTermsOfPayment,
+        otherReference: trimmedOtherReference,
+        termsOfDelivery1: trimmedTermsOfDelivery1,
+        termsOfDelivery2: trimmedTermsOfDelivery2,
+        sellerState,
+        buyerState,
+        gstType,
       };
+
+      if (mode === 'Other') {
+        orderData.customMode = trimmedCustomMode;
+      }
       
       console.log('📤 Sending order data:', orderData);
       console.log('📤 Order ID:', order._id);
@@ -552,7 +1128,7 @@ const DealerEditOrder = () => {
         console.log('✅ Order updated successfully');
         const updatedOrder = response.order;
         
-        // Navigate back to DealerOrderList immediately
+        // Navigate back to previous screen (DealerOrderList) immediately
         // The useFocusEffect in DealerOrderList will automatically refresh the orders
         navigation.goBack();
         
@@ -572,10 +1148,15 @@ const DealerEditOrder = () => {
     }
   };
 
-  const filteredProducts = products.filter(product =>
-    product.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.productCode.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredProducts = products.filter(product => {
+    const name = (product?.productName ?? '').toLowerCase();
+    const code = (product?.productCode ?? '').toLowerCase();
+    if (!normalizedQuery) {
+      return true;
+    }
+    return name.includes(normalizedQuery) || code.includes(normalizedQuery);
+  });
 
   const renderOrderItem = ({ item }: { item: OrderItem }) => (
     <View style={styles.orderItemCard}>
@@ -583,7 +1164,16 @@ const DealerEditOrder = () => {
         <View style={styles.orderItemInfo}>
           <Text style={styles.orderItemName}>{item.productName}</Text>
           <Text style={styles.orderItemCode}>{item.productCode}</Text>
-          <Text style={styles.orderItemPrice}>₹{item.unitPrice} / {item.unit}</Text>
+          {item.partNo ? (
+            <Text style={styles.orderItemMeta}>Part No: {item.partNo}</Text>
+          ) : null}
+          {item.itemHsn ? (
+            <Text style={styles.orderItemMeta}>HSN: {item.itemHsn}</Text>
+          ) : null}
+          {item.category ? (
+            <Text style={styles.orderItemMeta}>Category: {item.category}</Text>
+          ) : null}
+          <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
         </View>
         <TouchableOpacity
           style={styles.removeButton}
@@ -592,85 +1182,108 @@ const DealerEditOrder = () => {
           <Ionicons name="close-circle" size={24} color="#EF4444" />
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.quantityContainer}>
-        <Text style={styles.quantityLabel}>Quantity:</Text>
-        <View style={styles.quantityControls}>
-          <TouchableOpacity
-            style={[
-              styles.quantityButton,
-              (item.quantity <= 0 || updatingQuantity === item.productId) && styles.disabledButton
-            ]}
-            onPress={() => updateQuantity(item.productId, item.quantity - 1)}
-            disabled={item.quantity <= 0 || updatingQuantity === item.productId}
-          >
-            {updatingQuantity === item.productId ? (
-              <ActivityIndicator size="small" color="#6B7280" />
-            ) : (
-              <Ionicons name="remove" size={20} color="#6B7280" />
-            )}
-          </TouchableOpacity>
-          
-          <TextInput
-            style={[
-              styles.quantityInput,
-              updatingQuantity === item.productId && styles.disabledInput
-            ]}
-            value={item.quantity.toString()}
-            onChangeText={(text) => {
-              const newQuantity = parseInt(text) || 0;
-              updateQuantity(item.productId, newQuantity);
-            }}
-            keyboardType="numeric"
-            selectTextOnFocus
-            editable={updatingQuantity !== item.productId}
-          />
-          
-          <TouchableOpacity
-            style={[
-              styles.quantityButton,
-              (item.quantity >= item.availableStock || updatingQuantity === item.productId) && styles.disabledButton
-            ]}
-            onPress={() => updateQuantity(item.productId, item.quantity + 1)}
-            disabled={item.quantity >= item.availableStock || updatingQuantity === item.productId}
-          >
-            {updatingQuantity === item.productId ? (
-              <ActivityIndicator size="small" color="#6B7280" />
-            ) : (
-              <Ionicons name="add" size={20} color="#6B7280" />
-            )}
-          </TouchableOpacity>
+        <View style={styles.quantityRow}>
+          <Text style={styles.quantityLabel}>Quantity</Text>
+          <View style={styles.quantityControls}>
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                (item.quantity <= 0 || updatingQuantity === item.productId) && styles.quantityButtonDisabled
+              ]}
+              onPress={() => updateQuantity(item.productId, item.quantity - 1)}
+              disabled={item.quantity <= 0 || updatingQuantity === item.productId}
+            >
+              {updatingQuantity === item.productId ? (
+                <ActivityIndicator size="small" color="#6B7280" />
+              ) : (
+                <Ionicons name="remove" size={18} color="#111827" />
+              )}
+            </TouchableOpacity>
+
+            <TextInput
+              style={[
+                styles.quantityInput,
+                updatingQuantity === item.productId && styles.quantityInputDisabled
+              ]}
+              value={String(item.quantity)}
+              onChangeText={(text) => {
+                const parsed = parseInt(text, 10);
+                const newQuantity = Number.isNaN(parsed) ? 0 : parsed;
+                updateQuantity(item.productId, newQuantity);
+              }}
+              keyboardType="numeric"
+              editable={updatingQuantity !== item.productId}
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                (item.quantity >= item.availableStock || updatingQuantity === item.productId) && styles.quantityButtonDisabled
+              ]}
+              onPress={() => updateQuantity(item.productId, item.quantity + 1)}
+              disabled={item.quantity >= item.availableStock || updatingQuantity === item.productId}
+            >
+              {updatingQuantity === item.productId ? (
+                <ActivityIndicator size="small" color="#6B7280" />
+              ) : (
+                <Ionicons name="add" size={18} color="#111827" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-        
+
         <Text style={styles.stockText}>
-          Stock: {item.availableStock} {item.unit}
-          {updatingQuantity === item.productId && ' (Updating...)'}
+          Available: {item.availableStock} {item.unit}
         </Text>
       </View>
-      
+
       <View style={styles.orderItemTotal}>
         <Text style={styles.totalLabel}>Total:</Text>
-        <Text style={styles.totalAmount}>₹{item.totalAmount}</Text>
+        <Text style={styles.totalAmount}>{formatCurrency(item.totalAmount)}</Text>
+      </View>
+
+      <View style={styles.orderItemTaxDetails}>
+        <Text style={styles.orderItemTaxLine}>
+          Taxable Value: {formatCurrency(item.taxableValue)}
+        </Text>
+        <Text style={styles.orderItemTaxLine}>
+          GST Rate: {item.gstRate}%
+        </Text>
+        {item.cgstAmount > 0 ? (
+          <Text style={styles.orderItemTaxLine}>
+            CGST ({item.cgstRate}%): {formatCurrency(item.cgstAmount)}
+          </Text>
+        ) : null}
+        {item.sgstAmount > 0 ? (
+          <Text style={styles.orderItemTaxLine}>
+            SGST/UTGST ({item.sgstRate}%): {formatCurrency(item.sgstAmount)}
+          </Text>
+        ) : null}
+        {item.igstAmount > 0 ? (
+          <Text style={styles.orderItemTaxLine}>
+            IGST ({item.igstRate}%): {formatCurrency(item.igstAmount)}
+          </Text>
+        ) : null}
+        <Text style={styles.orderItemTaxTotal}>
+          Total GST: {formatCurrency(item.totalTaxAmount)}
+        </Text>
       </View>
     </View>
   );
 
   const renderProductItem = ({ item }: { item: Product }) => {
-    // Check if exact same product (same ID, price, unit) is already added
-    const isExactMatch = orderItems.some(orderItem => 
-      orderItem.productId === item._id && 
-      orderItem.unitPrice === item.price && 
-      orderItem.unit === item.unit
-    );
-    
-    // Check if same product ID exists but with different price/unit
-    const isSameProductDifferentPrice = orderItems.some(orderItem => 
-      orderItem.productId === item._id && 
-      (orderItem.unitPrice !== item.price || orderItem.unit !== item.unit)
-    );
-    
-    const isAlreadyAdded = isExactMatch || isSameProductDifferentPrice;
-    
+    const existingOrderItem = orderItems.find(orderItem => orderItem.productId === item._id);
+    const isAlreadyAdded = Boolean(existingOrderItem);
+    const stockNumber = getStockNumber(item.stock);
+    const unitLabel = getProductUnitLabel(item, getUnitLabel(item.unit));
+    const resolvedPrice = getProductPrice(item);
+    const resolvedGst = getProductGstRate(item);
+    const partNumber = getProductPartNo(item);
+    const hsnCode = getProductHsn(item);
+    const category = getProductCategory(item);
+
     return (
       <TouchableOpacity
         style={[
@@ -684,7 +1297,7 @@ const DealerEditOrder = () => {
             styles.productName,
             isAlreadyAdded && styles.addedProductText
           ]}>
-            {item.productName}
+            {getProductName(item)}
           </Text>
           <Text style={[
             styles.productCode,
@@ -692,29 +1305,66 @@ const DealerEditOrder = () => {
           ]}>
             {item.productCode}
           </Text>
-          <Text style={[
-            styles.productPrice,
-            isAlreadyAdded && styles.addedProductSubtext
-          ]}>
-            ₹{item.price} / {item.unit}
+          <Text
+            style={[
+              styles.productPrice,
+              isAlreadyAdded && styles.addedProductSubtext
+            ]}
+          >
+            ₹{resolvedPrice.toFixed(2)}
+          </Text>
+          {partNumber ? (
+            <Text
+              style={[
+                styles.dropdownItemMeta,
+                isAlreadyAdded && styles.addedProductSubtext
+              ]}
+            >
+              Part No: {partNumber}
+            </Text>
+          ) : null}
+          <Text
+            style={[
+              styles.dropdownItemMeta,
+              isAlreadyAdded && styles.addedProductSubtext
+            ]}
+          >
+            Category: {category}
           </Text>
           <Text style={[
-            styles.productStock,
+            styles.dropdownItemMeta,
             isAlreadyAdded && styles.addedProductSubtext
           ]}>
-            Stock: {item.stock.current} {item.unit}
+            GST: {resolvedGst}%
           </Text>
-          {isExactMatch && (
-            <Text style={styles.alreadyAddedText}>✓ Exact match already in order</Text>
-          )}
-          {isSameProductDifferentPrice && !isExactMatch && (
-            <Text style={styles.variantAddedText}>⚠ Same product with different price/unit exists</Text>
+          {hsnCode ? (
+            <Text
+              style={[
+                styles.dropdownItemMeta,
+                isAlreadyAdded && styles.addedProductSubtext
+              ]}
+            >
+              HSN: {hsnCode}
+            </Text>
+          ) : null}
+          <Text
+            style={[
+              styles.productStock,
+              isAlreadyAdded && styles.addedProductSubtext
+            ]}
+          >
+            Stock: {stockNumber} {unitLabel}
+          </Text>
+          {isAlreadyAdded && (
+            <Text style={styles.addedProductBadge}>
+              In order · Qty {existingOrderItem?.quantity ?? 0}
+            </Text>
           )}
         </View>
         <Ionicons 
-          name={isExactMatch ? "checkmark-circle" : isSameProductDifferentPrice ? "warning" : "add-circle-outline"} 
+          name={isAlreadyAdded ? 'refresh-circle' : 'add-circle-outline'} 
           size={24} 
-          color={isExactMatch ? "#10B981" : isSameProductDifferentPrice ? "#F59E0B" : "#3B82F6"} 
+          color={isAlreadyAdded ? '#10B981' : '#3B82F6'} 
         />
       </TouchableOpacity>
     );
@@ -743,77 +1393,97 @@ const DealerEditOrder = () => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Customer (Dealer) Information - Auto-populated from logged-in user */}
+        {/* Dealer Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer (Dealer)</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Name:</Text>
-              <Text style={styles.infoValue}>{user?.name || 'N/A'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email:</Text>
-              <Text style={styles.infoValue}>{user?.email || 'N/A'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Mobile:</Text>
-              <Text style={styles.infoValue}>{user?.mobile || 'N/A'}</Text>
-            </View>
-            {user?.address && (
+          <Text style={styles.sectionTitle}>Customer (Dealer) *</Text>
+          {selectedDealer ? (
+            <View style={styles.selectedInfoCard}>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Address:</Text>
-                <Text style={styles.infoValue}>{formatAddress(user.address)}</Text>
+                <Text style={styles.infoLabel}>Name:</Text>
+                <Text style={styles.infoValue}>{selectedDealer.name}</Text>
               </View>
-            )}
-          </View>
+              {selectedDealer.email && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Email:</Text>
+                  <Text style={styles.infoValue}>{selectedDealer.email}</Text>
+                </View>
+              )}
+              {selectedDealer.mobile && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Mobile:</Text>
+                  <Text style={styles.infoValue}>{selectedDealer.mobile}</Text>
+                </View>
+              )}
+              <Text style={styles.addressText}>
+                {formatAddress(selectedDealer.address)}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.infoText}>Loading dealer information...</Text>
+          )}
         </View>
 
         {/* Sub Dealer Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) (Optional)</Text>
-          <TouchableOpacity
-            style={[
-              styles.dropdown,
-              subDealers.length === 0 && styles.disabledDropdown
-            ]}
-            onPress={() => subDealers.length > 0 && setShowSubDealerDropdown(!showSubDealerDropdown)}
-            disabled={subDealers.length === 0}
-          >
-            <Text style={[
-              styles.dropdownText,
-              !selectedSubDealer && styles.placeholderText
-            ]}>
-              {subDealers.length === 0 
-                ? 'No Sub Dealers Available' 
-                : selectedSubDealer 
-                  ? selectedSubDealer.name 
-                  : 'Select Sub Dealer (Optional)'
-              }
-            </Text>
-            <Ionicons name="chevron-down" size={20} color="#6B7280" />
-          </TouchableOpacity>
-          
+          <View style={styles.selectionRow}>
+            <TouchableOpacity
+              style={[
+                styles.dropdown,
+                styles.selectionButton,
+                subDealers.length === 0 && styles.disabledDropdown
+              ]}
+              onPress={() => subDealers.length > 0 && setShowSubDealerDropdown(true)}
+              disabled={subDealers.length === 0}
+            >
+              <Text
+                style={[
+                  styles.dropdownText,
+                  !selectedSubDealer && styles.placeholderText
+                ]}
+              >
+                {subDealers.length === 0
+                  ? 'No Sub Dealers Available'
+                  : selectedSubDealer
+                    ? selectedSubDealer.name
+                    : 'Select Sub Dealer (Optional)'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </TouchableOpacity>
+            {selectedSubDealer && (
+              <TouchableOpacity
+                style={styles.clearSelectionButton}
+                onPress={() => setSelectedSubDealer(null)}
+              >
+                <Ionicons name="close-circle" size={20} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {selectedSubDealer && (
+            <View style={styles.selectedInfoCard}>
+              <Text style={styles.addressText}>
+                {formatAddress(selectedSubDealer.address)}
+              </Text>
+            </View>
+          )}
+
           {subDealers.length === 0 && (
             <Text style={styles.infoText}>
               No sub dealers available for the selected dealer
             </Text>
           )}
-          
+
           {showSubDealerDropdown && subDealers.length > 0 && (
             <View style={styles.dropdownList}>
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setSelectedSubDealer(null);
-                  setShowSubDealerDropdown(false);
-                }}
+              <ScrollView
+                style={styles.dropdownScroll}
+                contentContainerStyle={styles.dropdownScrollContent}
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.dropdownItemText}>No Sub Dealer</Text>
-              </TouchableOpacity>
-              <FlatList
-                data={subDealers}
-                renderItem={({ item }) => (
+                {subDealers.map((item) => (
                   <TouchableOpacity
+                    key={item._id}
                     style={styles.dropdownItem}
                     onPress={() => {
                       setSelectedSubDealer(item);
@@ -821,12 +1491,17 @@ const DealerEditOrder = () => {
                     }}
                   >
                     <Text style={styles.dropdownItemText}>{item.name}</Text>
-                    <Text style={styles.dropdownItemSubtext}>{item.email}</Text>
+                    {item.email ? (
+                      <Text style={styles.dropdownItemSubtext}>{item.email}</Text>
+                    ) : null}
+                    {formatAddress(item.address) !== 'Address not specified' ? (
+                      <Text style={styles.dropdownItemMeta}>
+                        {formatAddress(item.address)}
+                      </Text>
+                    ) : null}
                   </TouchableOpacity>
-                )}
-                keyExtractor={(item) => item._id}
-                style={styles.dropdownFlatList}
-              />
+                ))}
+              </ScrollView>
             </View>
           )}
         </View>
@@ -843,45 +1518,161 @@ const DealerEditOrder = () => {
         </View>
 
         {/* Order Items */}
-        {orderItems.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Order Items ({orderItems.length})</Text>
-            <FlatList
-              data={orderItems}
-              renderItem={renderOrderItem}
-              keyExtractor={(item) => item.productId}
-              scrollEnabled={false}
-            />
-          </View>
-        ) : (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Order Items</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Order Items{orderItems.length > 0 ? ` (${orderItems.length})` : ''}
+          </Text>
+          {orderItems.length > 0 ? (
+            orderItems.map((orderItem) => (
+              <React.Fragment key={orderItem.productId}>
+                {renderOrderItem({ item: orderItem })}
+              </React.Fragment>
+            ))
+          ) : (
             <View style={styles.emptyStateContainer}>
               <Ionicons name="cube-outline" size={48} color="#9CA3AF" />
               <Text style={styles.emptyStateText}>No products added yet</Text>
-              <Text style={styles.emptyStateSubtext}>Tap "Add Product" to start building your order</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Tap "Add Product" to start building your order
+              </Text>
             </View>
-          </View>
-        )}
+          )}
+        </View>
 
         {/* Order Summary */}
         {orderItems.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Order Summary</Text>
             <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>GST Type:</Text>
+              <Text style={styles.summaryValue}>{gstTypeLabel}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Seller State:</Text>
+              <Text style={styles.summaryValue}>{sellerState || 'N/A'}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Buyer State:</Text>
+              <Text style={styles.summaryValue}>{buyerState || 'N/A'}</Text>
+            </View>
+            <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Total Items:</Text>
               <Text style={styles.summaryValue}>{orderItems.length}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Total Quantity:</Text>
-              <Text style={styles.summaryValue}>{calculateTotalQuantity()}</Text>
+              <Text style={styles.summaryValue}>{orderSummary.totalQuantity}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total Amount:</Text>
-              <Text style={[styles.summaryValue, styles.totalAmount]}>₹{calculateTotalAmount()}</Text>
+              <Text style={styles.summaryLabel}>Taxable Value:</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(orderSummary.taxableValue)}</Text>
+            </View>
+            {hasCgst || hasSgst ? (
+              <>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>CGST:</Text>
+                  <Text style={styles.summaryValue}>{formatCurrency(orderSummary.cgstTotal)}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>SGST/UTGST:</Text>
+                  <Text style={styles.summaryValue}>{formatCurrency(orderSummary.sgstTotal)}</Text>
+                </View>
+              </>
+            ) : null}
+            {hasIgst ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>IGST:</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(orderSummary.igstTotal)}</Text>
+              </View>
+            ) : null}
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Total GST:</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(orderSummary.taxTotal)}</Text>
+            </View>
+            <View style={[styles.summaryRow, styles.summaryRowHighlight]}>
+              <Text style={styles.summaryLabel}>Grand Total:</Text>
+              <Text style={[styles.summaryValue, styles.totalAmount]}>
+                {formatCurrency(orderSummary.totalAmount)}
+              </Text>
             </View>
           </View>
         )}
+
+        {/* Payment Mode */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment Mode</Text>
+          <View style={styles.modeOptionsContainer}>
+            {MODE_OPTIONS.map((option) => {
+              const isSelected = mode === option;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.modeOptionButton,
+                    isSelected && styles.modeOptionButtonSelected,
+                  ]}
+                  onPress={() => {
+                    setMode(option);
+                    if (option !== 'Other') {
+                      setCustomMode('');
+                    }
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.modeOptionText,
+                      isSelected && styles.modeOptionTextSelected,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {mode === 'Other' && (
+            <TextInput
+              style={styles.fieldInput}
+              placeholder="Specify other payment mode"
+              value={customMode}
+              onChangeText={setCustomMode}
+              placeholderTextColor="#9CA3AF"
+            />
+          )}
+        </View>
+
+        {/* Additional Order Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Additional Order Details</Text>
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Terms of Payment"
+            value={termsOfPayment}
+            onChangeText={setTermsOfPayment}
+            placeholderTextColor="#9CA3AF"
+          />
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Other Reference"
+            value={otherReference}
+            onChangeText={setOtherReference}
+            placeholderTextColor="#9CA3AF"
+          />
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Terms of Delivery 1"
+            value={termsOfDelivery1}
+            onChangeText={setTermsOfDelivery1}
+            placeholderTextColor="#9CA3AF"
+          />
+          <TextInput
+            style={styles.fieldInput}
+            placeholder="Terms of Delivery 2"
+            value={termsOfDelivery2}
+            onChangeText={setTermsOfDelivery2}
+            placeholderTextColor="#9CA3AF"
+          />
+        </View>
 
         {/* Order Notes */}
         <View style={styles.section}>
@@ -909,10 +1700,10 @@ const DealerEditOrder = () => {
         <TouchableOpacity
           style={[
             styles.updateButton,
-            (!user || orderItems.filter(item => item.quantity > 0).length === 0) && styles.disabledButton
+            (!selectedDealer || orderItems.filter(item => item.quantity > 0).length === 0) && styles.disabledButton
           ]}
           onPress={handleUpdateOrder}
-          disabled={!user || orderItems.filter(item => item.quantity > 0).length === 0 || saving}
+          disabled={!selectedDealer || orderItems.filter(item => item.quantity > 0).length === 0 || saving}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -1031,6 +1822,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D1D5DB',
   },
+  selectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  selectionButton: {
+    flex: 1,
+  },
+  clearSelectionButton: {
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEE2E2',
+    marginLeft: 8,
+  },
   disabledDropdown: {
     backgroundColor: '#F3F4F6',
     borderColor: '#E5E7EB',
@@ -1056,8 +1863,11 @@ const styles = StyleSheet.create({
     maxHeight: 200,
     marginTop: 4,
   },
-  dropdownFlatList: {
+  dropdownScroll: {
     maxHeight: 200,
+  },
+  dropdownScrollContent: {
+    paddingBottom: 8,
   },
   dropdownItem: {
     padding: 16,
@@ -1074,11 +1884,45 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 2,
   },
+  dropdownItemMeta: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginTop: 2,
+  },
   infoText: {
     fontSize: 14,
     color: '#6B7280',
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  selectedInfoCard: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  infoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    width: 80,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#1F2937',
+    flex: 1,
+  },
+  addressText: {
+    fontSize: 14,
+    color: '#1F2937',
+    lineHeight: 20,
   },
   addProductButton: {
     flexDirection: 'row',
@@ -1125,6 +1969,11 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 2,
   },
+  orderItemMeta: {
+    fontSize: 12,
+    color: '#4B5563',
+    marginBottom: 2,
+  },
   orderItemPrice: {
     fontSize: 14,
     color: '#059669',
@@ -1134,10 +1983,13 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   quantityContainer: {
+    marginBottom: 12,
+  },
+  quantityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   quantityLabel: {
     fontSize: 14,
@@ -1149,24 +2001,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quantityButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quantityInput: {
-    width: 60,
-    height: 32,
+    width: 34,
+    height: 34,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  quantityButtonDisabled: {
+    opacity: 0.5,
+  },
+  quantityInput: {
+    width: 64,
+    height: 34,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    marginHorizontal: 8,
     textAlign: 'center',
     fontSize: 16,
-    fontWeight: '500',
-    color: '#1F2937',
-    marginHorizontal: 8,
+    fontWeight: '600',
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 0,
+    textAlignVertical: 'center',
+  },
+  quantityInputDisabled: {
+    backgroundColor: '#E5E7EB',
+    color: '#6B7280',
   },
   stockText: {
     fontSize: 12,
@@ -1179,6 +2043,26 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
+  },
+  orderItemTaxDetails: {
+    marginTop: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  orderItemTaxLine: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  orderItemTaxTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginTop: 4,
   },
   totalLabel: {
     fontSize: 16,
@@ -1214,6 +2098,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  summaryRowHighlight: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 8,
+    marginTop: 4,
+  },
   summaryLabel: {
     fontSize: 14,
     color: '#6B7280',
@@ -1232,6 +2122,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
     textAlignVertical: 'top',
+  },
+  fieldInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    padding: 16,
+    fontSize: 16,
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  modeOptionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modeOptionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  modeOptionButtonSelected: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  modeOptionText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  modeOptionTextSelected: {
+    color: '#FFFFFF',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -1348,7 +2274,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  // Visual indicators for already added products
   addedProductItem: {
     backgroundColor: '#F0FDF4',
     borderColor: '#10B981',
@@ -1359,15 +2284,9 @@ const styles = StyleSheet.create({
   addedProductSubtext: {
     color: '#047857',
   },
-  alreadyAddedText: {
+  addedProductBadge: {
     fontSize: 12,
-    color: '#059669',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  variantAddedText: {
-    fontSize: 12,
-    color: '#D97706',
+    color: '#047857',
     fontWeight: '500',
     marginTop: 2,
   },
@@ -1378,34 +2297,6 @@ const styles = StyleSheet.create({
   disabledInput: {
     opacity: 0.5,
     backgroundColor: '#F3F4F6',
-  },
-  infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  infoLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-    flex: 1,
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#1F2937',
-    flex: 2,
-    textAlign: 'right',
   },
 });
 

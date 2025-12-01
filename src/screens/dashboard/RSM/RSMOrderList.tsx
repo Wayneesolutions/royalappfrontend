@@ -513,7 +513,7 @@ const RSMOrderList = () => {
         <Text style={styles.headerTitle}>My Orders</Text>
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => navigation.navigate('AdminCreateOrder' as never)}
+          onPress={() => navigation.navigate('RSMCreateOrder' as never)}
         >
           <Ionicons name="add" size={24} color="#3B82F6" />
         </TouchableOpacity>
@@ -565,7 +565,7 @@ const RSMOrderList = () => {
             </Text>
             <TouchableOpacity
               style={styles.emptyStateButton}
-              onPress={() => navigation.navigate('AdminCreateOrder' as never)}
+              onPress={() => navigation.navigate('RSMCreateOrder' as never)}
             >
               <Text style={styles.emptyStateButtonText}>Create Your First Order</Text>
             </TouchableOpacity>

@@ -96,7 +96,8 @@ type AdminStackParamList = {
       AdminEditOrder: undefined;
 } & CommonStackParamList;
 
-// ==================== ZONAL SCREENS ====================
+// ==================== ZONAL SCREENS (ZSM - Zonal Sales Manager) ====================
+// Same as Admin but without create product/user functionality
 type ZonalStackParamList = {
   DashboardZonal: undefined;
   TeamManagementScreen: undefined;
@@ -106,19 +107,39 @@ type ZonalStackParamList = {
   ZonalCreateOrder: undefined;
   ZonalOrderList: undefined;
   ZonalEditOrder: { order: any };
+  // Admin screens (same functionality)
+  AdminCreateOrder: undefined;
+  AdminOrderList: undefined;
+  AdminEditOrder: undefined;
+  Companies: undefined;
+  Product: undefined;
+  ProductSummary: { cart: any[] };
+  Sales: undefined;
+  SaleOrders: undefined;
+  SaleOrderStart: undefined;
+  SaleOrderEntry: undefined;
+  SaleOrderItemSelect: undefined;
+  SaleOrderItemDetail: undefined;
+  SaleOrderApprove: undefined;
+  Users: undefined;
+  ZonalScreen: undefined;
   RSMScreen: undefined;
   ASMScreen: undefined;
-  SalesScreen: undefined;
-  DealerScreen: undefined;
   DistributorsScreen: undefined;
+  DealerScreen: undefined;
+  SalesScreen: undefined;
   InvoiceScreen: undefined;
   LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
+  ApprovedOrdersScreen: undefined;
   ClearOrdersScreen: undefined;
+  OutstandingScreen: undefined;
+  TargetAssignmentScreen: undefined;
 } & CommonStackParamList;
 
 // ==================== RSM SCREENS ====================
+// Same as Admin but without create product/user functionality
 export type RSMStackParamList = {
   DashboardRSM: undefined;
   TeamManagementScreen: undefined;
@@ -128,18 +149,39 @@ export type RSMStackParamList = {
   RSMCreateOrder: undefined;
   RSMOrderList: undefined;
   RSMEditOrder: { order: any };
+  // Admin screens (same functionality)
+  AdminCreateOrder: undefined;
+  AdminOrderList: undefined;
+  AdminEditOrder: undefined;
+  Companies: undefined;
+  Product: undefined;
+  ProductSummary: { cart: any[] };
+  Sales: undefined;
+  SaleOrders: undefined;
+  SaleOrderStart: undefined;
+  SaleOrderEntry: undefined;
+  SaleOrderItemSelect: undefined;
+  SaleOrderItemDetail: undefined;
+  SaleOrderApprove: undefined;
+  Users: undefined;
+  ZonalScreen: undefined;
+  RSMScreen: undefined;
   ASMScreen: undefined;
-  SalesScreen: undefined;
-  DealerScreen: undefined;
   DistributorsScreen: undefined;
+  DealerScreen: undefined;
+  SalesScreen: undefined;
   InvoiceScreen: undefined;
   LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
+  ApprovedOrdersScreen: undefined;
   ClearOrdersScreen: undefined;
+  OutstandingScreen: undefined;
+  TargetAssignmentScreen: undefined;
 } & CommonStackParamList;
 
 // ==================== ASM SCREENS ====================
+// Same as Admin but without create product/user functionality
 export type ASMStackParamList = {
   DashboardASM: undefined;
   TeamManagementScreen: undefined;
@@ -149,14 +191,35 @@ export type ASMStackParamList = {
   ASMCreateOrder: undefined;
   ASMOrderList: undefined;
   ASMEditOrder: { order: any };
-  SalesScreen: undefined;
-  DealerScreen: undefined;
+  // Admin screens (same functionality)
+  AdminCreateOrder: undefined;
+  AdminOrderList: undefined;
+  AdminEditOrder: undefined;
+  Companies: undefined;
+  Product: undefined;
+  ProductSummary: { cart: any[] };
+  Sales: undefined;
+  SaleOrders: undefined;
+  SaleOrderStart: undefined;
+  SaleOrderEntry: undefined;
+  SaleOrderItemSelect: undefined;
+  SaleOrderItemDetail: undefined;
+  SaleOrderApprove: undefined;
+  Users: undefined;
+  ZonalScreen: undefined;
+  RSMScreen: undefined;
+  ASMScreen: undefined;
   DistributorsScreen: undefined;
+  DealerScreen: undefined;
+  SalesScreen: undefined;
   InvoiceScreen: undefined;
   LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
+  ApprovedOrdersScreen: undefined;
   ClearOrdersScreen: undefined;
+  OutstandingScreen: undefined;
+  TargetAssignmentScreen: undefined;
 } & CommonStackParamList;
 
 // ==================== DISTRIBUTOR SCREENS ====================

@@ -139,10 +139,8 @@ const DealerOrderList = () => {
   const isInitialMount = useRef(true);
 
   useEffect(() => {
-    if (user?._id) {
-      fetchOrders();
-    }
-  }, [filter, user?._id]);
+    fetchOrders();
+  }, [filter, user?._id]); // Also depend on user ID
 
   // Listen for navigation params to refresh orders
   useEffect(() => {
@@ -168,37 +166,25 @@ const DealerOrderList = () => {
 
   const fetchOrders = async () => {
     try {
-      if (!user?._id) {
-        console.log('⏳ User not loaded yet, skipping fetch');
-        return;
-      }
-
       setLoading(true);
       
-      // Filter orders created BY this dealer (createdBy = dealer._id)
       const params: any = { 
         page: 1, 
         limit: 50,
-        createdBy: user._id // Only show orders created by this dealer
+        createdBy: user?._id // Filter by current user's ID instead of orderType
       };
       
       if (filter !== 'all') {
         params.status = filter;
       }
       
-      console.log('🔍 Fetching dealer created orders with params:', params);
+      console.log('🔍 Fetching orders for user:', user?._id, 'params:', params);
       const response = await getOrders(params);
-      console.log('📡 Orders response:', response);
-      
       if (response?.success) {
-        // Double-check: filter to ensure createdBy matches
-        let filteredOrders = response.orders || [];
-        filteredOrders = filteredOrders.filter((order: Order) => {
-          const createdBy = typeof order.createdBy === 'object' ? order.createdBy._id : order.createdBy;
-          return createdBy === user._id;
-        });
-        setOrders(filteredOrders);
-        console.log('✅ Loaded orders created by dealer:', filteredOrders.length);
+        setOrders(response.orders || []);
+        console.log('✅ Orders loaded:', response.orders?.length || 0);
+      } else {
+        console.log('❌ Failed to load orders:', response?.message);
       }
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -298,20 +284,20 @@ const DealerOrderList = () => {
       <View style={styles.orderDetails}>
         <View style={styles.orderDetailRow}>
           <Text style={styles.orderDetailLabel}>Items:</Text>
-          <Text style={styles.orderDetailValue}>{item.items.length} products</Text>
+          <Text style={styles.orderDetailValue}>{item.items?.length || 0} products</Text>
         </View>
         <View style={styles.orderDetailRow}>
           <Text style={styles.orderDetailLabel}>Quantity:</Text>
-          <Text style={styles.orderDetailValue}>{item.totalQuantity}</Text>
+          <Text style={styles.orderDetailValue}>{item.totalQuantity || 0}</Text>
         </View>
         <View style={styles.orderDetailRow}>
           <Text style={styles.orderDetailLabel}>Total:</Text>
-          <Text style={styles.orderDetailValue}>₹{item.totalAmount}</Text>
+          <Text style={styles.orderDetailValue}>₹{item.totalAmount || 0}</Text>
         </View>
         <View style={styles.orderDetailRow}>
           <Text style={styles.orderDetailLabel}>Date:</Text>
           <Text style={styles.orderDetailValue}>
-            {new Date(item.createdAt).toLocaleDateString()}
+            {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}
           </Text>
         </View>
       </View>
@@ -362,7 +348,7 @@ const DealerOrderList = () => {
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Created Date</Text>
                 <Text style={styles.detailsValue}>
-                  {new Date(selectedOrder.createdAt).toLocaleDateString()} {new Date(selectedOrder.createdAt).toLocaleTimeString()}
+                  {selectedOrder.createdAt ? `${new Date(selectedOrder.createdAt).toLocaleDateString()} ${new Date(selectedOrder.createdAt).toLocaleTimeString()}` : 'N/A'}
                 </Text>
               </View>
             </View>
@@ -379,21 +365,25 @@ const DealerOrderList = () => {
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Dealer Email</Text>
                 <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.dealerId === 'object' ? selectedOrder.dealerId.email : selectedOrder.customerEmail || 'N/A'}
+                  {typeof selectedOrder.dealerId === 'object' && selectedOrder.dealerId?.email 
+                    ? selectedOrder.dealerId.email 
+                    : selectedOrder.customerEmail || 'N/A'}
                 </Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Dealer Mobile</Text>
                 <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.dealerId === 'object' ? selectedOrder.dealerId.mobile : selectedOrder.customerMobile || 'N/A'}
+                  {typeof selectedOrder.dealerId === 'object' && selectedOrder.dealerId?.mobile 
+                    ? selectedOrder.dealerId.mobile 
+                    : selectedOrder.customerMobile || 'N/A'}
                 </Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Dealer Address</Text>
                 <Text style={styles.detailsValue}>
-                  {formatAddress(selectedOrder.customerAddress)}
+                  {formatAddress(selectedOrder.customerAddress || (typeof selectedOrder.dealerId === 'object' ? selectedOrder.dealerId?.address : undefined))}
                 </Text>
               </View>
             </View>
@@ -410,14 +400,18 @@ const DealerOrderList = () => {
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Email</Text>
                 <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' ? selectedOrder.subDealerId.email : 'N/A'}
+                  {typeof selectedOrder.subDealerId === 'object' && selectedOrder.subDealerId?.email 
+                    ? selectedOrder.subDealerId.email 
+                    : 'N/A'}
                 </Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Mobile</Text>
                 <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' ? selectedOrder.subDealerId.mobile : selectedOrder.shippingAddress?.mobile || 'N/A'}
+                  {typeof selectedOrder.subDealerId === 'object' && selectedOrder.subDealerId?.mobile 
+                    ? selectedOrder.subDealerId.mobile 
+                    : selectedOrder.shippingAddress?.mobile || 'N/A'}
                 </Text>
               </View>
               
@@ -431,19 +425,23 @@ const DealerOrderList = () => {
             <View style={styles.detailsSection}>
               <Text style={styles.detailsSectionTitle}>Order Items</Text>
               
-              {selectedOrder.items.map((item, index) => (
-                <View key={index} style={styles.itemRow}>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.productName}</Text>
-                    <Text style={styles.itemCode}>{item.productCode}</Text>
-                    <Text style={styles.itemPrice}>₹{item.unitPrice}/{item.unit}</Text>
+              {selectedOrder.items && Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
+                selectedOrder.items.map((item, index) => (
+                  <View key={index} style={styles.itemRow}>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName}>{item.productName || 'Unknown Product'}</Text>
+                      <Text style={styles.itemCode}>{item.productCode || 'N/A'}</Text>
+                      <Text style={styles.itemPrice}>₹{item.unitPrice || 0}/{item.unit || 'unit'}</Text>
+                    </View>
+                    <View style={styles.itemQuantity}>
+                      <Text style={styles.itemQuantityText}>Qty: {item.quantity || 0}</Text>
+                      <Text style={styles.itemTotal}>₹{item.totalAmount || 0}</Text>
+                    </View>
                   </View>
-                  <View style={styles.itemQuantity}>
-                    <Text style={styles.itemQuantityText}>Qty: {item.quantity}</Text>
-                    <Text style={styles.itemTotal}>₹{item.totalAmount}</Text>
-                  </View>
-                </View>
-              ))}
+                ))
+              ) : (
+                <Text style={styles.detailsValue}>No items in this order</Text>
+              )}
             </View>
 
             {/* Order Summary */}
@@ -452,17 +450,17 @@ const DealerOrderList = () => {
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Total Items</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.items.length}</Text>
+                <Text style={styles.detailsValue}>{selectedOrder.items?.length || 0}</Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Total Quantity</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.totalQuantity}</Text>
+                <Text style={styles.detailsValue}>{selectedOrder.totalQuantity || 0}</Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Total Amount</Text>
-                <Text style={[styles.detailsValue, styles.totalAmount]}>₹{selectedOrder.totalAmount}</Text>
+                <Text style={[styles.detailsValue, styles.totalAmount]}>₹{selectedOrder.totalAmount || 0}</Text>
               </View>
               
               {selectedOrder.notes && (
