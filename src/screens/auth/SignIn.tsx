@@ -33,9 +33,8 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
     clearError();
     
     try {
-      // Convert username to email format for consistency with your auth system
-      const email = username.includes('@') ? username : `${username}@company.com`;
-      await login(email.trim().toLowerCase(), password);
+      // Pass email or mobile directly to login (backend will handle both)
+      await login(username.trim(), password);
       // Navigation will be handled automatically by AppNavigator based on user role
     } catch (error) {
       Alert.alert(
@@ -56,13 +55,15 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.title}>Let's you sign in</Text>
         <Text style={styles.subtitle}>Welcome Back You Been Missed</Text>
 
-        <Text style={styles.label}>Username</Text>
+        <Text style={styles.label}>Email or Mobile Number</Text>
         <TextInput
           style={styles.input}
           value={username}
           onChangeText={setUsername}
+          placeholder="Enter email or mobile number"
           autoCapitalize="none"
           autoCorrect={false}
+          keyboardType="default"
         />
 
         <Text style={styles.label}>Password</Text>

@@ -38,7 +38,7 @@ export interface LoginResponse {
 }
 
 export interface LoginRequest {
-  email: string;
+  emailOrMobile: string;
   password: string;
 }
 

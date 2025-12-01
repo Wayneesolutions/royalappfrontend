@@ -26,11 +26,6 @@ interface Product {
   subCategory?: string;
   brand?: string;
   price: number;
-  stock: number | {
-    current: number;
-    minimum?: number;
-    maximum?: number;
-  };
   isActive: boolean;
   gstRate?: number;
   createdBy?: {
@@ -45,17 +40,6 @@ interface Product {
   updatedAt: string;
 }
 
-const getStockNumber = (stock: unknown): number => {
-  if (typeof stock === 'number') {
-    return stock;
-  }
-
-  if (stock && typeof (stock as any).current === 'number') {
-    return (stock as any).current;
-  }
-
-  return 0;
-};
 
 const ProductCatalog = () => {
   const navigation = useNavigation();
@@ -89,7 +73,6 @@ const ProductCatalog = () => {
     subCategory: '',
     brand: '',
     price: '',
-    stock: '',
     gstRate: DEFAULT_GST_RATE.toString(),
     isActive: true,
   });
@@ -227,7 +210,6 @@ const ProductCatalog = () => {
         subCategory: formData.subCategory.trim(),
         brand: formData.brand.trim(),
         price: parseFloat(formData.price),
-        stock: formData.stock ? parseInt(formData.stock, 10) || 0 : 0,
         gstRate: parseFloat(formData.gstRate),
         isActive: formData.isActive,
       };
@@ -302,7 +284,6 @@ const ProductCatalog = () => {
         subCategory: formData.subCategory.trim(),
         brand: formData.brand.trim(),
         price: parseFloat(formData.price),
-        stock: formData.stock ? parseInt(formData.stock, 10) || 0 : 0,
         gstRate: parseFloat(formData.gstRate),
         isActive: formData.isActive,
       };
@@ -389,7 +370,6 @@ const ProductCatalog = () => {
       subCategory: '',
       brand: '',
       price: '',
-      stock: '',
       gstRate: DEFAULT_GST_RATE.toString(),
       isActive: true,
     });
@@ -406,7 +386,6 @@ const ProductCatalog = () => {
       subCategory: product.subCategory || '',
       brand: product.brand || '',
       price: product.price?.toString() || '',
-      stock: getStockNumber(product.stock).toString(),
       gstRate: (product.gstRate ?? DEFAULT_GST_RATE).toString(),
       isActive: product.isActive,
     });
@@ -445,11 +424,6 @@ const ProductCatalog = () => {
           <Text style={styles.productGst}>
             GST: {(item.gstRate ?? DEFAULT_GST_RATE)}%
           </Text>
-          
-          <View style={styles.stockContainer}>
-            <Text style={styles.stockLabel}>Stock:</Text>
-            <Text style={styles.stockQuantity}>{getStockNumber(item.stock)}</Text>
-          </View>
           
           <View style={styles.statusContainer}>
             <View style={[
@@ -752,27 +726,15 @@ const ProductCatalog = () => {
               />
             </View>
             
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Price *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.price}
-                  onChangeText={(text) => setFormData({...formData, price: text})}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Stock</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.stock}
-                  onChangeText={(text) => setFormData({...formData, stock: text})}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Price *</Text>
+              <TextInput
+                style={styles.formInput}
+                value={formData.price}
+                onChangeText={(text) => setFormData({...formData, price: text})}
+                placeholder="0.00"
+                keyboardType="numeric"
+              />
             </View>
             
             <View style={styles.formGroup}>
@@ -881,27 +843,15 @@ const ProductCatalog = () => {
               />
             </View>
             
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Price *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.price}
-                  onChangeText={(text) => setFormData({...formData, price: text})}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.formLabel}>Stock</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.stock}
-                  onChangeText={(text) => setFormData({...formData, stock: text})}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Price *</Text>
+              <TextInput
+                style={styles.formInput}
+                value={formData.price}
+                onChangeText={(text) => setFormData({...formData, price: text})}
+                placeholder="0.00"
+                keyboardType="numeric"
+              />
             </View>
             
             <View style={styles.formGroup}>
@@ -1013,16 +963,6 @@ const ProductCatalog = () => {
                     <Text style={styles.detailsValue}>
                       {(selectedProduct.gstRate ?? DEFAULT_GST_RATE)}%
                     </Text>
-                  </View>
-                </View>
-
-                {/* Stock Information */}
-                <View style={styles.detailsSection}>
-                  <Text style={styles.detailsSectionTitle}>Stock Information</Text>
-                  
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Stock Available</Text>
-                    <Text style={styles.detailsValue}>{getStockNumber(selectedProduct.stock)}</Text>
                   </View>
                 </View>
 

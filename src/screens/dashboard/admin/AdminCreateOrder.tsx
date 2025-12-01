@@ -494,7 +494,7 @@ const AdminCreateOrder = () => {
       console.log('🔍 Fetching products...');
       const productsResponse = await getProducts();
       console.log('📡 Products response:', productsResponse);
-
+      
       let productList: any[] = [];
       if (Array.isArray(productsResponse)) {
         productList = productsResponse;
@@ -540,11 +540,11 @@ const AdminCreateOrder = () => {
     setShowSubDealerDropdown(false);
   };
 
-  const createSelectionState = (initialStock: number): ProductSelectionState => ({
+  const createSelectionState = (): ProductSelectionState => ({
     quantity: '0',
     validating: false,
     isValid: false,
-    availableStock: initialStock,
+    availableStock: 0,
     error: '',
     adding: false,
     lastValidatedQuantity: undefined,
@@ -552,7 +552,7 @@ const AdminCreateOrder = () => {
   });
 
   const getSelectionState = (product: Product): ProductSelectionState =>
-    productSelections[product._id] ?? createSelectionState(getStockNumber(product.stock));
+    productSelections[product._id] ?? createSelectionState();
 
   const getFreshProduct = async (productId: string): Promise<Product> => {
     const response = await getProductById(productId);
@@ -569,84 +569,17 @@ const AdminCreateOrder = () => {
     const quantityNumber = parseInt(quantityString, 10) || 0;
 
     setProductSelections((prev) => {
-      const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+      const prevState = prev[product._id] ?? createSelectionState();
       return {
         ...prev,
         [product._id]: {
           ...prevState,
           quantity: quantityString,
-          validating: quantityNumber > 0,
-          isValid: false,
+          isValid: quantityNumber > 0,
           error: '',
         },
       };
     });
-
-    if (quantityNumber <= 0) {
-      setProductSelections((prev) => {
-        const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
-        return {
-          ...prev,
-          [product._id]: {
-            ...prevState,
-            quantity: quantityString,
-            validating: false,
-            isValid: false,
-            error: '',
-            lastValidatedQuantity: undefined,
-            productData: undefined,
-          },
-        };
-      });
-      return;
-    }
-
-    const validate = async () => {
-      try {
-        const freshProduct = await getFreshProduct(product._id);
-        const availableStock = getStockNumber(freshProduct.stock);
-        const isValid = quantityNumber <= availableStock;
-
-        setProductSelections((prev) => {
-          const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
-          if ((prevState.quantity || '0') !== quantityString) {
-            return prev;
-          }
-          return {
-            ...prev,
-            [product._id]: {
-              ...prevState,
-              validating: false,
-              isValid,
-              availableStock,
-              error: isValid ? '' : `Only ${availableStock} units available`,
-              productData: freshProduct,
-              lastValidatedQuantity: quantityNumber,
-            },
-          };
-        });
-      } catch (error) {
-        setProductSelections((prev) => {
-          const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
-          if ((prevState.quantity || '0') !== quantityString) {
-            return prev;
-          }
-          return {
-            ...prev,
-            [product._id]: {
-              ...prevState,
-              validating: false,
-              isValid: false,
-              error: error instanceof Error ? error.message : 'Unable to validate stock',
-              productData: undefined,
-              lastValidatedQuantity: undefined,
-            },
-          };
-        });
-      }
-    };
-
-    validate();
   };
 
   const adjustProductSelectionQuantity = (product: Product, delta: number) => {
@@ -665,7 +598,7 @@ const AdminCreateOrder = () => {
     }
 
     setProductSelections((prev) => {
-      const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+      const prevState = prev[product._id] ?? createSelectionState();
       return {
         ...prev,
         [product._id]: {
@@ -678,42 +611,22 @@ const AdminCreateOrder = () => {
 
     try {
       let freshProduct = selection.productData;
-      let availableStock = selection.availableStock;
 
-      if (!selection.isValid || selection.lastValidatedQuantity !== quantityNumber || !freshProduct) {
+      if (!freshProduct) {
         freshProduct = await getFreshProduct(product._id);
-        availableStock = getStockNumber(freshProduct.stock);
-
-        if (quantityNumber > availableStock) {
-          setProductSelections((prev) => ({
-            ...prev,
-            [product._id]: {
-              ...(prev[product._id] ?? createSelectionState(availableStock)),
-              quantity: selection.quantity,
-              validating: false,
-              isValid: false,
-              availableStock,
-              error: `Only ${availableStock} units available`,
-              adding: false,
-              productData: freshProduct,
-              lastValidatedQuantity: quantityNumber,
-            },
-          }));
-          return;
-        }
       }
 
       const success = await addProductToOrder(product, quantityNumber, freshProduct);
 
       if (success) {
-        const resetState = createSelectionState(getStockNumber((freshProduct ?? product).stock));
+        const resetState = createSelectionState();
         setProductSelections((prev) => ({
           ...prev,
           [product._id]: resetState,
         }));
       } else {
         setProductSelections((prev) => {
-          const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+          const prevState = prev[product._id] ?? createSelectionState();
           return {
             ...prev,
             [product._id]: {
@@ -725,7 +638,7 @@ const AdminCreateOrder = () => {
       }
     } catch (error) {
       setProductSelections((prev) => {
-        const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
+        const prevState = prev[product._id] ?? createSelectionState();
         return {
           ...prev,
           [product._id]: {
@@ -765,44 +678,17 @@ const AdminCreateOrder = () => {
     for (const { product, selection, quantity } of entries) {
       try {
         let freshProduct = selection.productData;
-        let availableStock = selection.availableStock;
 
-        if (
-          !selection.isValid ||
-          selection.lastValidatedQuantity !== quantity ||
-          !freshProduct
-        ) {
+        if (!freshProduct) {
           freshProduct = await getFreshProduct(product._id);
-          availableStock = getStockNumber(freshProduct.stock);
-        }
-
-        if (quantity > availableStock) {
-          const message = `${freshProduct.productName}: Only ${availableStock} available.`;
-          errorMessages.push(message);
-          setProductSelections((prev) => ({
-            ...prev,
-            [product._id]: {
-              ...(prev[product._id] ?? createSelectionState(availableStock)),
-              quantity: String(quantity),
-              validating: false,
-              isValid: false,
-              availableStock,
-              error: `Only ${availableStock} units available`,
-              adding: false,
-              lastValidatedQuantity: undefined,
-              productData: freshProduct,
-            },
-          }));
-          continue;
         }
 
         const success = await addProductToOrder(product, quantity, freshProduct);
         if (success) {
           addedCount += 1;
-          const refreshedStock = getStockNumber(freshProduct.stock);
           setProductSelections((prev) => ({
             ...prev,
-            [product._id]: createSelectionState(refreshedStock),
+            [product._id]: createSelectionState(),
           }));
         } else {
           const message = `${freshProduct.productName}: Failed to add to order.`;
@@ -810,7 +696,7 @@ const AdminCreateOrder = () => {
           setProductSelections((prev) => ({
             ...prev,
             [product._id]: {
-              ...(prev[product._id] ?? createSelectionState(getStockNumber(product.stock))),
+              ...(prev[product._id] ?? createSelectionState()),
               quantity: String(quantity),
               adding: false,
             },
@@ -823,7 +709,7 @@ const AdminCreateOrder = () => {
         setProductSelections((prev) => ({
           ...prev,
           [product._id]: {
-            ...(prev[product._id] ?? createSelectionState(getStockNumber(product.stock))),
+            ...(prev[product._id] ?? createSelectionState()),
             adding: false,
             isValid: false,
             error: message,
@@ -856,21 +742,12 @@ const AdminCreateOrder = () => {
       const freshProduct =
         freshProductOverride ?? (await getFreshProduct(product._id));
       const unitLabel = getProductUnitLabel(freshProduct, getUnitLabel(product.unit));
-      const availableStock = getStockNumber(freshProduct.stock ?? product.stock);
       const resolvedPrice = getProductPrice(freshProduct);
       const resolvedGstRate = getProductGstRate(freshProduct);
       const resolvedName = getProductName(freshProduct);
       const partNumber = getProductPartNo(freshProduct);
       const hsnCode = getProductHsn(freshProduct);
       const category = getProductCategory(freshProduct);
-
-      if (quantity > availableStock) {
-        Alert.alert(
-          'Insufficient Stock',
-          `Only ${availableStock} ${unitLabel} available for ${freshProduct.productName}.`
-        );
-        return false;
-      }
 
       setOrderItems((prevItems) => {
         const updatedItems = [...prevItems];
@@ -885,7 +762,7 @@ const AdminCreateOrder = () => {
             quantity,
             unitPrice: resolvedPrice,
             gstRate: previous.gstRate ?? resolvedGstRate,
-            availableStock,
+            availableStock: 0,
             partNo: previous.partNo || partNumber,
             itemHsn: previous.itemHsn || hsnCode,
             category: previous.category || category,
@@ -926,7 +803,7 @@ const AdminCreateOrder = () => {
             igstAmount: 0,
             totalTaxAmount: 0,
             totalAmount: 0,
-            availableStock,
+            availableStock: 0,
           });
         }
 
@@ -947,40 +824,20 @@ const AdminCreateOrder = () => {
     
     if (newQuantity < 0) return; // Don't allow negative quantities
     
-    try {
-      // Check stock availability using backend API
-      console.log(`🔍 Checking stock for product ${item.productName}, requested quantity: ${newQuantity}`);
-      
-      // Get fresh product data to check current stock
-      const productResponse = await getProductById(productId);
-      const currentStock = (productResponse?.success
-        ? getStockNumber(productResponse.product?.stock)
-        : undefined) ?? item.availableStock;
-
-      if (newQuantity > currentStock) {
-        Alert.alert('Insufficient Stock', `Only ${currentStock} ${item.unit} available in stock.`);
-        return;
-      }
-
-      setOrderItems((prevItems) =>
-        applyGstToItems(
-          prevItems.map((it) =>
-            it.productId === productId
-              ? {
-                  ...it,
-                  quantity: newQuantity,
-                  availableStock: currentStock,
-                }
-              : it
-          ),
-          gstType
-        )
-      );
-      console.log(`✅ Updated quantity for ${item.productName}: ${newQuantity}`);
-    } catch (error) {
-      console.error('❌ Error updating quantity:', error);
-      Alert.alert('Error', 'Failed to update quantity');
-    }
+    setOrderItems((prevItems) =>
+      applyGstToItems(
+        prevItems.map((it) =>
+          it.productId === productId
+            ? {
+                ...it,
+                quantity: newQuantity,
+              }
+            : it
+        ),
+        gstType
+      )
+    );
+    console.log(`✅ Updated quantity for ${item.productName}: ${newQuantity}`);
   };
 
   const removeItem = (productId: string) => {
@@ -1016,23 +873,6 @@ const AdminCreateOrder = () => {
         Alert.alert('Validation Error', 'Please specify the payment mode when selecting Other.');
         setSaving(false);
         return;
-      }
-      
-      // Final stock validation before creating order
-      console.log('🔍 Performing final stock validation...');
-      for (const item of itemsWithQuantity) {
-        const productResponse = await getProductById(item.productId);
-        if (productResponse?.success) {
-          const currentStock = getStockNumber(productResponse.product.stock);
-          if (item.quantity > currentStock) {
-            Alert.alert(
-              'Stock Validation Failed', 
-              `${item.productName}: Only ${currentStock} ${item.unit} available, but ${item.quantity} requested.`
-            );
-            setSaving(false);
-            return;
-          }
-        }
       }
       
       const trimmedCustomMode = customMode.trim();
@@ -1192,15 +1032,9 @@ const AdminCreateOrder = () => {
         (orderItem.unitPrice !== resolvedPrice || orderItem.unit !== resolvedUnit)
     );
 
-    const availableStockLabel =
-      selection.availableStock > 0
-        ? selection.availableStock
-        : getStockNumber(item.stock);
-
     const addButtonVisible = quantityNumber > 0;
-    const isLoading = selection.validating || selection.adding;
-    const canAdd =
-      addButtonVisible && selection.isValid && !isLoading;
+    const isLoading = selection.adding;
+    const canAdd = addButtonVisible && !isLoading;
     const addButtonLabel = existingItem ? 'Update' : 'Add';
 
     return (
@@ -1229,14 +1063,14 @@ const AdminCreateOrder = () => {
               {item.productCode} • ₹{resolvedPrice.toFixed(2)}
             </Text>
             {partNumber ? (
-              <Text
-                style={[
-                  styles.dropdownItemSubtext,
-                  existingItem && styles.addedProductSubtext,
-                ]}
-              >
+            <Text
+              style={[
+                styles.dropdownItemSubtext,
+                existingItem && styles.addedProductSubtext,
+              ]}
+            >
                 Part No: {partNumber}
-              </Text>
+            </Text>
             ) : null}
             <Text
               style={[
@@ -1264,10 +1098,6 @@ const AdminCreateOrder = () => {
                 HSN: {hsnCode}
               </Text>
             ) : null}
-            <Text style={styles.productAvailabilityText}>
-            Available: {availableStockLabel}{' '}
-            {getProductUnitLabel(item)}
-            </Text>
           </View>
           {existingItem ? (
             <Ionicons name="checkmark-circle" size={22} color="#10B981" />
@@ -1346,13 +1176,6 @@ const AdminCreateOrder = () => {
           )}
         </View>
 
-        {selection.validating && (
-          <Text style={styles.selectionHelperText}>Validating stock...</Text>
-        )}
-
-        {selection.error ? (
-          <Text style={styles.selectionErrorText}>{selection.error}</Text>
-        ) : null}
 
         {existingItem && !selection.error && (
           <Text style={styles.selectionInfoText}>
@@ -1378,9 +1201,6 @@ const AdminCreateOrder = () => {
           <Text style={styles.orderItemMeta}>Category: {item.category}</Text>
         ) : null}
         <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
-        <Text style={styles.orderItemStock}>
-          Available: {item.availableStock} {item.unit}
-        </Text>
       </View>
 
       <View style={styles.orderItemSummary}>

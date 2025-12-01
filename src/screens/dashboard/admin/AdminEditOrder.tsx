@@ -549,11 +549,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             ? it.tax
             : DEFAULT_GST_RATE;
       const totalAmount = (it.totalAmount ?? it.totalPrice ?? (unitPrice * quantity)) ?? 0;
-      const availableStock =
-        typeof it.availableStock === 'number'
-          ? it.availableStock
-          : getStockNumber(productIdObj?.stock) ||
-            getStockNumber((it as any)?.stock);
+      const availableStock = 0;
       const partNo = it.partNo || productIdObj?.partNo || productIdObj?.itemAlias;
       const itemHsn = it.itemHsn || productIdObj?.itemHsn;
       const category = it.category || productIdObj?.category;
@@ -705,25 +701,24 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       setShowDealerDropdown(false);
       setShowSubDealerDropdown(false);
 
-      // Sync order items with latest product info (stock, unit, price)
+      // Sync order items with latest product info (unit, price)
       if (normalizedProducts.length > 0) {
         setOrderItems(prevItems =>
           applyGstToItems(
             prevItems.map(item => {
-              const match = normalizedProducts.find(prod => prod._id === item.productId);
-              if (!match) {
-                return item;
-              }
+            const match = normalizedProducts.find(prod => prod._id === item.productId);
+            if (!match) {
+              return item;
+            }
 
-              const updatedStock = getStockNumber(match.stock);
               const updatedUnit = getProductUnitLabel(match, item.unit);
               const updatedPrice = getProductPrice(match) || item.unitPrice;
 
-              return {
-                ...item,
-                availableStock: updatedStock > 0 ? updatedStock : item.availableStock,
-                unit: updatedUnit,
-                unitPrice: updatedPrice,
+            return {
+              ...item,
+              availableStock: 0,
+              unit: updatedUnit,
+              unitPrice: updatedPrice,
                 partNo: item.partNo || getProductPartNo(match),
                 itemHsn: item.itemHsn || getProductHsn(match),
                 category: item.category || getProductCategory(match),
@@ -732,10 +727,10 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                 description: item.description || match.description,
                 baseUnits: item.baseUnits || match.baseUnits,
                 additionalUnits: item.additionalUnits || match.additionalUnits,
-              };
-            }),
-            gstType
-          )
+            };
+          }),
+          gstType
+        )
         );
       }
       
@@ -818,14 +813,11 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       const resolvedUnit = getProductUnitLabel(freshProduct, getUnitLabel(product.unit));
       const resolvedPrice = getProductPrice(freshProduct) || getProductPrice(product);
       const resolvedGstRate = getProductGstRate(freshProduct);
-      const resolvedStock = getStockNumber(
-        (freshProduct.stock as Product['stock']) ?? product.stock
-      );
       const resolvedName = getProductName(freshProduct);
       const partNumber = getProductPartNo(freshProduct);
       const hsnCode = getProductHsn(freshProduct);
       const category = getProductCategory(freshProduct);
-      const initialQuantity = resolvedStock > 0 ? 1 : 0;
+      const initialQuantity = 1;
 
       const newItem: OrderItem = {
         productId: freshProduct._id,
@@ -856,20 +848,13 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         igstAmount: 0,
         totalTaxAmount: 0,
         totalAmount: 0,
-        availableStock: resolvedStock,
+        availableStock: 0,
       };
 
       setOrderItems((prevItems) =>
         applyGstToItems([...prevItems, newItem], gstType)
       );
       setShowProductDropdown(false);
-
-      if (initialQuantity === 0) {
-        Alert.alert(
-          'Info',
-          'Selected product currently has no available stock. Quantity is set to 0.'
-        );
-      }
     } catch (error) {
       console.error('Error adding product to order:', error);
       Alert.alert('Error', 'Failed to add product to order');
@@ -897,7 +882,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       const productResponse = await getProductById(productId);
       console.log('📦 Product response:', productResponse);
 
-      let currentStock = item.availableStock;
       let unitLabel = item.unit;
       let unitPrice = item.unitPrice;
       let metadataUpdates: Partial<OrderItem> = {};
@@ -906,7 +890,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         const product = normalizeProduct(
           productResponse.data?.product || productResponse.product || productResponse?.data
         );
-        currentStock = getStockNumber(product.stock ?? item.availableStock);
         unitLabel = getProductUnitLabel(product, unitLabel);
         const resolvedPrice = getProductPrice(product);
         if (resolvedPrice) {
@@ -922,15 +905,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           baseUnits: item.baseUnits || product.baseUnits,
           additionalUnits: item.additionalUnits || product.additionalUnits,
         };
-        console.log(`📊 Current stock from API: ${currentStock}`);
-      } else {
-        console.log('⚠️ Failed to get fresh stock data, using existing:', item.availableStock);
-        console.log('📦 Full response:', productResponse);
-      }
-
-      if (newQuantity > currentStock) {
-        Alert.alert('Insufficient Stock', `Only ${currentStock} ${unitLabel} available in stock.`);
-        return;
       }
 
       setOrderItems((prevItems) =>
@@ -940,7 +914,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
               ? {
                   ...it,
                   quantity: newQuantity,
-                  availableStock: currentStock,
+                  availableStock: 0,
                   unit: unitLabel,
                   unitPrice,
                   ...metadataUpdates,
@@ -990,22 +964,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
     try {
       setSaving(true);
       console.log('🔄 Starting order update...');
-      
-      // Final stock validation
-      for (const item of itemsWithQuantity) {
-        const productResponse = await getProductById(item.productId);
-        if (productResponse?.success) {
-          const currentStock = getStockNumber(productResponse.product?.stock);
-          if (item.quantity > currentStock) {
-            Alert.alert(
-              'Stock Validation Failed', 
-              `${item.productName}: Only ${currentStock} ${item.unit} available, but ${item.quantity} requested.`
-            );
-            setSaving(false);
-            return;
-          }
-        }
-      }
       
       const trimmedCustomMode = customMode.trim();
       const trimmedTermsOfPayment = termsOfPayment.trim();
@@ -1177,10 +1135,10 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             <TouchableOpacity
               style={[
                 styles.quantityButton,
-                (item.quantity >= item.availableStock || updatingQuantity === item.productId) && styles.quantityButtonDisabled
+                updatingQuantity === item.productId && styles.quantityButtonDisabled
               ]}
               onPress={() => updateQuantity(item.productId, item.quantity + 1)}
-              disabled={item.quantity >= item.availableStock || updatingQuantity === item.productId}
+              disabled={updatingQuantity === item.productId}
             >
               {updatingQuantity === item.productId ? (
                 <ActivityIndicator size="small" color="#6B7280" />
@@ -1191,9 +1149,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           </View>
         </View>
 
-        <Text style={styles.stockText}>
-          Available: {item.availableStock} {item.unit}
-        </Text>
       </View>
 
       <View style={styles.orderItemTotal}>
@@ -1233,7 +1188,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
   const renderProductItem = ({ item }: { item: Product }) => {
     const existingOrderItem = orderItems.find(orderItem => orderItem.productId === item._id);
     const isAlreadyAdded = Boolean(existingOrderItem);
-    const stockNumber = getStockNumber(item.stock);
     const unitLabel = getProductUnitLabel(item, getUnitLabel(item.unit));
     const resolvedPrice = getProductPrice(item);
     const resolvedGst = getProductGstRate(item);
@@ -1264,8 +1218,8 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           </Text>
           <Text
             style={[
-              styles.productPrice,
-              isAlreadyAdded && styles.addedProductSubtext
+            styles.productPrice,
+            isAlreadyAdded && styles.addedProductSubtext
             ]}
           >
             ₹{resolvedPrice.toFixed(2)}
@@ -1304,14 +1258,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
               HSN: {hsnCode}
             </Text>
           ) : null}
-          <Text
-            style={[
-              styles.productStock,
-              isAlreadyAdded && styles.addedProductSubtext
-            ]}
-          >
-            Stock: {stockNumber} {unitLabel}
-          </Text>
           {isAlreadyAdded && (
             <Text style={styles.addedProductBadge}>
               In order · Qty {existingOrderItem?.quantity ?? 0}

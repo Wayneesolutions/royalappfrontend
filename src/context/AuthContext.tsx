@@ -11,7 +11,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (emailOrMobile: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (userData: any) => void;
   roleSpecificData: any;
@@ -129,9 +129,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     dispatch(checkAuthStatus());
   }, [dispatch]);
 
-  const login = async (email: string, password: string): Promise<void> => {
+  const login = async (emailOrMobile: string, password: string): Promise<void> => {
     try {
-      const result = await dispatch(loginUser({ email, password }));
+      const result = await dispatch(loginUser({ emailOrMobile, password }));
       if (loginUser.rejected.match(result)) {
         throw new Error(result.payload as string);
       }

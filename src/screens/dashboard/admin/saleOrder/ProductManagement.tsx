@@ -73,7 +73,6 @@ type ProductFormState = {
   stdPurcRate: string;
   stdSaleRate: string;
   price: string;
-  stock: string;
   itemGstPer: string;
   gstRate: string;
   itemHsn: string;
@@ -89,8 +88,6 @@ type ProductFormState = {
   other4: string;
   other5: string;
 };
-
-const LOW_STOCK_THRESHOLD = 5;
 
 const emptyFormState = (): ProductFormState => ({
   productCode: "",
@@ -108,7 +105,6 @@ const emptyFormState = (): ProductFormState => ({
   stdPurcRate: "",
   stdSaleRate: "",
   price: "",
-  stock: "",
   itemGstPer: "",
   gstRate: "",
   itemHsn: "",
@@ -131,43 +127,31 @@ const ProductManagement = () => {
     createProduct, 
     updateProduct, 
     deleteProduct,
-    getProductCategories,
-    updateProductStock,
-    getLowStockProducts 
+    getProductCategories
   } = useAuth();
   const navigation = useNavigation();
 
   // State management
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // Filter and search
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [showLowStock, setShowLowStock] = useState(false);
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showStockModal, setShowStockModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Form states
   const [formData, setFormData] = useState<ProductFormState>(emptyFormState());
 
-  // Stock update state
-  const [stockUpdate, setStockUpdate] = useState({
-    quantity: '',
-    operation: 'add' as 'add' | 'subtract'
-  });
-
   const derivedSelectedProduct = selectedProduct
     ? {
-        stockValue: getStockValue(selectedProduct.stock),
         priceValue:
           selectedProduct.price ??
           selectedProduct.stdSaleRate ??
@@ -247,15 +231,6 @@ const toTrimmed = (value: string) => {
   return trimmed.length ? trimmed : undefined;
 };
 
-function getStockValue(stock: Product['stock']) {
-  if (typeof stock === 'number') {
-    return stock;
-  }
-  if (stock && typeof stock === 'object' && typeof stock.current === 'number') {
-    return stock.current;
-  }
-  return 0;
-}
 
   // Fetch data
   const fetchData = async () => {
@@ -280,12 +255,6 @@ function getStockValue(stock: Product['stock']) {
       const categoriesResponse = await getProductCategories();
       if (categoriesResponse?.success) {
         setCategories(categoriesResponse.categories || []);
-      }
-
-      // Fetch low stock products
-      const lowStockResponse = await getLowStockProducts();
-      if (lowStockResponse?.success) {
-        setLowStockProducts(lowStockResponse.products || []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -332,7 +301,7 @@ function getStockValue(stock: Product['stock']) {
 
     try {
       setLoading(true);
-
+      
       const productData: Record<string, any> = {
         productCode,
         name: resolvedName,
@@ -349,7 +318,6 @@ function getStockValue(stock: Product['stock']) {
         stdPurcRate: toNumber(formData.stdPurcRate),
         stdSaleRate: toNumber(formData.stdSaleRate),
         price: resolvedPrice,
-        stock: toInteger(formData.stock) ?? 0,
         itemGstPer: toNumber(formData.itemGstPer),
         gstRate: toNumber(formData.gstRate),
         itemHsn: toTrimmed(formData.itemHsn),
@@ -386,7 +354,7 @@ function getStockValue(stock: Product['stock']) {
         
         // Show success message after modal is closed
         Alert.alert(
-          'Success',
+          'Success', 
           `Product "${productLabel}" created successfully!`,
         );
       } else {
@@ -445,7 +413,6 @@ function getStockValue(stock: Product['stock']) {
         stdPurcRate: toNumber(formData.stdPurcRate),
         stdSaleRate: toNumber(formData.stdSaleRate),
         price: resolvedPrice,
-        stock: toInteger(formData.stock),
         itemGstPer: toNumber(formData.itemGstPer),
         gstRate: toNumber(formData.gstRate),
         itemHsn: toTrimmed(formData.itemHsn),
@@ -483,7 +450,7 @@ function getStockValue(stock: Product['stock']) {
         
         // Show success message after modal is closed
         Alert.alert(
-          'Success',
+          'Success', 
           `Product "${productLabel}" updated successfully!`,
         );
       } else {
@@ -493,52 +460,6 @@ function getStockValue(stock: Product['stock']) {
       }
     } catch (error) {
       console.error('Error updating product:', error);
-      // Handle API errors that throw exceptions (like 400 Bad Request)
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update stock
-  const handleUpdateStock = async () => {
-    if (!selectedProduct || !stockUpdate.quantity) return;
-
-    // Validate quantity is a valid number
-    if (isNaN(parseInt(stockUpdate.quantity)) || parseInt(stockUpdate.quantity) <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid quantity');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      
-      const response = await updateProductStock(selectedProduct._id, {
-        quantity: parseInt(stockUpdate.quantity),
-        operation: stockUpdate.operation
-      });
-
-      if (response?.success) {
-        // Success: Close modal, reset form, and refresh product list immediately
-        console.log('✅ Stock Update Success! Closing modal and refreshing product list...');
-        setShowStockModal(false);
-        setSelectedProduct(null);
-        setStockUpdate({ quantity: '', operation: 'add' });
-        fetchData();
-        
-        // Show success message after modal is closed
-        Alert.alert(
-          'Success', 
-          `Stock updated successfully! ${stockUpdate.operation === 'add' ? 'Added' : 'Removed'} ${stockUpdate.quantity} units.`
-        );
-      } else {
-        // Handle specific error messages from API
-        const errorMessage = response?.message || 'Failed to update stock';
-        Alert.alert('Error', errorMessage);
-      }
-    } catch (error) {
-      console.error('Error updating stock:', error);
       // Handle API errors that throw exceptions (like 400 Bad Request)
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       Alert.alert('Error', errorMessage);
@@ -595,7 +516,6 @@ function getStockValue(stock: Product['stock']) {
       stdPurcRate: product.stdPurcRate?.toString() || '',
       stdSaleRate: product.stdSaleRate?.toString() || '',
       price: (product.price ?? product.stdSaleRate ?? 0).toString(),
-      stock: getStockValue(product.stock).toString(),
       itemGstPer: product.itemGstPer?.toString() || '',
       gstRate: product.gstRate?.toString() || '',
       itemHsn: product.itemHsn || '',
@@ -620,99 +540,72 @@ function getStockValue(stock: Product['stock']) {
     setShowDetailsModal(true);
   };
 
-  // Filter products
-  const filteredProducts = showLowStock ? lowStockProducts : products;
-
   // Render product item
   const renderProductItem = ({ item }: { item: Product }) => {
-    const stockValue = getStockValue(item.stock);
-    const isLowStock = stockValue <= LOW_STOCK_THRESHOLD;
     const priceValue = item.price ?? item.stdSaleRate ?? item.stdPurcRate ?? 0;
     const unitLabel = item.baseUnits || item.additionalUnits || 'units';
 
     return (
-      <View style={styles.productCard}>
-        <TouchableOpacity
-          style={styles.productCardContent}
-          onPress={() => openDetailsModal(item)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.productHeader}>
-            <View style={styles.productInfo}>
+    <View style={styles.productCard}>
+      <TouchableOpacity 
+        style={styles.productCardContent}
+        onPress={() => openDetailsModal(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.productHeader}>
+          <View style={styles.productInfo}>
               <Text style={styles.productName}>{item.productName || item.name}</Text>
-              <Text style={styles.productCode}>{item.productCode}</Text>
-              <Text style={styles.productCategory}>{item.category}</Text>
-            </View>
-            <View style={styles.productPrice}>
+            <Text style={styles.productCode}>{item.productCode}</Text>
+            <Text style={styles.productCategory}>{item.category}</Text>
+          </View>
+          <View style={styles.productPrice}>
               <Text style={styles.priceText}>₹{formatCurrency(priceValue)}</Text>
               <Text style={styles.unitText}>/{unitLabel}</Text>
-            </View>
           </View>
+        </View>
 
-          <View style={styles.productDetails}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Stock:</Text>
-              <Text
-                style={[
-                  styles.detailValue,
-                  isLowStock && styles.lowStockText,
-                ]}
-              >
-                {stockValue} {unitLabel}
-              </Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Finish Item:</Text>
-              <Text style={styles.detailValue}>
-                {item.isFinishItem ? 'Yes' : 'No'}
-              </Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status:</Text>
+        <View style={styles.productDetails}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Finish Item:</Text>
+            <Text style={styles.detailValue}>
+              {item.isFinishItem ? 'Yes' : 'No'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Status:</Text>
               <View
                 style={[
-                  styles.statusBadge,
+              styles.statusBadge,
                   { backgroundColor: item.isActive ? '#10B981' : '#EF4444' },
                 ]}
               >
-                <Text style={styles.statusText}>
+              <Text style={styles.statusText}>
                   {item.isActive ? 'Active' : 'Inactive'}
-                </Text>
-              </View>
+              </Text>
             </View>
           </View>
-        </TouchableOpacity>
-
-        <View style={styles.productActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.editButton]}
-            onPress={() => openEditModal(item)}
-          >
-            <Ionicons name="create-outline" size={16} color="#3B82F6" />
-            <Text style={styles.actionButtonText}>Edit</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.stockButton]}
-            onPress={() => {
-              setSelectedProduct(item);
-              setShowStockModal(true);
-            }}
-          >
-            <Ionicons name="cube-outline" size={16} color="#F59E0B" />
-            <Text style={styles.actionButtonText}>Stock</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteProduct(item)}
-          >
-            <Ionicons name="trash-outline" size={16} color="#EF4444" />
-            <Text style={styles.actionButtonText}>Delete</Text>
-          </TouchableOpacity>
         </View>
+      </TouchableOpacity>
+
+      <View style={styles.productActions}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.editButton]}
+          onPress={() => openEditModal(item)}
+        >
+          <Ionicons name="create-outline" size={16} color="#3B82F6" />
+          <Text style={styles.actionButtonText}>Edit</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={() => handleDeleteProduct(item)}
+        >
+          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+          <Text style={styles.actionButtonText}>Delete</Text>
+        </TouchableOpacity>
       </View>
-    );
+    </View>
+  );
   };
 
   // Render create/edit modal
@@ -733,7 +626,7 @@ function getStockValue(stock: Product['stock']) {
     >
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <TouchableOpacity
+          <TouchableOpacity 
             style={styles.modalHeaderButton}
             onPress={() => {
               if (isEdit) {
@@ -750,7 +643,7 @@ function getStockValue(stock: Product['stock']) {
           <Text style={styles.modalTitle}>
             {isEdit ? 'Edit Product' : 'Create Product'}
           </Text>
-          <TouchableOpacity
+          <TouchableOpacity 
             style={styles.modalHeaderButton}
             onPress={isEdit ? handleUpdateProduct : handleCreateProduct}
             disabled={loading}
@@ -761,7 +654,7 @@ function getStockValue(stock: Product['stock']) {
           </TouchableOpacity>
         </View>
 
-        <ScrollView
+        <ScrollView 
           style={styles.modalContent}
           contentContainerStyle={styles.modalContentContainer}
           keyboardShouldPersistTaps="handled"
@@ -769,32 +662,32 @@ function getStockValue(stock: Product['stock']) {
         >
           <Text style={styles.sectionTitle}>Basic Information</Text>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Product Code *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.productCode}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Product Code *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.productCode}
               onChangeText={(text) => updateFormValue('productCode', text)}
-              placeholder="Enter product code"
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
+                placeholder="Enter product code"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Product Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.productName}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Product Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.productName}
               onChangeText={(text) => {
                 updateFormValue('productName', text);
                 if (!formData.name) {
                   updateFormValue('name', text);
                 }
               }}
-              placeholder="Enter product name"
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
+                placeholder="Enter product name"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Internal Name</Text>
@@ -807,18 +700,18 @@ function getStockValue(stock: Product['stock']) {
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Description</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.description}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Description</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={formData.description}
               onChangeText={(text) => updateFormValue('description', text)}
-              placeholder="Enter product description"
-              multiline
-              numberOfLines={3}
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
+                placeholder="Enter product description"
+                multiline
+                numberOfLines={3}
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
 
           <View style={styles.inputRow}>
             <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
@@ -845,28 +738,28 @@ function getStockValue(stock: Product['stock']) {
 
           <Text style={styles.sectionTitle}>Classification</Text>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.inputLabel}>Category *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.category}
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={styles.inputLabel}>Category *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.category}
                 onChangeText={(text) => updateFormValue('category', text)}
-                placeholder="Enter category"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.inputLabel}>Sub Category</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.subCategory}
+                  placeholder="Enter category"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                <Text style={styles.inputLabel}>Sub Category</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.subCategory}
                 onChangeText={(text) => updateFormValue('subCategory', text)}
-                placeholder="Enter sub category"
-                placeholderTextColor="#9CA3AF"
-              />
+                  placeholder="Enter sub category"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
             </View>
-          </View>
 
           <View style={styles.inputRow}>
             <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
@@ -889,60 +782,59 @@ function getStockValue(stock: Product['stock']) {
                 placeholderTextColor="#9CA3AF"
               />
             </View>
-          </View>
+            </View>
 
           <Text style={styles.sectionTitle}>Units & Pricing</Text>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
               <Text style={styles.inputLabel}>Base Units</Text>
-              <TextInput
-                style={styles.input}
+                <TextInput
+                  style={styles.input}
                 value={formData.baseUnits}
                 onChangeText={(text) => updateFormValue('baseUnits', text)}
                 placeholder="e.g. pcs, ltr"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
               <Text style={styles.inputLabel}>Additional Units</Text>
-              <TextInput
-                style={styles.input}
+                <TextInput
+                  style={styles.input}
                 value={formData.additionalUnits}
                 onChangeText={(text) => updateFormValue('additionalUnits', text)}
                 placeholder="Optional"
-                placeholderTextColor="#9CA3AF"
-              />
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
             </View>
-          </View>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
               <Text style={styles.inputLabel}>Std Purchase Rate</Text>
-              <TextInput
-                style={styles.input}
+                <TextInput
+                  style={styles.input}
                 value={formData.stdPurcRate}
                 onChangeText={(text) => updateFormValue('stdPurcRate', text)}
-                placeholder="0.00"
-                keyboardType="numeric"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                  placeholder="0.00"
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
               <Text style={styles.inputLabel}>Std Sale Rate</Text>
-              <TextInput
-                style={styles.input}
+                <TextInput
+                  style={styles.input}
                 value={formData.stdSaleRate}
                 onChangeText={(text) => updateFormValue('stdSaleRate', text)}
-                placeholder="0.00"
-                keyboardType="numeric"
-                placeholderTextColor="#9CA3AF"
-              />
+                  placeholder="0.00"
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
             </View>
-          </View>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+            <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Price *</Text>
               <TextInput
                 style={styles.input}
@@ -953,37 +845,25 @@ function getStockValue(stock: Product['stock']) {
                 placeholderTextColor="#9CA3AF"
               />
             </View>
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.inputLabel}>Available Stock</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.stock}
-                onChangeText={(text) => updateFormValue('stock', text)}
-                placeholder="0"
-                keyboardType="numeric"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-          </View>
 
           <Text style={styles.sectionTitle}>Tax & Compliance</Text>
-
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+            
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
               <Text style={styles.inputLabel}>GST Rate (%)</Text>
-              <TextInput
-                style={styles.input}
+                <TextInput
+                  style={styles.input}
                 value={formData.gstRate}
                 onChangeText={(text) => updateFormValue('gstRate', text)}
                 placeholder="18"
-                keyboardType="numeric"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
               <Text style={styles.inputLabel}>Item GST (%)</Text>
-              <TextInput
-                style={styles.input}
+                <TextInput
+                  style={styles.input}
                 value={formData.itemGstPer}
                 onChangeText={(text) => updateFormValue('itemGstPer', text)}
                 placeholder="18"
@@ -1025,11 +905,11 @@ function getStockValue(stock: Product['stock']) {
                 style={styles.input}
                 value={formData.openingBalance}
                 onChangeText={(text) => updateFormValue('openingBalance', text)}
-                placeholder="0"
-                keyboardType="numeric"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
+                  placeholder="0"
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
             <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
               <Text style={styles.inputLabel}>Opening Rate</Text>
               <TextInput
@@ -1041,20 +921,20 @@ function getStockValue(stock: Product['stock']) {
                 placeholderTextColor="#9CA3AF"
               />
             </View>
-          </View>
+            </View>
 
           <Text style={styles.sectionTitle}>Status & Metadata</Text>
 
-          <View style={styles.inputGroup}>
+            <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Company Code Override</Text>
-            <TextInput
-              style={styles.input}
+              <TextInput
+                style={styles.input}
               value={formData.companyCode}
               onChangeText={(text) => updateFormValue('companyCode', text)}
               placeholder="Optional company code"
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
 
           <View style={styles.toggleRow}>
             <Text style={styles.toggleLabel}>Finish Item</Text>
@@ -1088,106 +968,6 @@ function getStockValue(stock: Product['stock']) {
               />
             </View>
           ))}
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-
-  // Render stock update modal
-  const renderStockModal = () => (
-    <Modal
-      visible={showStockModal}
-      animationType="slide"
-      presentationStyle="formSheet"
-      onRequestClose={() => setShowStockModal(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <TouchableOpacity 
-            style={styles.modalHeaderButton}
-            onPress={() => setShowStockModal(false)}
-          >
-            <Text style={styles.modalCancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <Text style={styles.modalTitle}>Update Stock</Text>
-          <TouchableOpacity 
-            style={styles.modalHeaderButton}
-            onPress={handleUpdateStock}
-            disabled={loading || !stockUpdate.quantity}
-          >
-            <Text style={[styles.modalSaveText, (loading || !stockUpdate.quantity) && styles.disabledText]}>
-              Update
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView 
-          style={styles.modalContent}
-          contentContainerStyle={styles.modalContentContainer}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {selectedProduct && (
-            <>
-              <View style={styles.stockProductInfo}>
-                <Text style={styles.productName}>{selectedProduct.productName}</Text>
-                <Text style={styles.productCode}>{selectedProduct.productCode}</Text>
-                <Text style={styles.currentStock}>
-                  Current Stock: {getStockValue(selectedProduct.stock)}{' '}
-                  {selectedProduct.baseUnits || selectedProduct.additionalUnits || 'units'}
-                </Text>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Operation</Text>
-                <View style={styles.operationButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.operationButton,
-                      stockUpdate.operation === 'add' && styles.activeOperationButton
-                    ]}
-                    onPress={() => setStockUpdate({ ...stockUpdate, operation: 'add' })}
-                  >
-                    <Ionicons name="add" size={20} color={stockUpdate.operation === 'add' ? '#fff' : '#10B981'} />
-                    <Text style={[
-                      styles.operationButtonText,
-                      stockUpdate.operation === 'add' && styles.activeOperationButtonText
-                    ]}>
-                      Add Stock
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[
-                      styles.operationButton,
-                      stockUpdate.operation === 'subtract' && styles.activeOperationButton
-                    ]}
-                    onPress={() => setStockUpdate({ ...stockUpdate, operation: 'subtract' })}
-                  >
-                    <Ionicons name="remove" size={20} color={stockUpdate.operation === 'subtract' ? '#fff' : '#EF4444'} />
-                    <Text style={[
-                      styles.operationButtonText,
-                      stockUpdate.operation === 'subtract' && styles.activeOperationButtonText
-                    ]}>
-                      Remove Stock
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Quantity</Text>
-                <TextInput
-                  style={styles.input}
-                  value={stockUpdate.quantity}
-                  onChangeText={(text) => setStockUpdate({ ...stockUpdate, quantity: text })}
-                  placeholder="Enter quantity"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-            </>
-          )}
         </ScrollView>
       </View>
     </Modal>
@@ -1261,8 +1041,8 @@ function getStockValue(stock: Product['stock']) {
                 />
                 <DetailRow label="Brand" value={selectedProduct.brand} />
                 <DetailRow label="Parent" value={selectedProduct.parent} />
-              </View>
-
+                </View>
+                
               <View style={styles.detailsSection}>
                 <Text style={styles.detailsSectionTitle}>Units & Pricing</Text>
                 <DetailRow
@@ -1293,12 +1073,8 @@ function getStockValue(stock: Product['stock']) {
                   label="Price"
                   value={`₹${formatCurrency(derivedSelectedProduct.priceValue)} / ${selectedProduct.baseUnits || 'units'}`}
                 />
-                <DetailRow
-                  label="Stock"
-                  value={`${derivedSelectedProduct.stockValue} ${selectedProduct.baseUnits || 'units'}`}
-                />
-              </View>
-
+                </View>
+                
               <View style={styles.detailsSection}>
                 <Text style={styles.detailsSectionTitle}>Tax & Compliance</Text>
                 <DetailRow
@@ -1314,8 +1090,8 @@ function getStockValue(stock: Product['stock']) {
                   label="HSN Description"
                   value={selectedProduct.itemHsnDesc}
                 />
-              </View>
-
+                </View>
+                
               <View style={styles.detailsSection}>
                 <Text style={styles.detailsSectionTitle}>Inventory</Text>
                 <DetailRow
@@ -1338,7 +1114,7 @@ function getStockValue(stock: Product['stock']) {
                   <Text style={styles.detailsLabel}>Active Status</Text>
                   <View
                     style={[
-                      styles.detailsBadge,
+                    styles.detailsBadge,
                       {
                         backgroundColor: selectedProduct.isActive
                           ? '#D1FAE5'
@@ -1348,7 +1124,7 @@ function getStockValue(stock: Product['stock']) {
                   >
                     <Text
                       style={[
-                        styles.detailsBadgeText,
+                      styles.detailsBadgeText,
                         {
                           color: selectedProduct.isActive
                             ? '#059669'
@@ -1434,37 +1210,6 @@ function getStockValue(stock: Product['stock']) {
           />
         </View>
 
-        <View style={styles.filterButtons}>
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              !showLowStock && styles.activeFilterButton
-            ]}
-            onPress={() => setShowLowStock(false)}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              !showLowStock && styles.activeFilterButtonText
-            ]}>
-              All Products
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              showLowStock && styles.activeFilterButton
-            ]}
-            onPress={() => setShowLowStock(true)}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              showLowStock && styles.activeFilterButtonText
-            ]}>
-              Low Stock ({lowStockProducts.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
 
         {categories.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilters}>
@@ -1505,7 +1250,7 @@ function getStockValue(stock: Product['stock']) {
 
       {/* Products List */}
       <FlatList
-        data={filteredProducts}
+        data={products}
         renderItem={renderProductItem}
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.productsList}
@@ -1517,10 +1262,7 @@ function getStockValue(stock: Product['stock']) {
             <Ionicons name="cube-outline" size={64} color="#9CA3AF" />
             <Text style={styles.emptyStateTitle}>No Products Found</Text>
             <Text style={styles.emptyStateText}>
-              {showLowStock 
-                ? 'No products with low stock'
-                : 'No products found matching your criteria'
-              }
+              No products found matching your criteria
             </Text>
           </View>
         )}
@@ -1530,7 +1272,6 @@ function getStockValue(stock: Product['stock']) {
       {/* Modals */}
       {renderProductModal(false)}
       {renderProductModal(true)}
-      {renderStockModal()}
       {renderDetailsModal()}
     </View>
   );
@@ -1711,10 +1452,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1F2937',
   },
-  lowStockText: {
-    color: '#EF4444',
-    fontWeight: 'bold',
-  },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1742,11 +1479,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#EBF4FF',
     borderWidth: 1,
     borderColor: '#3B82F6',
-  },
-  stockButton: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
   },
   deleteButton: {
     backgroundColor: '#FEF2F2',
@@ -1902,48 +1634,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  // Stock modal specific styles
-  stockProductInfo: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  currentStock: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  operationButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  operationButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#F9FAFB',
-    gap: 8,
-    minHeight: 56, // Better touch target
-  },
-  activeOperationButton: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
-  },
-  operationButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  activeOperationButtonText: {
-    color: '#fff',
-  },
-  
   // Product Details Modal Styles
   productCardContent: {
     flex: 1,
