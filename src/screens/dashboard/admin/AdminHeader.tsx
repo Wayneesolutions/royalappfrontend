@@ -44,6 +44,13 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     const currentCompany = user?.defaultCompany;
     const availableCompanies = user?.companies || [];
 
+    // Debug: Log company data structure
+    useEffect(() => {
+        if (availableCompanies.length > 0) {
+            console.log('Available companies structure:', JSON.stringify(availableCompanies, null, 2));
+        }
+    }, [availableCompanies]);
+
     const confirmLogout = async () => {
         setShowLogoutModal(false);
         try {
@@ -59,17 +66,28 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     };
 
     const handleCompanySwitch = async (companyId: string) => {
-        if (companyId === currentCompany?._id) {
+        console.log('handleCompanySwitch called with companyId:', companyId);
+        console.log('Current company ID:', currentCompany?._id);
+        
+        if (!companyId) {
+            console.error('Company ID is missing!');
+            Alert.alert('Error', 'Company ID is missing. Please try again.');
+            return;
+        }
+
+        if (companyId === currentCompany?._id || companyId === currentCompany?.id) {
             setShowCompanyDropdown(false);
             return;
         }
 
         setIsSwitchingCompany(true);
         try {
+            console.log('Calling switchCompany with ID:', companyId);
             await switchCompany(companyId);
             setShowCompanyDropdown(false);
             Alert.alert('Success', 'Company switched successfully!');
         } catch (error) {
+            console.error('Error switching company:', error);
             Alert.alert('Error', 'Failed to switch company. Please try again.');
         } finally {
             setIsSwitchingCompany(false);
@@ -149,16 +167,26 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                         <Text style={styles.companyDropdownTitle}>Switch Company</Text>
                         <View style={styles.companyDivider} />
                         {availableCompanies.map((companyData: any, index: number) => {
+                            // Handle both populated objects and raw IDs
                             const company = companyData.companyId;
-                            const isCurrentCompany = company._id === currentCompany?._id;
+                            const companyId = company?._id || company?.id || company || companyData.companyId;
+                            const companyName = company?.companyName || companyData.companyName || 'Unknown Company';
+                            const companyCode = company?.companyCode || companyData.companyCode || '';
+                            const isCurrentCompany = companyId === currentCompany?._id || companyId === currentCompany?.id;
+                            
+                            if (!companyId) {
+                                console.warn('Company ID is missing for company:', companyData);
+                                return null;
+                            }
+
                             return (
                                 <TouchableOpacity
-                                    key={company._id}
+                                    key={companyId}
                                     style={[
                                         styles.companyDropdownItem,
                                         index === availableCompanies.length - 1 && styles.companyDropdownItemLast
                                     ]}
-                                    onPress={() => handleCompanySwitch(company._id)}
+                                    onPress={() => handleCompanySwitch(companyId)}
                                     disabled={isCurrentCompany || isSwitchingCompany}
                                 >
                                     <View style={styles.companyItemInfo}>
@@ -166,13 +194,13 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                                             styles.companyItemName,
                                             isCurrentCompany && styles.currentCompanyText
                                         ]}>
-                                            {company.companyName}
+                                            {companyName}
                                         </Text>
                                         <Text style={[
                                             styles.companyItemCode,
                                             isCurrentCompany && styles.currentCompanyText
                                         ]}>
-                                            {company.companyCode}
+                                            {companyCode}
                                         </Text>
                                     </View>
                                     {isCurrentCompany && (

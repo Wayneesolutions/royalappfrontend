@@ -498,6 +498,19 @@ class ApiService {
     }
   }
 
+  async adminGetGroupsForSelection(): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/groups-for-selection');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   // General user endpoints (accessible by all roles)
   async getUserUsersByCompany(params?: { 
     companyId?: string; 
@@ -515,9 +528,14 @@ class ApiService {
 
   async switchCompany(companyId: string): Promise<ApiResponse<any>> {
     try {
+      if (!companyId) {
+        throw new Error('Company ID is required');
+      }
+      console.log('Switching company with ID:', companyId);
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/user/switch-company', { companyId });
       return response.data;
     } catch (error) {
+      console.error('Error in switchCompany API call:', error);
       this.handleApiError(error as AxiosError);
     }
   }
@@ -582,7 +600,18 @@ class ApiService {
     password: string;
     role: string;
     userName?: string;
-    parentUserId?: string;
+    parentUserId: string;
+    groupId?: string;
+    groupGUID?: string;
+    GroupGUID?: string;
+    GroupName?: string;
+    GroupParent?: string;
+    cmpcode?: string;
+    Remarks?: string;
+    Other1?: string;
+    Other2?: string;
+    Other3?: string;
+    Other4?: string;
     address?: {
       street?: string;
       city?: string;
@@ -590,6 +619,7 @@ class ApiService {
       pincode?: string;
       country?: string;
     };
+    subdealerDetails?: any;
   }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/admin/create-user', userData);
