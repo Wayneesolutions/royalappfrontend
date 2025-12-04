@@ -380,11 +380,6 @@ const Users = () => {
       return;
     }
 
-    if (!formData.parentUserId) {
-      Alert.alert("Missing Parent User", "Please select a parent user. Every user must have a parent in the hierarchy.");
-      return;
-    }
-
     if (!user?.defaultCompany?._id) {
       Alert.alert("Error", "No company selected. Please select a company first.");
       return;
@@ -398,7 +393,7 @@ const Users = () => {
         mobile: formData.mobile,
         password: formData.password,
         role: formData.role,
-        parentUserId: formData.parentUserId,
+        parentUserId: formData.parentUserId || undefined, // Make parent user optional
         userName: formData.email || undefined, // Use email as username if provided
         address: {
           street: formData.address.street || "",
@@ -480,11 +475,6 @@ const Users = () => {
       return;
     }
 
-    if (!formData.parentUserId) {
-      Alert.alert("Missing Parent User", "Please select a parent user. Every user must have a parent in the hierarchy.");
-      return;
-    }
-
     console.log('🔍 Updating user with data:', {
       name: formData.name,
       email: formData.email,
@@ -501,7 +491,7 @@ const Users = () => {
         email: formData.email || undefined,
         mobile: formData.mobile,
         role: formData.role,
-        parentUserId: formData.parentUserId,
+        parentUserId: formData.parentUserId || undefined, // Make parent user optional
         userName: formData.email || undefined,
         isActive: editingUser.isActive,
         address: {
@@ -863,6 +853,10 @@ const Users = () => {
               style={styles.sidebarContent}
               contentContainerStyle={styles.sidebarContentContainer}
               showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+              bounces={true}
+              alwaysBounceVertical={false}
             >
               <TextInput
                 placeholder="Full Name *"
@@ -914,9 +908,9 @@ const Users = () => {
               </View>
 
               {/* Parent User Selection */}
-              <Text style={styles.roleLabel}>Select Parent User *</Text>
+              <Text style={styles.roleLabel}>Select Parent User (Optional)</Text>
               <Text style={styles.hintText}>
-                Select any user as parent. Every user must have a parent in the hierarchy.
+                Select any user as parent. This is optional - users can be created with or without a parent user.
               </Text>
               
               <TouchableOpacity
@@ -996,7 +990,11 @@ const Users = () => {
                     />
                   </View>
                   
-                  <ScrollView style={styles.parentListContainer} nestedScrollEnabled>
+                  <ScrollView 
+                    style={styles.parentListContainer} 
+                    nestedScrollEnabled={true}
+                    keyboardShouldPersistTaps="handled"
+                  >
                     {loadingParents ? (
                       <View style={styles.parentLoadingContainer}>
                         <ActivityIndicator size="small" color="#0493D2" />
@@ -1367,6 +1365,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 10,
+    flexDirection: 'column',
   },
   sidebarDragHandle: {
     width: 40,
@@ -1394,6 +1393,7 @@ const styles = StyleSheet.create({
   sidebarContent: {
     flex: 1,
     padding: 24,
+    paddingBottom: 0,
   },
   sidebarContentContainer: {
     paddingBottom: 24,
@@ -1545,7 +1545,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#fff',
     marginBottom: 18,
-    maxHeight: 500,
+    maxHeight: 450,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1568,7 +1568,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   parentListContainer: {
-    maxHeight: 450,
+    maxHeight: 400,
   },
   parentLoadingContainer: {
     padding: 20,
