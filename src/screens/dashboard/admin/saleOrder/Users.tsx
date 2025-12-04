@@ -16,6 +16,7 @@ import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import { useAuth } from "../../../../context/AuthContext";
 import DashboardHeader from "../AdminHeader";
 import { useRoute } from '@react-navigation/native';
+import apiService from '../../../../services/api';
 
 interface User {
   _id: string;
@@ -39,13 +40,65 @@ interface User {
     };
     isActive: boolean;
   }>;
+  groups?: Array<{
+    groupId: string | {
+      _id: string;
+      GroupGUID: string;
+      GroupName: string;
+      GroupParent?: string | null;
+      cmpcode: string;
+      Remarks?: string;
+      other1?: string;
+      other2?: string;
+      other3?: string;
+      other4?: string;
+    };
+    groupGUID?: string;
+    GroupGUID?: string;
+    GroupName?: string;
+    GroupParent?: string | null;
+    cmpcode?: string;
+    Remarks?: string;
+    Other1?: string;
+    Other2?: string;
+    Other3?: string;
+    Other4?: string;
+    isActive?: boolean;
+    assignedBy?: string;
+    assignedAt?: string;
+  }>;
+  primaryGroup?: {
+    _id: string;
+    GroupGUID: string;
+    GroupName: string;
+    GroupParent?: string | null;
+    cmpcode: string;
+    Remarks?: string;
+    Other1?: string;
+    Other2?: string;
+    Other3?: string;
+    Other4?: string;
+  } | null;
+  tallyGroup?: {
+    groupId?: string;
+    GroupGUID?: string;
+    GroupName?: string;
+    GroupParent?: string | null;
+    cmpcode?: string;
+    Remarks?: string;
+    Other1?: string;
+    Other2?: string;
+    Other3?: string;
+    Other4?: string;
+  } | null;
   hierarchy?: {
     parentUser?: {
-      _id?: string;
+      _id: string;
       name: string;
       email: string;
       role: string;
-    } | string;
+      mobile?: string;
+    } | string | null;
     level?: number;
   };
   createdBy?: {
@@ -55,8 +108,17 @@ interface User {
   createdAt: string;
 }
 
+interface Group {
+  _id: string;
+  GroupGUID: string;
+  GroupName: string;
+  GroupParent: string | null;
+  cmpcode: string;
+  Remarks: string;
+}
+
 const Users = () => {
-  const { user, getUsersByCompany, getUsersForParentSelection, createUser, editUser, deleteUser } = useAuth();
+  const { user, getUsersByCompany, createUser, editUser, deleteUser } = useAuth();
   const route = useRoute();
   const routeParams = route.params as { role?: string } | undefined;
   
@@ -87,15 +149,35 @@ const Users = () => {
       state: "",
       pincode: "",
       country: "India"
+    },
+    subdealerDetails: {
+      SDName: "",
+      SDType: "",
+      SDAddress1: "",
+      SDAddress2: "",
+      SDAddress3: "",
+      SDState: "",
+      SDCountry: "India",
+      SDPincode: "",
+      SDContactPerson: "",
+      SDMobileNo: "",
+      SDEmail: "",
+      SDGSTNType: "",
+      SDGSTNNumber: ""
     }
   });
 
-  // State for parent user selection
-  const [allUsers, setAllUsers] = useState<User[]>([]);
+  // State for parent user selection (populated from users-by-company API)
+  const [allUsersForParent, setAllUsersForParent] = useState<User[]>([]);
   const [loadingParents, setLoadingParents] = useState(false);
   const [showParentSelector, setShowParentSelector] = useState(false);
   const [parentSearchQuery, setParentSearchQuery] = useState('');
-  const [selectedParentRole, setSelectedParentRole] = useState<string>('');
+
+  // State for group selection (Tally groups) - not used anymore, kept for backward compatibility
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [showGroupSelector, setShowGroupSelector] = useState(false);
+  const [groupSearchQuery, setGroupSearchQuery] = useState('');
 
   const availableRoles = [
     { value: 'zonal', label: 'Zonal Manager', level: 2 },
@@ -123,41 +205,41 @@ const Users = () => {
   const roleOrder = ['zonal', 'rsm', 'asm', 'dealers', 'distibutors', 'subdealer', 'salesman'];
   
   // Static mock users for testing parent selection
-  // Fetch all users for parent selection from backend
+
+  // Fetch all users for parent selection from users-by-company API
   const fetchAllUsersForParent = async () => {
     try {
       setLoadingParents(true);
       
-      // Get the user ID to exclude (if editing)
-      const excludeUserId = isEditMode && editingUser ? editingUser._id : undefined;
-      
-      // Fetch users from backend
-      const result = await getUsersForParentSelection(excludeUserId);
+      // Fetch users from users-by-company API (with high limit to get all users)
+      const result = await getUsersByCompany({ limit: 1000 });
       
       if (result && result.users && Array.isArray(result.users)) {
-        // Format users to match the expected structure
+        // Format users from users-by-company API response
+        // The API already returns users in the correct format with groups array
         const formattedUsers: User[] = result.users.map((u: any) => ({
           _id: u._id,
           name: u.name,
           email: u.email || '',
-          mobile: u.mobile || '',
+          mobile: u.mobile,
           role: u.role,
           userName: u.userName || '',
-          isActive: u.isActive !== false, // Default to true if not specified
-          companies: [],
-          hierarchy: u.hierarchy || {},
+          isActive: u.isActive !== false,
+          companies: u.companies || [],
+          groups: u.groups || [],
+          hierarchy: u.hierarchy || { level: null },
+          address: u.address,
           createdAt: u.createdAt || new Date().toISOString()
         }));
         
-        setAllUsers(formattedUsers);
+        setAllUsersForParent(formattedUsers);
       } else {
         console.warn('No users returned from backend, using empty list');
-        setAllUsers([]);
+        setAllUsersForParent([]);
       }
     } catch (err) {
       console.error('Failed to fetch users for parent selection:', err);
-      // On error, set empty array instead of static data
-      setAllUsers([]);
+      setAllUsersForParent([]);
       Alert.alert(
         'Error',
         'Failed to load users for parent selection. Please try again.'
@@ -167,47 +249,72 @@ const Users = () => {
     }
   };
 
-  // Group parent users by role
-  const groupParentUsersByRole = () => {
-    const grouped: { [key: string]: User[] } = {};
-    
-    let filtered = allUsers;
-    
-    // Filter by selected parent role if any
-    if (selectedParentRole) {
-      filtered = filtered.filter(u => u.role === selectedParentRole);
+  // Fetch all groups for selection (Tally groups)
+  const fetchAllGroups = async () => {
+    try {
+      setLoadingGroups(true);
+      const result = await apiService.adminGetGroupsForSelection();
+      
+      if (result && result.success && result.data) {
+        // Extract groups from the response
+        const groups: Group[] = [];
+        
+        if (result.data.groups && Array.isArray(result.data.groups)) {
+          result.data.groups.forEach((g: any) => {
+            groups.push({
+              _id: g._id,
+              GroupGUID: g.GroupGUID,
+              GroupName: g.GroupName,
+              GroupParent: g.GroupParent || null,
+              cmpcode: g.cmpcode,
+              Remarks: g.Remarks || ''
+            });
+          });
+        }
+        
+        setAllGroups(groups);
+      } else {
+        setAllGroups([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch groups:', err);
+      setAllGroups([]);
+    } finally {
+      setLoadingGroups(false);
     }
+  };
+
+  // Filter parent users based on search
+  const getFilteredParentUsers = () => {
+    let filtered = allUsersForParent;
     
     // Filter by search query if any
     if (parentSearchQuery) {
-      filtered = filtered.filter(u =>
+      filtered = filtered.filter((u: User) =>
         u.name.toLowerCase().includes(parentSearchQuery.toLowerCase()) ||
         u.email?.toLowerCase().includes(parentSearchQuery.toLowerCase()) ||
-        u.mobile.includes(parentSearchQuery)
+        u.mobile.includes(parentSearchQuery) ||
+        getRoleLabel(u.role).toLowerCase().includes(parentSearchQuery.toLowerCase())
       );
     }
     
-    filtered.forEach((user) => {
-      if (!grouped[user.role]) {
-        grouped[user.role] = [];
-      }
-      grouped[user.role].push(user);
-    });
+    return filtered;
+  };
 
-    // Sort groups by role hierarchy order (all roles)
-    const sortedGroups: { [key: string]: User[] } = {};
-    roleOrder.forEach((role) => {
-      if (grouped[role]) {
-        sortedGroups[role] = grouped[role].sort((a, b) => a.name.localeCompare(b.name));
-      }
-    });
+  // Filter groups based on search
+  const getFilteredGroups = () => {
+    let filtered = allGroups;
     
-    // Also include admin if present
-    if (grouped['admin']) {
-      sortedGroups['admin'] = grouped['admin'].sort((a, b) => a.name.localeCompare(b.name));
+    // Filter by search query if any
+    if (groupSearchQuery) {
+      filtered = filtered.filter((g: Group) =>
+        g.GroupName.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
+        g.GroupGUID.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
+        (g.Remarks && g.Remarks.toLowerCase().includes(groupSearchQuery.toLowerCase()))
+      );
     }
-
-    return sortedGroups;
+    
+    return filtered;
   };
 
   // Get role label
@@ -238,82 +345,39 @@ const Users = () => {
     return sortedGroups;
   };
 
-  // Get parent user name from hierarchy
-  const getParentUserName = (user: User): string => {
+  // Get group name from user.groups or primaryGroup
+  const getGroupName = (user: User): string => {
     try {
-      // Check if hierarchy exists
-      if (!user.hierarchy) {
-        return 'No Parent';
+      // First check primaryGroup (most reliable)
+      if (user.primaryGroup && typeof user.primaryGroup === 'object') {
+        return user.primaryGroup.GroupName || user.primaryGroup.groupName || 'Unknown Group';
       }
 
-      // Check if parentUser exists
-      const parentUser = user.hierarchy.parentUser;
-      if (!parentUser) {
-        return 'No Parent';
-      }
-
-      // Handle if parentUser is a string (ID)
-      if (typeof parentUser === 'string') {
-        // Try to find in allUsers or users list
-        const parent = allUsers.find(u => u._id === parentUser) || 
-                       users.find(u => u._id === parentUser);
-        return parent ? parent.name : 'Unknown';
-      }
-
-      // Handle if parentUser is an object
-      if (typeof parentUser === 'object' && parentUser !== null) {
-        // Check if it has name property
-        if ('name' in parentUser && parentUser.name) {
-          return String(parentUser.name);
+      // Then check groups array
+      if (user.groups && Array.isArray(user.groups) && user.groups.length > 0) {
+        const firstGroup = user.groups[0];
+        
+        // Check if groupId is populated (object)
+        if (firstGroup.groupId && typeof firstGroup.groupId === 'object') {
+          return firstGroup.groupId.GroupName || firstGroup.groupId.groupName || 'Unknown Group';
         }
-        // If no name, try to find by _id
-        if ('_id' in parentUser && parentUser._id) {
-          const parent = allUsers.find(u => u._id === parentUser._id) || 
-                         users.find(u => u._id === parentUser._id);
-          return parent ? parent.name : 'Unknown';
+        
+        // Check for groupName (lowercase) - new format
+        if (firstGroup.groupName) {
+          return firstGroup.groupName;
+        }
+        
+        // Check for GroupName (uppercase) - old format
+        if (firstGroup.GroupName) {
+          return firstGroup.GroupName;
         }
       }
 
-      return 'No Parent';
+      // No group assigned
+      return 'No Group';
     } catch (error) {
-      console.error('Error in getParentUserName:', error, 'for user:', user.name);
-      return 'No Parent';
-    }
-  };
-
-  // Get parent user role from hierarchy
-  const getParentUserRole = (user: User): string => {
-    try {
-      if (!user.hierarchy?.parentUser) {
-        return '';
-      }
-
-      const parentUser = user.hierarchy.parentUser;
-      
-      // Handle if parentUser is a string (ID)
-      if (typeof parentUser === 'string') {
-        const parent = allUsers.find(u => u._id === parentUser) || 
-                       users.find(u => u._id === parentUser);
-        return parent ? getRoleLabel(parent.role) : '';
-      }
-
-      // Handle if parentUser is an object
-      if (typeof parentUser === 'object' && parentUser !== null) {
-        if ('role' in parentUser && parentUser.role) {
-          return getRoleLabel(String(parentUser.role));
-        }
-        // If no role, try to find by _id
-        if ('_id' in parentUser && parentUser._id) {
-          const parent = allUsers.find(u => u._id === parentUser._id) || 
-                         users.find(u => u._id === parentUser._id);
-          return parent ? getRoleLabel(parent.role) : '';
-        }
-      }
-
-      return '';
-    } catch (error) {
-      console.error('Error in getParentUserRole:', error, 'for user:', user.name);
-      return '';
+      console.error('Error in getGroupName:', error, 'for user:', user.name);
+      return 'No Group';
     }
   };
 
@@ -326,12 +390,12 @@ const Users = () => {
   useEffect(() => {
     if (__DEV__ && users.length > 0) {
       console.log('Users state updated:', users.length, 'users');
-      const firstUserWithHierarchy = users.find(u => u.hierarchy?.parentUser);
-      if (firstUserWithHierarchy) {
-        console.log('First user with hierarchy:', {
-          name: firstUserWithHierarchy.name,
-          hierarchy: firstUserWithHierarchy.hierarchy,
-          parentUser: firstUserWithHierarchy.hierarchy?.parentUser
+      const firstUserWithGroup = users.find(u => (u.groups && u.groups.length > 0) || u.primaryGroup);
+      if (firstUserWithGroup) {
+        console.log('First user with group:', {
+          name: firstUserWithGroup.name,
+          groups: firstUserWithGroup.groups,
+          primaryGroup: firstUserWithGroup.primaryGroup
         });
       }
     }
@@ -387,7 +451,7 @@ const Users = () => {
 
     setCreatingUser(true);
     try {
-      const userData = {
+      const userData: any = {
         name: formData.name,
         email: formData.email || undefined, // Make email optional
         mobile: formData.mobile,
@@ -404,8 +468,41 @@ const Users = () => {
         }
       };
 
-      await createUser(userData);
-      Alert.alert("Success", "User created successfully!");
+      // Group will be automatically created by backend based on parentUserId
+      // GroupParent will be set to the parentUserId
+
+      // Add subdealer details if role is subdealer
+      if (formData.role === 'subdealer') {
+        userData.subdealerDetails = {
+          SDName: formData.subdealerDetails.SDName || "",
+          SDType: formData.subdealerDetails.SDType || "",
+          SDAddress1: formData.subdealerDetails.SDAddress1 || "",
+          SDAddress2: formData.subdealerDetails.SDAddress2 || "",
+          SDAddress3: formData.subdealerDetails.SDAddress3 || "",
+          SDState: formData.subdealerDetails.SDState || "",
+          SDCountry: formData.subdealerDetails.SDCountry || "India",
+          SDPincode: formData.subdealerDetails.SDPincode || "",
+          SDContactPerson: formData.subdealerDetails.SDContactPerson || "",
+          SDMobileNo: formData.subdealerDetails.SDMobileNo || "",
+          SDEmail: formData.subdealerDetails.SDEmail || "",
+          SDGSTNType: formData.subdealerDetails.SDGSTNType || "",
+          SDGSTNNumber: formData.subdealerDetails.SDGSTNNumber || ""
+        };
+      }
+
+      const response = await createUser(userData);
+      
+      // Show success message with group info if group was auto-created
+      if (response?.user?.groups && response.user.groups.length > 0) {
+        const group = response.user.groups[0];
+        const parentName = allUsersForParent.find(u => u._id === formData.parentUserId)?.name || 'Parent User';
+        Alert.alert(
+          "Success", 
+          `User created successfully!\n\nGroup Details:\n• Name: ${group.groupName || 'N/A'}\n• GUID: ${group.groupGUID || 'N/A'}\n• Company: ${group.cmpcode || 'N/A'}\n• Parent User: ${group.other4 || parentName}`
+        );
+      } else {
+        Alert.alert("Success", "User created successfully!");
+      }
       setFormData({ 
         name: "", 
         email: "", 
@@ -419,8 +516,24 @@ const Users = () => {
           state: "",
           pincode: "",
           country: "India"
+        },
+        subdealerDetails: {
+          SDName: "",
+          SDType: "",
+          SDAddress1: "",
+          SDAddress2: "",
+          SDAddress3: "",
+          SDState: "",
+          SDCountry: "India",
+          SDPincode: "",
+          SDContactPerson: "",
+          SDMobileNo: "",
+          SDEmail: "",
+          SDGSTNType: "",
+          SDGSTNNumber: ""
         }
       });
+      setShowGroupSelector(false);
       setModalVisible(false);
       fetchUsers(); // Refresh the list
     } catch (err) {
@@ -444,7 +557,7 @@ const Users = () => {
           ? userToEdit.hierarchy.parentUser 
           : (userToEdit.hierarchy.parentUser as any)?._id)
       : "";
-    
+
     setFormData({
       name: userToEdit.name,
       email: userToEdit.email || "",
@@ -458,6 +571,35 @@ const Users = () => {
         state: userToEdit.address?.state || "",
         pincode: userToEdit.address?.pincode || "",
         country: userToEdit.address?.country || "India"
+      },
+      subdealerDetails: userToEdit.role === 'subdealer' && (userToEdit as any).subdealerDetails ? {
+        SDName: (userToEdit as any).subdealerDetails.SDName || "",
+        SDType: (userToEdit as any).subdealerDetails.SDType || "",
+        SDAddress1: (userToEdit as any).subdealerDetails.SDAddress1 || "",
+        SDAddress2: (userToEdit as any).subdealerDetails.SDAddress2 || "",
+        SDAddress3: (userToEdit as any).subdealerDetails.SDAddress3 || "",
+        SDState: (userToEdit as any).subdealerDetails.SDState || "",
+        SDCountry: (userToEdit as any).subdealerDetails.SDCountry || "India",
+        SDPincode: (userToEdit as any).subdealerDetails.SDPincode || "",
+        SDContactPerson: (userToEdit as any).subdealerDetails.SDContactPerson || "",
+        SDMobileNo: (userToEdit as any).subdealerDetails.SDMobileNo || "",
+        SDEmail: (userToEdit as any).subdealerDetails.SDEmail || "",
+        SDGSTNType: (userToEdit as any).subdealerDetails.SDGSTNType || "",
+        SDGSTNNumber: (userToEdit as any).subdealerDetails.SDGSTNNumber || ""
+      } : {
+        SDName: "",
+        SDType: "",
+        SDAddress1: "",
+        SDAddress2: "",
+        SDAddress3: "",
+        SDState: "",
+        SDCountry: "India",
+        SDPincode: "",
+        SDContactPerson: "",
+        SDMobileNo: "",
+        SDEmail: "",
+        SDGSTNType: "",
+        SDGSTNNumber: ""
       }
     });
     
@@ -486,7 +628,7 @@ const Users = () => {
 
     setCreatingUser(true);
     try {
-      const userData = {
+      const userData: any = {
         name: formData.name,
         email: formData.email || undefined,
         mobile: formData.mobile,
@@ -503,10 +645,40 @@ const Users = () => {
         }
       };
 
+      // Add subdealer details if role is subdealer
+      if (formData.role === 'subdealer') {
+        userData.subdealerDetails = {
+          SDName: formData.subdealerDetails.SDName || "",
+          SDType: formData.subdealerDetails.SDType || "",
+          SDAddress1: formData.subdealerDetails.SDAddress1 || "",
+          SDAddress2: formData.subdealerDetails.SDAddress2 || "",
+          SDAddress3: formData.subdealerDetails.SDAddress3 || "",
+          SDState: formData.subdealerDetails.SDState || "",
+          SDCountry: formData.subdealerDetails.SDCountry || "India",
+          SDPincode: formData.subdealerDetails.SDPincode || "",
+          SDContactPerson: formData.subdealerDetails.SDContactPerson || "",
+          SDMobileNo: formData.subdealerDetails.SDMobileNo || "",
+          SDEmail: formData.subdealerDetails.SDEmail || "",
+          SDGSTNType: formData.subdealerDetails.SDGSTNType || "",
+          SDGSTNNumber: formData.subdealerDetails.SDGSTNNumber || ""
+        };
+      }
+
       console.log('🔍 Sending user data to API:', userData);
 
-      await editUser(editingUser._id, userData);
-      Alert.alert("Success", "User updated successfully!");
+      const response = await editUser(editingUser._id, userData);
+      
+      // Show success message with group details if available
+      if (response?.user?.groups && response.user.groups.length > 0) {
+        const group = response.user.groups[0];
+        Alert.alert(
+          "Success", 
+          `User updated successfully!\n\nGroup Details:\n• Name: ${group.groupName || 'N/A'}\n• GUID: ${group.groupGUID || 'N/A'}\n• Company: ${group.cmpcode || 'N/A'}\n• Parent User: ${group.other4 || 'N/A'}`
+        );
+      } else {
+        Alert.alert("Success", "User updated successfully!");
+      }
+      
       setFormData({ 
         name: "", 
         email: "", 
@@ -520,6 +692,21 @@ const Users = () => {
           state: "",
           pincode: "",
           country: "India"
+        },
+        subdealerDetails: {
+          SDName: "",
+          SDType: "",
+          SDAddress1: "",
+          SDAddress2: "",
+          SDAddress3: "",
+          SDState: "",
+          SDCountry: "India",
+          SDPincode: "",
+          SDContactPerson: "",
+          SDMobileNo: "",
+          SDEmail: "",
+          SDGSTNType: "",
+          SDGSTNNumber: ""
         }
       });
       setModalVisible(false);
@@ -527,7 +714,6 @@ const Users = () => {
       setIsEditMode(false);
       setShowParentSelector(false);
       setParentSearchQuery('');
-      setSelectedParentRole('');
       fetchUsers(); // Refresh the list
     } catch (err) {
       console.error('Failed to update user:', err);
@@ -540,7 +726,7 @@ const Users = () => {
   const handleDeleteUser = (userToDelete: User) => {
     Alert.alert(
       "Delete User",
-      `Are you sure you want to permanently delete ${userToDelete.name}?\n\nThis action cannot be undone and will:\n• Remove the user from all companies\n• Delete all user data\n• Remove access to the system\n\nUser Details:\n• Name: ${userToDelete.name}\n• Email: ${userToDelete.email || 'N/A'}\n• Role: ${userToDelete.role.toUpperCase()}\n• Company: ${userToDelete.companies[0]?.companyId?.companyName || 'N/A'}`,
+      `Are you sure you want to permanently delete ${userToDelete.name}?\n\nThis action cannot be undone and will:\n• Remove the user from all companies\n• Delete all user data\n• Remove access to the system\n\nUser Details:\n• Name: ${userToDelete.name}\n• Email: ${userToDelete.email || 'N/A'}\n• Role: ${userToDelete.role.toUpperCase()}\n• Company: ${userToDelete.companies[0]?.companyName || userToDelete.companies[0]?.companyId?.companyName || 'N/A'}`,
       [
         {
           text: "Cancel",
@@ -587,17 +773,15 @@ const Users = () => {
   const renderUserCard = ({ item }: { item: User }) => {
     // Debug: Log the actual item data
     if (__DEV__ && item.name === 'Zsm') {
-      console.log('Rendering Zsm user card:', {
+      console.log('Rendering user card:', {
         name: item.name,
-        hierarchy: item.hierarchy,
-        parentUser: item.hierarchy?.parentUser,
-        parentUserType: typeof item.hierarchy?.parentUser,
-        parentUserName: item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object' ? (item.hierarchy.parentUser as any).name : 'N/A'
+        groups: item.groups,
+        primaryGroup: item.primaryGroup
       });
     }
     
-    const parentName = getParentUserName(item);
-    const parentRole = getParentUserRole(item);
+    const groupName = getGroupName(item);
+    const hasGroup = groupName !== 'No Group' && groupName !== 'Unknown Group' && (item.groups && item.groups.length > 0 || item.primaryGroup);
     
     return (
       <View style={styles.card}>
@@ -630,40 +814,29 @@ const Users = () => {
             <Text style={styles.detailText}>{item.mobile}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Ionicons name="person" size={16} color="#6B7280" />
+            <Ionicons 
+              name={hasGroup ? "layers" : "layers-outline"} 
+              size={16} 
+              color={hasGroup ? "#10B981" : "#9CA3AF"} 
+            />
             <View style={styles.parentUserContainer}>
-              {(() => {
-                // Direct check of hierarchy data as fallback
-                const directParentName = item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object' 
-                  ? (item.hierarchy.parentUser as any)?.name 
-                  : null;
-                const displayName = parentName !== 'No Parent' ? parentName : (directParentName || 'No Parent User');
-                const directParentRole = item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object'
-                  ? (item.hierarchy.parentUser as any)?.role
-                  : null;
-                const displayRole = parentRole || (directParentRole ? getRoleLabel(directParentRole) : '');
-                
-                return (
-                  <>
-                    <Text style={styles.detailText}>{displayName}</Text>
-                    {displayName !== 'No Parent User' && displayRole && (
-                      <View style={[styles.parentRoleBadge, { backgroundColor: getRoleColor(
-                        item.hierarchy?.parentUser && typeof item.hierarchy.parentUser === 'object'
-                          ? String((item.hierarchy.parentUser as any).role || '')
-                          : ''
-                      ) }]}>
-                        <Text style={styles.parentRoleBadgeText}>{displayRole}</Text>
-                      </View>
-                    )}
-                  </>
-                );
-              })()}
+              <Text style={[
+                styles.detailText,
+                !hasGroup && styles.noGroupText
+              ]}>
+                {hasGroup ? groupName : 'No Group Assigned'}
+              </Text>
+              {hasGroup && item.primaryGroup && (
+                <View style={styles.groupBadge}>
+                  <Text style={styles.groupBadgeText}>Group</Text>
+                </View>
+              )}
             </View>
           </View>
           <View style={styles.detailRow}>
             <Ionicons name="business" size={16} color="#6B7280" />
             <Text style={styles.detailText}>
-              {item.companies[0]?.companyId?.companyName || 'No company assigned'}
+              {item.companies[0]?.companyName || item.companies[0]?.companyId?.companyName || 'No company assigned'}
             </Text>
           </View>
         </View>
@@ -795,7 +968,6 @@ const Users = () => {
             setIsEditMode(false);
             setShowParentSelector(false);
             setParentSearchQuery('');
-            setSelectedParentRole('');
             setFormData({ 
               name: "", 
               email: "", 
@@ -803,12 +975,28 @@ const Users = () => {
               password: "", 
               role: "",
               parentUserId: "",
+              groupId: "", // Reset group selection
               address: {
                 street: "",
                 city: "",
                 state: "",
                 pincode: "",
                 country: "India"
+              },
+              subdealerDetails: {
+                SDName: "",
+                SDType: "",
+                SDAddress1: "",
+                SDAddress2: "",
+                SDAddress3: "",
+                SDState: "",
+                SDCountry: "India",
+                SDPincode: "",
+                SDContactPerson: "",
+                SDMobileNo: "",
+                SDEmail: "",
+                SDGSTNType: "",
+                SDGSTNNumber: ""
               }
             });
           }}
@@ -826,22 +1014,37 @@ const Users = () => {
                 setModalVisible(false);
                 setEditingUser(null);
                 setIsEditMode(false);
-                setShowParentSelector(false);
-                setParentSearchQuery('');
-                setSelectedParentRole('');
-                setFormData({ 
-                  name: "", 
-                  email: "", 
-                  mobile: "", 
-                  password: "", 
-                  role: "",
-                  parentUserId: "",
-                  address: {
-                    street: "",
-                    city: "",
-                    state: "",
-                    pincode: "",
-                    country: "India"
+              setShowParentSelector(false);
+              setParentSearchQuery('');
+              setFormData({ 
+                name: "", 
+                email: "", 
+                mobile: "", 
+                password: "", 
+                role: "",
+                parentUserId: "",
+                groupId: "", // Reset group selection
+                address: {
+                  street: "",
+                  city: "",
+                  state: "",
+                  pincode: "",
+                  country: "India"
+                },
+                  subdealerDetails: {
+                    SDName: "",
+                    SDType: "",
+                    SDAddress1: "",
+                    SDAddress2: "",
+                    SDAddress3: "",
+                    SDState: "",
+                    SDCountry: "India",
+                    SDPincode: "",
+                    SDContactPerson: "",
+                    SDMobileNo: "",
+                    SDEmail: "",
+                    SDGSTNType: "",
+                    SDGSTNNumber: ""
                   }
                 });
               }}>
@@ -858,6 +1061,63 @@ const Users = () => {
               bounces={true}
               alwaysBounceVertical={false}
             >
+              {/* Show All Users First */}
+              <Text style={styles.sectionLabel}>All Users</Text>
+              <Text style={styles.helperText}>
+                View all users in the system. Select a parent user below to create a grouping.
+              </Text>
+              
+              <View style={styles.allUsersContainer}>
+                <ScrollView style={styles.allUsersList} nestedScrollEnabled>
+                  {loadingParents ? (
+                    <View style={styles.parentLoadingContainer}>
+                      <ActivityIndicator size="small" color="#0493D2" />
+                      <Text style={styles.parentLoadingText}>Loading users...</Text>
+                    </View>
+                  ) : (() => {
+                    const allUsers = allUsersForParent;
+                    return allUsers.length > 0 ? (
+                      allUsers.map((user) => (
+                        <View key={user._id} style={styles.userListItem}>
+                          <View style={styles.userItemInfo}>
+                            <Text style={styles.userItemName}>{user.name}</Text>
+                            <Text style={styles.userItemDetails}>
+                              {user.email || user.mobile} • {getRoleLabel(user.role)}
+                            </Text>
+                            {(user.primaryGroup?.GroupName || (user.groups && user.groups.length > 0 && user.groups[0]?.GroupName)) && (
+                              <Text style={styles.userItemGroup}>
+                                Group: {user.primaryGroup?.GroupName || (user.groups && user.groups[0]?.GroupName)}
+                              </Text>
+                            )}
+                            {(!user.primaryGroup && (!user.groups || user.groups.length === 0)) && (
+                              <Text style={[styles.userItemGroup, { color: '#9CA3AF', fontStyle: 'italic' }]}>
+                                No Group Assigned
+                              </Text>
+                            )}
+                          </View>
+                          <View style={[
+                            styles.userStatusBadge,
+                            user.isActive ? styles.userStatusActive : styles.userStatusInactive
+                          ]}>
+                            <Text style={[
+                              styles.userStatusText,
+                              user.isActive ? { color: '#065F46' } : { color: '#991B1B' }
+                            ]}>
+                              {user.isActive ? 'Active' : 'Inactive'}
+                            </Text>
+                          </View>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={styles.parentEmptyState}>
+                        <Ionicons name="people-outline" size={32} color="#9CA3AF" />
+                        <Text style={styles.parentEmptyText}>No users found</Text>
+                      </View>
+                    );
+                  })()}
+                </ScrollView>
+              </View>
+
               <TextInput
                 placeholder="Full Name *"
                 value={formData.name}
@@ -895,7 +1155,30 @@ const Users = () => {
                       styles.roleOption,
                       formData.role === role.value && styles.roleOptionSelected
                     ]}
-                    onPress={() => setFormData({ ...formData, role: role.value })}
+                    onPress={() => {
+                      setFormData({ 
+                        ...formData, 
+                        role: role.value,
+                        // Clear subdealer details if role changes from subdealer
+                        ...(formData.role === 'subdealer' && role.value !== 'subdealer' ? {
+                          subdealerDetails: {
+                            SDName: "",
+                            SDType: "",
+                            SDAddress1: "",
+                            SDAddress2: "",
+                            SDAddress3: "",
+                            SDState: "",
+                            SDCountry: "India",
+                            SDPincode: "",
+                            SDContactPerson: "",
+                            SDMobileNo: "",
+                            SDEmail: "",
+                            SDGSTNType: "",
+                            SDGSTNNumber: ""
+                          }
+                        } : {})
+                      });
+                    }}
                   >
                     <Text style={[
                       styles.roleOptionText,
@@ -907,10 +1190,10 @@ const Users = () => {
                 ))}
               </View>
 
-              {/* Parent User Selection */}
-              <Text style={styles.roleLabel}>Select Parent User (Optional)</Text>
-              <Text style={styles.hintText}>
-                Select any user as parent. This is optional - users can be created with or without a parent user.
+              {/* Select Parent User Section */}
+              <Text style={styles.sectionLabel}>Select Parent User *</Text>
+              <Text style={styles.helperText}>
+                Select any user as parent. Every user must have a parent in the hierarchy. A group will be automatically created with GroupParent set to the selected parent user's ID.
               </Text>
               
               <TouchableOpacity
@@ -929,7 +1212,7 @@ const Users = () => {
                     !formData.parentUserId && styles.parentSelectorPlaceholder
                   ]}>
                     {formData.parentUserId
-                      ? allUsers.find(u => u._id === formData.parentUserId)?.name || 'Select parent user'
+                      ? allUsersForParent.find(u => u._id === formData.parentUserId)?.name || 'Select parent user'
                       : 'Select parent user'}
                   </Text>
                   <Ionicons 
@@ -944,46 +1227,20 @@ const Users = () => {
                 <View style={styles.selectedParentInfo}>
                   <Ionicons name="checkmark-circle" size={16} color="#10B981" />
                   <Text style={styles.selectedParentText}>
-                    Parent: {allUsers.find(u => u._id === formData.parentUserId)?.name} 
-                    ({getRoleLabel(allUsers.find(u => u._id === formData.parentUserId)?.role || '')})
+                    Parent: {allUsersForParent.find(u => u._id === formData.parentUserId)?.name} 
+                    ({getRoleLabel(allUsersForParent.find(u => u._id === formData.parentUserId)?.role || '')})
                   </Text>
                 </View>
               )}
 
               {showParentSelector && (
                 <View style={styles.parentSelectorDropdown}>
-                  {/* Parent Role Filter */}
-                  <View style={styles.parentRoleFilterContainer}>
-                    <Text style={styles.parentRoleFilterLabel}>Filter by Role:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parentRoleFilters}>
-                      <TouchableOpacity
-                        style={[styles.parentRoleFilter, !selectedParentRole && styles.parentRoleFilterActive]}
-                        onPress={() => setSelectedParentRole('')}
-                      >
-                        <Text style={[styles.parentRoleFilterText, !selectedParentRole && styles.parentRoleFilterTextActive]}>
-                          All
-                        </Text>
-                      </TouchableOpacity>
-                      {parentRoles.map((role) => (
-                        <TouchableOpacity
-                          key={role.value}
-                          style={[styles.parentRoleFilter, selectedParentRole === role.value && styles.parentRoleFilterActive]}
-                          onPress={() => setSelectedParentRole(role.value)}
-                        >
-                          <Text style={[styles.parentRoleFilterText, selectedParentRole === role.value && styles.parentRoleFilterTextActive]}>
-                            {role.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-
                   {/* Search */}
                   <View style={styles.parentSearchContainer}>
                     <Ionicons name="search" size={16} color="#9CA3AF" />
                     <TextInput
                       style={styles.parentSearchInput}
-                      placeholder="Search by name, email, or mobile..."
+                      placeholder="Search by name, email, mobile, or role..."
                       value={parentSearchQuery}
                       onChangeText={setParentSearchQuery}
                       placeholderTextColor="#9CA3AF"
@@ -1001,52 +1258,81 @@ const Users = () => {
                         <Text style={styles.parentLoadingText}>Loading users...</Text>
                       </View>
                     ) : (() => {
-                      const groupedUsers = groupParentUsersByRole();
-                      const hasUsers = Object.keys(groupedUsers).length > 0;
+                      const filteredUsers = getFilteredParentUsers();
+                      const hasUsers = filteredUsers.length > 0;
                       
                       return hasUsers ? (
-                        Object.keys(groupedUsers).map((role) => {
+                        filteredUsers.map((parentUser) => {
+                          const isSelected = formData.parentUserId === parentUser._id;
                           return (
-                            <View key={role} style={styles.parentRoleGroup}>
-                              <View style={styles.parentRoleHeader}>
-                                <View style={[styles.parentRoleBadge, { backgroundColor: getRoleColor(role) }]}>
-                                  <Text style={styles.parentRoleBadgeText}>{getRoleLabel(role)}</Text>
+                            <TouchableOpacity
+                              key={parentUser._id}
+                              style={[
+                                styles.parentUserItem,
+                                isSelected && styles.parentUserItemSelected
+                              ]}
+                              onPress={() => {
+                                setFormData({ 
+                                  ...formData, 
+                                  parentUserId: parentUser._id
+                                });
+                                setShowParentSelector(false);
+                                setParentSearchQuery('');
+                              }}
+                            >
+                              <View style={styles.parentUserInfo}>
+                                <Text style={[
+                                  styles.parentUserName,
+                                  isSelected && styles.parentUserNameSelected
+                                ]}>
+                                  {parentUser.name}
+                                </Text>
+                                <View style={styles.parentUserHeaderRow}>
+                                  <View style={[styles.parentRoleBadgeInline, { backgroundColor: getRoleColor(parentUser.role) }]}>
+                                    <Text style={styles.parentRoleBadgeTextInline}>
+                                      {getRoleLabel(parentUser.role)}
+                                    </Text>
+                                  </View>
                                 </View>
-                                <Text style={styles.parentRoleCount}>({groupedUsers[role].length})</Text>
+                                <Text style={styles.parentUserDetails}>
+                                  {parentUser.email || parentUser.mobile}
+                                </Text>
+                                {parentUser.hierarchy?.parentUser ? (
+                                  <View style={styles.parentUserParentInfo}>
+                                    <Ionicons name="person-outline" size={12} color="#6B7280" />
+                                    <Text style={styles.parentUserParentText}>
+                                      Parent: {parentUser.hierarchy.parentUser.name} ({getRoleLabel(parentUser.hierarchy.parentUser.role)})
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <View style={styles.parentUserParentInfo}>
+                                    <Ionicons name="person-outline" size={12} color="#9CA3AF" />
+                                    <Text style={[styles.parentUserParentText, { color: '#9CA3AF', fontStyle: 'italic' }]}>
+                                      No Parent User
+                                    </Text>
+                                  </View>
+                                )}
+                                {(parentUser.primaryGroup?.GroupName || (parentUser.groups && parentUser.groups.length > 0 && (parentUser.groups[0]?.GroupName || parentUser.groups[0]?.groupName))) && (
+                                  <View style={styles.parentUserGroupInfo}>
+                                    <Ionicons name="layers-outline" size={12} color="#10B981" />
+                                    <Text style={styles.userItemGroup}>
+                                      Group: {parentUser.primaryGroup?.GroupName || (parentUser.groups && parentUser.groups.length > 0 && (parentUser.groups[0]?.GroupName || parentUser.groups[0]?.groupName))}
+                                    </Text>
+                                  </View>
+                                )}
+                                {(!parentUser.primaryGroup && (!parentUser.groups || parentUser.groups.length === 0)) && (
+                                  <View style={styles.parentUserGroupInfo}>
+                                    <Ionicons name="layers-outline" size={12} color="#9CA3AF" />
+                                    <Text style={[styles.userItemGroup, { color: '#9CA3AF', fontStyle: 'italic' }]}>
+                                      No Group Assigned
+                                    </Text>
+                                  </View>
+                                )}
                               </View>
-                              {groupedUsers[role].map((parentUser) => {
-                                return (
-                                  <TouchableOpacity
-                                    key={parentUser._id}
-                                    style={[
-                                      styles.parentUserItem,
-                                      formData.parentUserId === parentUser._id && styles.parentUserItemSelected
-                                    ]}
-                                    onPress={() => {
-                                      setFormData({ ...formData, parentUserId: parentUser._id });
-                                      setShowParentSelector(false);
-                                      setParentSearchQuery('');
-                                      setSelectedParentRole('');
-                                    }}
-                                  >
-                                    <View style={styles.parentUserInfo}>
-                                      <Text style={[
-                                        styles.parentUserName,
-                                        formData.parentUserId === parentUser._id && styles.parentUserNameSelected
-                                      ]}>
-                                        {parentUser.name}
-                                      </Text>
-                                      <Text style={styles.parentUserDetails}>
-                                        {parentUser.email || parentUser.mobile}
-                                      </Text>
-                                    </View>
-                                    {formData.parentUserId === parentUser._id && (
-                                      <Ionicons name="checkmark-circle" size={20} color="#0493D2" />
-                                    )}
-                                  </TouchableOpacity>
-                                );
-                              })}
-                            </View>
+                              {isSelected && (
+                                <Ionicons name="checkmark-circle" size={20} color="#0493D2" />
+                              )}
+                            </TouchableOpacity>
                           );
                         })
                       ) : (
@@ -1054,8 +1340,8 @@ const Users = () => {
                           <Ionicons name="people-outline" size={32} color="#9CA3AF" />
                           <Text style={styles.parentEmptyText}>No users found</Text>
                           <Text style={styles.parentEmptySubtext}>
-                            {parentSearchQuery || selectedParentRole 
-                              ? 'Try adjusting your filters' 
+                            {parentSearchQuery
+                              ? 'Try adjusting your search' 
                               : 'No users available for parent selection'}
                           </Text>
                         </View>
@@ -1064,6 +1350,179 @@ const Users = () => {
                   </ScrollView>
                 </View>
               )}
+
+
+              {/* Subdealer Specific Fields - Only show when role is subdealer */}
+              {formData.role === 'subdealer' && (
+                <>
+                  <Text style={styles.sectionLabel}>Sub Dealer Information</Text>
+                  
+                  <TextInput
+                    placeholder="Sub Dealer Name *"
+                    value={formData.subdealerDetails.SDName}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDName: text }
+                    })}
+                    style={styles.input}
+                  />
+
+                  <Text style={styles.roleLabel}>Sub Dealer Type *</Text>
+                  <View style={styles.roleOptions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.roleOption,
+                        formData.subdealerDetails.SDType === 'Sub Dealer' && styles.roleOptionSelected
+                      ]}
+                      onPress={() => setFormData({ 
+                        ...formData, 
+                        subdealerDetails: { ...formData.subdealerDetails, SDType: 'Sub Dealer' }
+                      })}
+                    >
+                      <Text style={[
+                        styles.roleOptionText,
+                        formData.subdealerDetails.SDType === 'Sub Dealer' && styles.roleOptionTextSelected
+                      ]}>
+                        Sub Dealer
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.roleOption,
+                        formData.subdealerDetails.SDType === 'TSO' && styles.roleOptionSelected
+                      ]}
+                      onPress={() => setFormData({ 
+                        ...formData, 
+                        subdealerDetails: { ...formData.subdealerDetails, SDType: 'TSO' }
+                      })}
+                    >
+                      <Text style={[
+                        styles.roleOptionText,
+                        formData.subdealerDetails.SDType === 'TSO' && styles.roleOptionTextSelected
+                      ]}>
+                        TSO
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TextInput
+                    placeholder="Address Line 1"
+                    value={formData.subdealerDetails.SDAddress1}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDAddress1: text }
+                    })}
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    placeholder="Address Line 2"
+                    value={formData.subdealerDetails.SDAddress2}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDAddress2: text }
+                    })}
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    placeholder="Address Line 3"
+                    value={formData.subdealerDetails.SDAddress3}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDAddress3: text }
+                    })}
+                    style={styles.input}
+                  />
+
+                  <View style={styles.addressRow}>
+                    <TextInput
+                      placeholder="State"
+                      value={formData.subdealerDetails.SDState}
+                      onChangeText={(text) => setFormData({ 
+                        ...formData, 
+                        subdealerDetails: { ...formData.subdealerDetails, SDState: text }
+                      })}
+                      style={[styles.input, styles.halfInput]}
+                    />
+                    
+                    <TextInput
+                      placeholder="Country"
+                      value={formData.subdealerDetails.SDCountry}
+                      onChangeText={(text) => setFormData({ 
+                        ...formData, 
+                        subdealerDetails: { ...formData.subdealerDetails, SDCountry: text }
+                      })}
+                      style={[styles.input, styles.halfInput]}
+                    />
+                  </View>
+
+                  <TextInput
+                    placeholder="Pincode"
+                    value={formData.subdealerDetails.SDPincode}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDPincode: text }
+                    })}
+                    keyboardType="numeric"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    placeholder="Contact Person"
+                    value={formData.subdealerDetails.SDContactPerson}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDContactPerson: text }
+                    })}
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    placeholder="Mobile Number"
+                    value={formData.subdealerDetails.SDMobileNo}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDMobileNo: text }
+                    })}
+                    keyboardType="phone-pad"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    placeholder="Email Address"
+                    value={formData.subdealerDetails.SDEmail}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDEmail: text }
+                    })}
+                    keyboardType="email-address"
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    placeholder="GSTN Type"
+                    value={formData.subdealerDetails.SDGSTNType}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDGSTNType: text }
+                    })}
+                    style={styles.input}
+                  />
+
+                  <TextInput
+                    placeholder="GSTN Number"
+                    value={formData.subdealerDetails.SDGSTNNumber}
+                    onChangeText={(text) => setFormData({ 
+                      ...formData, 
+                      subdealerDetails: { ...formData.subdealerDetails, SDGSTNNumber: text }
+                    })}
+                    style={styles.input}
+                  />
+                </>
+              )}
+
+
 
               {/* Address Section */}
               <Text style={styles.sectionLabel}>Address Information</Text>
@@ -1304,6 +1763,22 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     flex: 1,
   },
+  noGroupText: {
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  groupBadge: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  groupBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#065F46',
+  },
   parentUserContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1485,6 +1960,29 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 14,
   },
+  helperText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    borderLeftWidth: 3,
+    borderLeftColor: '#0493D2',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1E40AF',
+    lineHeight: 18,
+  },
   addressRow: {
     flexDirection: 'row',
     gap: 12,
@@ -1635,6 +2133,40 @@ const styles = StyleSheet.create({
   parentUserDetails: {
     fontSize: 12,
     color: '#6B7280',
+    marginTop: 4,
+  },
+  parentUserHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  parentRoleBadgeInline: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  parentRoleBadgeTextInline: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  parentUserParentInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  parentUserParentText: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  parentUserGroupInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
   },
   parentEmptyState: {
     padding: 24,
@@ -1707,9 +2239,6 @@ const styles = StyleSheet.create({
   parentRoleFilterTextActive: {
     color: '#fff',
   },
-  usersListContainer: {
-    gap: 20,
-  },
   roleGroupContainer: {
     marginBottom: 24,
   },
@@ -1781,6 +2310,117 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#fff',
+  },
+  usersListSection: {
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  usersListToggle: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  usersListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  usersListTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  usersListContainer: {
+    marginTop: 12,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    maxHeight: 400,
+    gap: 20,
+  },
+  userCategorySection: {
+    marginBottom: 20,
+  },
+  userCategoryTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userListItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  userItemInfo: {
+    flex: 1,
+  },
+  userItemName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  userItemDetails: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  userItemGroup: {
+    fontSize: 12,
+    color: '#3B82F6',
+    fontWeight: '500',
+  },
+  userStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  userStatusActive: {
+    backgroundColor: '#D1FAE5',
+  },
+  userStatusInactive: {
+    backgroundColor: '#FEE2E2',
+  },
+  userStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065F46',
+  },
+  allUsersContainer: {
+    maxHeight: 200,
+    marginBottom: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  allUsersList: {
+    maxHeight: 200,
+  },
+  emptyUsersState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyUsersText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#9CA3AF',
   },
 });
 

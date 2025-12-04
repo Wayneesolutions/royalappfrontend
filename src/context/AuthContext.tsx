@@ -181,6 +181,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const switchCompany = async (companyId: string): Promise<void> => {
     try {
+      if (!companyId) {
+        throw new Error('Company ID is required');
+      }
+      console.log('AuthContext: Switching company with ID:', companyId);
       const result = await apiService.switchCompany(companyId);
 
       if (!result?.success || !result.data?.user) {
@@ -324,7 +328,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const createUser = async (userData: any): Promise<any> => {
     try {
       const result = await apiService.adminCreateUser(userData);
-      return result.data;
+      // Backend returns { success, message, user }, not { success, message, data }
+      return result;
     } catch (error) {
       console.error('Failed to create user:', error);
       throw error;
@@ -334,7 +339,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const editUser = async (userId: string, userData: any): Promise<any> => {
     try {
       const result = await apiService.adminEditUser(userId, userData);
-      return result.data;
+      // Backend returns { success, message, user }, not { success, message, data }
+      return result;
     } catch (error) {
       console.error('Failed to edit user:', error);
       throw error;

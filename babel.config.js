@@ -1,5 +1,5 @@
 module.exports = function (api) {
-  // Disable cache temporarily to force reload of .env file
+  // Disable cache to force reload of .env file
   api.cache(false);
 
   return {
@@ -15,7 +15,7 @@ module.exports = function (api) {
           path: ".env",
           safe: false,
           allowUndefined: true,
-          verbose: false,
+          verbose: true, // Enable verbose to see what's being loaded
         },
       ],
     ],
