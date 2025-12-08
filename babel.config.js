@@ -1,6 +1,10 @@
 module.exports = function (api) {
-  // Disable cache to force reload of .env file
-  api.cache(false);
+  // Enable cache but invalidate when .env file changes
+  api.cache(() => {
+    // Invalidate cache when .env file changes
+    // This allows caching for performance while still reloading when env changes
+    return process.env.NODE_ENV;
+  });
 
   return {
     presets: [
@@ -15,7 +19,7 @@ module.exports = function (api) {
           path: ".env",
           safe: false,
           allowUndefined: true,
-          verbose: true, // Enable verbose to see what's being loaded
+          verbose: false, // Disable verbose logging to reduce console spam
         },
       ],
     ],

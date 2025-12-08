@@ -143,6 +143,7 @@ const Users = () => {
     password: "",
     role: "",
     parentUserId: "",
+    groupId: "",
     address: {
       street: "",
       city: "",
@@ -150,21 +151,6 @@ const Users = () => {
       pincode: "",
       country: "India"
     },
-    subdealerDetails: {
-      SDName: "",
-      SDType: "",
-      SDAddress1: "",
-      SDAddress2: "",
-      SDAddress3: "",
-      SDState: "",
-      SDCountry: "India",
-      SDPincode: "",
-      SDContactPerson: "",
-      SDMobileNo: "",
-      SDEmail: "",
-      SDGSTNType: "",
-      SDGSTNNumber: ""
-    }
   });
 
   // State for parent user selection (populated from users-by-company API)
@@ -173,7 +159,7 @@ const Users = () => {
   const [showParentSelector, setShowParentSelector] = useState(false);
   const [parentSearchQuery, setParentSearchQuery] = useState('');
 
-  // State for group selection (Tally groups) - not used anymore, kept for backward compatibility
+  // State for group selection
   const [allGroups, setAllGroups] = useState<Group[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [showGroupSelector, setShowGroupSelector] = useState(false);
@@ -183,26 +169,22 @@ const Users = () => {
     { value: 'zonal', label: 'Zonal Manager', level: 2 },
     { value: 'rsm', label: 'Regional Sales Manager', level: 3 },
     { value: 'asm', label: 'Area Sales Manager', level: 4 },
-    { value: 'dealers', label: 'Dealer', level: 6 },
     { value: 'distibutors', label: 'Distributor', level: 6 },
-    { value: 'subdealer', label: 'Sub Dealer', level: 7 },
     { value: 'salesman', label: 'Salesman', level: 5 },
   ];
 
-  // All roles that can be selected as parent
+  // All roles that can be selected as parent (dealers and subdealers removed - managed separately)
   const parentRoles = [
     { value: 'admin', label: 'Admin' },
     { value: 'zonal', label: 'Zonal Manager' },
     { value: 'rsm', label: 'Regional Sales Manager' },
     { value: 'asm', label: 'Area Sales Manager' },
-    { value: 'dealers', label: 'Dealer' },
-    { value: 'subdealer', label: 'Sub Dealer' },
     { value: 'distibutors', label: 'Distributor' },
     { value: 'salesman', label: 'Salesman' },
   ];
 
-  // Role hierarchy order for display
-  const roleOrder = ['zonal', 'rsm', 'asm', 'dealers', 'distibutors', 'subdealer', 'salesman'];
+  // Role hierarchy order for display (dealers and subdealers removed - managed separately)
+  const roleOrder = ['zonal', 'rsm', 'asm', 'distibutors', 'salesman'];
   
   // Static mock users for testing parent selection
 
@@ -249,11 +231,11 @@ const Users = () => {
     }
   };
 
-  // Fetch all groups for selection (Tally groups)
+  // Fetch all groups for selection
   const fetchAllGroups = async () => {
     try {
       setLoadingGroups(true);
-      const result = await apiService.adminGetGroupsForSelection();
+      const result = await apiService.adminGetAllGroups();
       
       if (result && result.success && result.data) {
         // Extract groups from the response
@@ -350,7 +332,7 @@ const Users = () => {
     try {
       // First check primaryGroup (most reliable)
       if (user.primaryGroup && typeof user.primaryGroup === 'object') {
-        return user.primaryGroup.GroupName || user.primaryGroup.groupName || 'Unknown Group';
+        return user.primaryGroup.GroupName || 'Unknown Group';
       }
 
       // Then check groups array
@@ -359,17 +341,17 @@ const Users = () => {
         
         // Check if groupId is populated (object)
         if (firstGroup.groupId && typeof firstGroup.groupId === 'object') {
-          return firstGroup.groupId.GroupName || firstGroup.groupId.groupName || 'Unknown Group';
+          return firstGroup.groupId.GroupName || 'Unknown Group';
         }
         
-        // Check for groupName (lowercase) - new format
-        if (firstGroup.groupName) {
-          return firstGroup.groupName;
-        }
-        
-        // Check for GroupName (uppercase) - old format
+        // Check for GroupName (uppercase)
         if (firstGroup.GroupName) {
           return firstGroup.GroupName;
+        }
+        
+        // Check for groupName (lowercase) - fallback
+        if ((firstGroup as any).groupName) {
+          return (firstGroup as any).groupName;
         }
       }
 
@@ -401,12 +383,6 @@ const Users = () => {
     }
   }, [users]);
 
-  // Fetch all users for parent selection when modal opens
-  useEffect(() => {
-    if (modalVisible) {
-      fetchAllUsersForParent();
-    }
-  }, [modalVisible]);
 
   const fetchUsers = async () => {
     try {
@@ -458,6 +434,7 @@ const Users = () => {
         password: formData.password,
         role: formData.role,
         parentUserId: formData.parentUserId || undefined, // Make parent user optional
+        groupId: formData.groupId || undefined, // Group assignment (optional)
         userName: formData.email || undefined, // Use email as username if provided
         address: {
           street: formData.address.street || "",
@@ -468,27 +445,10 @@ const Users = () => {
         }
       };
 
-      // Group will be automatically created by backend based on parentUserId
-      // GroupParent will be set to the parentUserId
+      // If groupId is provided, it will be used
+      // Otherwise, group will be automatically created by backend based on parentUserId
 
-      // Add subdealer details if role is subdealer
-      if (formData.role === 'subdealer') {
-        userData.subdealerDetails = {
-          SDName: formData.subdealerDetails.SDName || "",
-          SDType: formData.subdealerDetails.SDType || "",
-          SDAddress1: formData.subdealerDetails.SDAddress1 || "",
-          SDAddress2: formData.subdealerDetails.SDAddress2 || "",
-          SDAddress3: formData.subdealerDetails.SDAddress3 || "",
-          SDState: formData.subdealerDetails.SDState || "",
-          SDCountry: formData.subdealerDetails.SDCountry || "India",
-          SDPincode: formData.subdealerDetails.SDPincode || "",
-          SDContactPerson: formData.subdealerDetails.SDContactPerson || "",
-          SDMobileNo: formData.subdealerDetails.SDMobileNo || "",
-          SDEmail: formData.subdealerDetails.SDEmail || "",
-          SDGSTNType: formData.subdealerDetails.SDGSTNType || "",
-          SDGSTNNumber: formData.subdealerDetails.SDGSTNNumber || ""
-        };
-      }
+      // Note: Dealers and subdealers are now managed separately through Ledger and SubDealer models
 
       const response = await createUser(userData);
       
@@ -496,9 +456,11 @@ const Users = () => {
       if (response?.user?.groups && response.user.groups.length > 0) {
         const group = response.user.groups[0];
         const parentName = allUsersForParent.find(u => u._id === formData.parentUserId)?.name || 'Parent User';
+        const groupName = (group as any).GroupName || (group as any).groupName || 'N/A';
+        const groupGUID = (group as any).GroupGUID || (group as any).groupGUID || 'N/A';
         Alert.alert(
           "Success", 
-          `User created successfully!\n\nGroup Details:\n• Name: ${group.groupName || 'N/A'}\n• GUID: ${group.groupGUID || 'N/A'}\n• Company: ${group.cmpcode || 'N/A'}\n• Parent User: ${group.other4 || parentName}`
+          `User created successfully!\n\nGroup Details:\n• Name: ${groupName}\n• GUID: ${groupGUID}\n• Company: ${(group as any).cmpcode || 'N/A'}\n• Parent User: ${(group as any).other4 || parentName}`
         );
       } else {
         Alert.alert("Success", "User created successfully!");
@@ -510,6 +472,7 @@ const Users = () => {
         password: "", 
         role: "",
         parentUserId: "",
+        groupId: "",
         address: {
           street: "",
           city: "",
@@ -517,23 +480,9 @@ const Users = () => {
           pincode: "",
           country: "India"
         },
-        subdealerDetails: {
-          SDName: "",
-          SDType: "",
-          SDAddress1: "",
-          SDAddress2: "",
-          SDAddress3: "",
-          SDState: "",
-          SDCountry: "India",
-          SDPincode: "",
-          SDContactPerson: "",
-          SDMobileNo: "",
-          SDEmail: "",
-          SDGSTNType: "",
-          SDGSTNNumber: ""
-        }
       });
       setShowGroupSelector(false);
+      setGroupSearchQuery('');
       setModalVisible(false);
       fetchUsers(); // Refresh the list
     } catch (err) {
@@ -558,6 +507,13 @@ const Users = () => {
           : (userToEdit.hierarchy.parentUser as any)?._id)
       : "";
 
+    // Get group ID from user's groups (use first active group if available)
+    const userGroupId = userToEdit.groups && userToEdit.groups.length > 0
+      ? (typeof userToEdit.groups[0].groupId === 'string'
+          ? userToEdit.groups[0].groupId
+          : (userToEdit.groups[0].groupId as any)?._id || '')
+      : "";
+
     setFormData({
       name: userToEdit.name,
       email: userToEdit.email || "",
@@ -565,6 +521,7 @@ const Users = () => {
       password: "", // Don't pre-fill password for security
       role: userToEdit.role,
       parentUserId: parentUserId,
+      groupId: userGroupId,
       address: {
         street: userToEdit.address?.street || "",
         city: userToEdit.address?.city || "",
@@ -572,39 +529,10 @@ const Users = () => {
         pincode: userToEdit.address?.pincode || "",
         country: userToEdit.address?.country || "India"
       },
-      subdealerDetails: userToEdit.role === 'subdealer' && (userToEdit as any).subdealerDetails ? {
-        SDName: (userToEdit as any).subdealerDetails.SDName || "",
-        SDType: (userToEdit as any).subdealerDetails.SDType || "",
-        SDAddress1: (userToEdit as any).subdealerDetails.SDAddress1 || "",
-        SDAddress2: (userToEdit as any).subdealerDetails.SDAddress2 || "",
-        SDAddress3: (userToEdit as any).subdealerDetails.SDAddress3 || "",
-        SDState: (userToEdit as any).subdealerDetails.SDState || "",
-        SDCountry: (userToEdit as any).subdealerDetails.SDCountry || "India",
-        SDPincode: (userToEdit as any).subdealerDetails.SDPincode || "",
-        SDContactPerson: (userToEdit as any).subdealerDetails.SDContactPerson || "",
-        SDMobileNo: (userToEdit as any).subdealerDetails.SDMobileNo || "",
-        SDEmail: (userToEdit as any).subdealerDetails.SDEmail || "",
-        SDGSTNType: (userToEdit as any).subdealerDetails.SDGSTNType || "",
-        SDGSTNNumber: (userToEdit as any).subdealerDetails.SDGSTNNumber || ""
-      } : {
-        SDName: "",
-        SDType: "",
-        SDAddress1: "",
-        SDAddress2: "",
-        SDAddress3: "",
-        SDState: "",
-        SDCountry: "India",
-        SDPincode: "",
-        SDContactPerson: "",
-        SDMobileNo: "",
-        SDEmail: "",
-        SDGSTNType: "",
-        SDGSTNNumber: ""
-      }
     });
     
-    // Fetch all users for parent selection when editing
-    fetchAllUsersForParent();
+    // Fetch all groups for group selection when editing
+    fetchAllGroups();
     
     setModalVisible(true);
   };
@@ -634,6 +562,7 @@ const Users = () => {
         mobile: formData.mobile,
         role: formData.role,
         parentUserId: formData.parentUserId || undefined, // Make parent user optional
+        groupId: formData.groupId || undefined, // Group assignment (optional)
         userName: formData.email || undefined,
         isActive: editingUser.isActive,
         address: {
@@ -645,24 +574,7 @@ const Users = () => {
         }
       };
 
-      // Add subdealer details if role is subdealer
-      if (formData.role === 'subdealer') {
-        userData.subdealerDetails = {
-          SDName: formData.subdealerDetails.SDName || "",
-          SDType: formData.subdealerDetails.SDType || "",
-          SDAddress1: formData.subdealerDetails.SDAddress1 || "",
-          SDAddress2: formData.subdealerDetails.SDAddress2 || "",
-          SDAddress3: formData.subdealerDetails.SDAddress3 || "",
-          SDState: formData.subdealerDetails.SDState || "",
-          SDCountry: formData.subdealerDetails.SDCountry || "India",
-          SDPincode: formData.subdealerDetails.SDPincode || "",
-          SDContactPerson: formData.subdealerDetails.SDContactPerson || "",
-          SDMobileNo: formData.subdealerDetails.SDMobileNo || "",
-          SDEmail: formData.subdealerDetails.SDEmail || "",
-          SDGSTNType: formData.subdealerDetails.SDGSTNType || "",
-          SDGSTNNumber: formData.subdealerDetails.SDGSTNNumber || ""
-        };
-      }
+      // Note: Dealers and subdealers are now managed separately through Ledger and SubDealer models
 
       console.log('🔍 Sending user data to API:', userData);
 
@@ -673,7 +585,7 @@ const Users = () => {
         const group = response.user.groups[0];
         Alert.alert(
           "Success", 
-          `User updated successfully!\n\nGroup Details:\n• Name: ${group.groupName || 'N/A'}\n• GUID: ${group.groupGUID || 'N/A'}\n• Company: ${group.cmpcode || 'N/A'}\n• Parent User: ${group.other4 || 'N/A'}`
+          `User updated successfully!\n\nGroup Details:\n• Name: ${group.GroupName || (group as any).groupName || 'N/A'}\n• GUID: ${group.GroupGUID || (group as any).groupGUID || 'N/A'}\n• Company: ${group.cmpcode || 'N/A'}\n• Parent User: ${(group as any).other4 || 'N/A'}`
         );
       } else {
         Alert.alert("Success", "User updated successfully!");
@@ -686,6 +598,7 @@ const Users = () => {
         password: "", 
         role: "",
         parentUserId: "",
+        groupId: "",
         address: {
           street: "",
           city: "",
@@ -693,21 +606,6 @@ const Users = () => {
           pincode: "",
           country: "India"
         },
-        subdealerDetails: {
-          SDName: "",
-          SDType: "",
-          SDAddress1: "",
-          SDAddress2: "",
-          SDAddress3: "",
-          SDState: "",
-          SDCountry: "India",
-          SDPincode: "",
-          SDContactPerson: "",
-          SDMobileNo: "",
-          SDEmail: "",
-          SDGSTNType: "",
-          SDGSTNNumber: ""
-        }
       });
       setModalVisible(false);
       setEditingUser(null);
@@ -726,7 +624,7 @@ const Users = () => {
   const handleDeleteUser = (userToDelete: User) => {
     Alert.alert(
       "Delete User",
-      `Are you sure you want to permanently delete ${userToDelete.name}?\n\nThis action cannot be undone and will:\n• Remove the user from all companies\n• Delete all user data\n• Remove access to the system\n\nUser Details:\n• Name: ${userToDelete.name}\n• Email: ${userToDelete.email || 'N/A'}\n• Role: ${userToDelete.role.toUpperCase()}\n• Company: ${userToDelete.companies[0]?.companyName || userToDelete.companies[0]?.companyId?.companyName || 'N/A'}`,
+      `Are you sure you want to permanently delete ${userToDelete.name}?\n\nThis action cannot be undone and will:\n• Remove the user from all companies\n• Delete all user data\n• Remove access to the system\n\nUser Details:\n• Name: ${userToDelete.name}\n• Email: ${userToDelete.email || 'N/A'}\n• Role: ${userToDelete.role.toUpperCase()}\n• Company: ${(userToDelete.companies[0]?.companyId as any)?.companyName || 'N/A'}`,
       [
         {
           text: "Cancel",
@@ -763,8 +661,6 @@ const Users = () => {
       'rsm': '#10B981',
       'asm': '#F59E0B',
       'salesman': '#EF4444',
-      'dealers': '#8B5CF6',
-      'subdealer': '#06B6D4',
       'distibutors': '#84CC16',
     };
     return colors[role] || '#6B7280';
@@ -836,7 +732,7 @@ const Users = () => {
           <View style={styles.detailRow}>
             <Ionicons name="business" size={16} color="#6B7280" />
             <Text style={styles.detailText}>
-              {item.companies[0]?.companyName || item.companies[0]?.companyId?.companyName || 'No company assigned'}
+              {(item.companies[0]?.companyId as any)?.companyName || 'No company assigned'}
             </Text>
           </View>
         </View>
@@ -983,21 +879,6 @@ const Users = () => {
                 pincode: "",
                 country: "India"
               },
-              subdealerDetails: {
-                SDName: "",
-                SDType: "",
-                SDAddress1: "",
-                SDAddress2: "",
-                SDAddress3: "",
-                SDState: "",
-                SDCountry: "India",
-                SDPincode: "",
-                SDContactPerson: "",
-                SDMobileNo: "",
-                SDEmail: "",
-                SDGSTNType: "",
-                SDGSTNNumber: ""
-              }
             });
           }}
         >
@@ -1031,21 +912,6 @@ const Users = () => {
                   pincode: "",
                   country: "India"
                 },
-                  subdealerDetails: {
-                    SDName: "",
-                    SDType: "",
-                    SDAddress1: "",
-                    SDAddress2: "",
-                    SDAddress3: "",
-                    SDState: "",
-                    SDCountry: "India",
-                    SDPincode: "",
-                    SDContactPerson: "",
-                    SDMobileNo: "",
-                    SDEmail: "",
-                    SDGSTNType: "",
-                    SDGSTNNumber: ""
-                  }
                 });
               }}>
                 <Ionicons name="close" size={24} color="#6B7280" />
@@ -1061,63 +927,6 @@ const Users = () => {
               bounces={true}
               alwaysBounceVertical={false}
             >
-              {/* Show All Users First */}
-              <Text style={styles.sectionLabel}>All Users</Text>
-              <Text style={styles.helperText}>
-                View all users in the system. Select a parent user below to create a grouping.
-              </Text>
-              
-              <View style={styles.allUsersContainer}>
-                <ScrollView style={styles.allUsersList} nestedScrollEnabled>
-                  {loadingParents ? (
-                    <View style={styles.parentLoadingContainer}>
-                      <ActivityIndicator size="small" color="#0493D2" />
-                      <Text style={styles.parentLoadingText}>Loading users...</Text>
-                    </View>
-                  ) : (() => {
-                    const allUsers = allUsersForParent;
-                    return allUsers.length > 0 ? (
-                      allUsers.map((user) => (
-                        <View key={user._id} style={styles.userListItem}>
-                          <View style={styles.userItemInfo}>
-                            <Text style={styles.userItemName}>{user.name}</Text>
-                            <Text style={styles.userItemDetails}>
-                              {user.email || user.mobile} • {getRoleLabel(user.role)}
-                            </Text>
-                            {(user.primaryGroup?.GroupName || (user.groups && user.groups.length > 0 && user.groups[0]?.GroupName)) && (
-                              <Text style={styles.userItemGroup}>
-                                Group: {user.primaryGroup?.GroupName || (user.groups && user.groups[0]?.GroupName)}
-                              </Text>
-                            )}
-                            {(!user.primaryGroup && (!user.groups || user.groups.length === 0)) && (
-                              <Text style={[styles.userItemGroup, { color: '#9CA3AF', fontStyle: 'italic' }]}>
-                                No Group Assigned
-                              </Text>
-                            )}
-                          </View>
-                          <View style={[
-                            styles.userStatusBadge,
-                            user.isActive ? styles.userStatusActive : styles.userStatusInactive
-                          ]}>
-                            <Text style={[
-                              styles.userStatusText,
-                              user.isActive ? { color: '#065F46' } : { color: '#991B1B' }
-                            ]}>
-                              {user.isActive ? 'Active' : 'Inactive'}
-                            </Text>
-                          </View>
-                        </View>
-                      ))
-                    ) : (
-                      <View style={styles.parentEmptyState}>
-                        <Ionicons name="people-outline" size={32} color="#9CA3AF" />
-                        <Text style={styles.parentEmptyText}>No users found</Text>
-                      </View>
-                    );
-                  })()}
-                </ScrollView>
-              </View>
-
               <TextInput
                 placeholder="Full Name *"
                 value={formData.name}
@@ -1159,24 +968,7 @@ const Users = () => {
                       setFormData({ 
                         ...formData, 
                         role: role.value,
-                        // Clear subdealer details if role changes from subdealer
-                        ...(formData.role === 'subdealer' && role.value !== 'subdealer' ? {
-                          subdealerDetails: {
-                            SDName: "",
-                            SDType: "",
-                            SDAddress1: "",
-                            SDAddress2: "",
-                            SDAddress3: "",
-                            SDState: "",
-                            SDCountry: "India",
-                            SDPincode: "",
-                            SDContactPerson: "",
-                            SDMobileNo: "",
-                            SDEmail: "",
-                            SDGSTNType: "",
-                            SDGSTNNumber: ""
-                          }
-                        } : {})
+                        // Note: Dealers and subdealers are managed separately
                       });
                     }}
                   >
@@ -1190,144 +982,120 @@ const Users = () => {
                 ))}
               </View>
 
-              {/* Select Parent User Section */}
-              <Text style={styles.sectionLabel}>Select Parent User *</Text>
+              {/* Select Group Section */}
+              <Text style={styles.sectionLabel}>Assign to Group (Optional)</Text>
               <Text style={styles.helperText}>
-                Select any user as parent. Every user must have a parent in the hierarchy. A group will be automatically created with GroupParent set to the selected parent user's ID.
+                Optionally assign user to an existing group. If not selected, a group will be automatically created.
               </Text>
               
-              <TouchableOpacity
-                style={styles.parentSelectorButton}
-                onPress={() => {
-                  if (!showParentSelector) {
-                    fetchAllUsersForParent();
-                  }
-                  setShowParentSelector(!showParentSelector);
-                }}
-              >
-                <View style={styles.parentSelectorContent}>
-                  <Ionicons name="people" size={20} color="#6B7280" />
-                  <Text style={[
-                    styles.parentSelectorText,
-                    !formData.parentUserId && styles.parentSelectorPlaceholder
-                  ]}>
-                    {formData.parentUserId
-                      ? allUsersForParent.find(u => u._id === formData.parentUserId)?.name || 'Select parent user'
-                      : 'Select parent user'}
-                  </Text>
-                  <Ionicons 
-                    name={showParentSelector ? "chevron-up" : "chevron-down"} 
-                    size={20} 
-                    color="#6B7280" 
-                  />
+              {formData.groupId ? (
+                <View style={styles.selectedGroupContainer}>
+                  <View style={styles.selectedGroupInfo}>
+                    <Ionicons name="folder" size={20} color="#0493D2" />
+                    <View style={styles.selectedGroupDetails}>
+                      <Text style={styles.selectedGroupName}>
+                        {allGroups.find(g => g._id === formData.groupId)?.GroupName || 'Selected Group'}
+                      </Text>
+                      <Text style={styles.selectedGroupGUID}>
+                        GUID: {allGroups.find(g => g._id === formData.groupId)?.GroupGUID || 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.removeGroupButton}
+                    onPress={() => setFormData({ ...formData, groupId: '' })}
+                  >
+                    <Ionicons name="close-circle" size={24} color="#EF4444" />
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-
-              {formData.parentUserId && (
-                <View style={styles.selectedParentInfo}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                  <Text style={styles.selectedParentText}>
-                    Parent: {allUsersForParent.find(u => u._id === formData.parentUserId)?.name} 
-                    ({getRoleLabel(allUsersForParent.find(u => u._id === formData.parentUserId)?.role || '')})
-                  </Text>
-                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.groupSelectorButton}
+                  onPress={() => {
+                    if (!showGroupSelector) {
+                      fetchAllGroups();
+                    }
+                    setShowGroupSelector(!showGroupSelector);
+                  }}
+                >
+                  <View style={styles.groupSelectorContent}>
+                    <Ionicons name="folder-outline" size={20} color="#6B7280" />
+                    <Text style={styles.groupSelectorText}>Select Group (Optional)</Text>
+                    <Ionicons 
+                      name={showGroupSelector ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color="#6B7280" 
+                    />
+                  </View>
+                </TouchableOpacity>
               )}
 
-              {showParentSelector && (
-                <View style={styles.parentSelectorDropdown}>
+              {showGroupSelector && (
+                <View style={styles.groupSelectorDropdown}>
                   {/* Search */}
-                  <View style={styles.parentSearchContainer}>
+                  <View style={styles.groupSearchContainer}>
                     <Ionicons name="search" size={16} color="#9CA3AF" />
                     <TextInput
-                      style={styles.parentSearchInput}
-                      placeholder="Search by name, email, mobile, or role..."
-                      value={parentSearchQuery}
-                      onChangeText={setParentSearchQuery}
+                      style={styles.groupSearchInput}
+                      placeholder="Search groups..."
+                      value={groupSearchQuery}
+                      onChangeText={setGroupSearchQuery}
                       placeholderTextColor="#9CA3AF"
                     />
                   </View>
                   
                   <ScrollView 
-                    style={styles.parentListContainer} 
+                    style={styles.groupListContainer} 
                     nestedScrollEnabled={true}
                     keyboardShouldPersistTaps="handled"
                   >
-                    {loadingParents ? (
-                      <View style={styles.parentLoadingContainer}>
+                    {loadingGroups ? (
+                      <View style={styles.groupLoadingContainer}>
                         <ActivityIndicator size="small" color="#0493D2" />
-                        <Text style={styles.parentLoadingText}>Loading users...</Text>
+                        <Text style={styles.groupLoadingText}>Loading groups...</Text>
                       </View>
                     ) : (() => {
-                      const filteredUsers = getFilteredParentUsers();
-                      const hasUsers = filteredUsers.length > 0;
+                      const filteredGroups = allGroups.filter(group => {
+                        const searchLower = groupSearchQuery.toLowerCase();
+                        return (
+                          group.GroupName.toLowerCase().includes(searchLower) ||
+                          group.GroupGUID.toLowerCase().includes(searchLower) ||
+                          (group.Remarks && group.Remarks.toLowerCase().includes(searchLower))
+                        );
+                      });
                       
-                      return hasUsers ? (
-                        filteredUsers.map((parentUser) => {
-                          const isSelected = formData.parentUserId === parentUser._id;
+                      return filteredGroups.length > 0 ? (
+                        filteredGroups.map((group) => {
+                          const isSelected = formData.groupId === group._id;
                           return (
                             <TouchableOpacity
-                              key={parentUser._id}
+                              key={group._id}
                               style={[
-                                styles.parentUserItem,
-                                isSelected && styles.parentUserItemSelected
+                                styles.groupItem,
+                                isSelected && styles.groupItemSelected
                               ]}
                               onPress={() => {
-                                setFormData({ 
-                                  ...formData, 
-                                  parentUserId: parentUser._id
-                                });
-                                setShowParentSelector(false);
-                                setParentSearchQuery('');
+                                setFormData({ ...formData, groupId: group._id });
+                                setShowGroupSelector(false);
+                                setGroupSearchQuery('');
                               }}
                             >
-                              <View style={styles.parentUserInfo}>
-                                <Text style={[
-                                  styles.parentUserName,
-                                  isSelected && styles.parentUserNameSelected
-                                ]}>
-                                  {parentUser.name}
-                                </Text>
-                                <View style={styles.parentUserHeaderRow}>
-                                  <View style={[styles.parentRoleBadgeInline, { backgroundColor: getRoleColor(parentUser.role) }]}>
-                                    <Text style={styles.parentRoleBadgeTextInline}>
-                                      {getRoleLabel(parentUser.role)}
+                              <View style={styles.groupItemInfo}>
+                                <Ionicons name="folder" size={20} color={isSelected ? "#0493D2" : "#6B7280"} />
+                                <View style={styles.groupItemDetails}>
+                                  <Text style={[
+                                    styles.groupItemName,
+                                    isSelected && styles.groupItemNameSelected
+                                  ]}>
+                                    {group.GroupName}
+                                  </Text>
+                                  <Text style={styles.groupItemGUID}>GUID: {group.GroupGUID}</Text>
+                                  {group.Remarks && (
+                                    <Text style={styles.groupItemRemarks} numberOfLines={1}>
+                                      {group.Remarks}
                                     </Text>
-                                  </View>
+                                  )}
                                 </View>
-                                <Text style={styles.parentUserDetails}>
-                                  {parentUser.email || parentUser.mobile}
-                                </Text>
-                                {parentUser.hierarchy?.parentUser ? (
-                                  <View style={styles.parentUserParentInfo}>
-                                    <Ionicons name="person-outline" size={12} color="#6B7280" />
-                                    <Text style={styles.parentUserParentText}>
-                                      Parent: {parentUser.hierarchy.parentUser.name} ({getRoleLabel(parentUser.hierarchy.parentUser.role)})
-                                    </Text>
-                                  </View>
-                                ) : (
-                                  <View style={styles.parentUserParentInfo}>
-                                    <Ionicons name="person-outline" size={12} color="#9CA3AF" />
-                                    <Text style={[styles.parentUserParentText, { color: '#9CA3AF', fontStyle: 'italic' }]}>
-                                      No Parent User
-                                    </Text>
-                                  </View>
-                                )}
-                                {(parentUser.primaryGroup?.GroupName || (parentUser.groups && parentUser.groups.length > 0 && (parentUser.groups[0]?.GroupName || parentUser.groups[0]?.groupName))) && (
-                                  <View style={styles.parentUserGroupInfo}>
-                                    <Ionicons name="layers-outline" size={12} color="#10B981" />
-                                    <Text style={styles.userItemGroup}>
-                                      Group: {parentUser.primaryGroup?.GroupName || (parentUser.groups && parentUser.groups.length > 0 && (parentUser.groups[0]?.GroupName || parentUser.groups[0]?.groupName))}
-                                    </Text>
-                                  </View>
-                                )}
-                                {(!parentUser.primaryGroup && (!parentUser.groups || parentUser.groups.length === 0)) && (
-                                  <View style={styles.parentUserGroupInfo}>
-                                    <Ionicons name="layers-outline" size={12} color="#9CA3AF" />
-                                    <Text style={[styles.userItemGroup, { color: '#9CA3AF', fontStyle: 'italic' }]}>
-                                      No Group Assigned
-                                    </Text>
-                                  </View>
-                                )}
                               </View>
                               {isSelected && (
                                 <Ionicons name="checkmark-circle" size={20} color="#0493D2" />
@@ -1336,13 +1104,11 @@ const Users = () => {
                           );
                         })
                       ) : (
-                        <View style={styles.parentEmptyState}>
-                          <Ionicons name="people-outline" size={32} color="#9CA3AF" />
-                          <Text style={styles.parentEmptyText}>No users found</Text>
-                          <Text style={styles.parentEmptySubtext}>
-                            {parentSearchQuery
-                              ? 'Try adjusting your search' 
-                              : 'No users available for parent selection'}
+                        <View style={styles.groupEmptyState}>
+                          <Ionicons name="folder-outline" size={32} color="#9CA3AF" />
+                          <Text style={styles.groupEmptyText}>No groups found</Text>
+                          <Text style={styles.groupEmptySubtext}>
+                            {groupSearchQuery ? 'Try adjusting your search' : 'Create groups first'}
                           </Text>
                         </View>
                       );
@@ -1352,175 +1118,8 @@ const Users = () => {
               )}
 
 
-              {/* Subdealer Specific Fields - Only show when role is subdealer */}
-              {formData.role === 'subdealer' && (
-                <>
-                  <Text style={styles.sectionLabel}>Sub Dealer Information</Text>
-                  
-                  <TextInput
-                    placeholder="Sub Dealer Name *"
-                    value={formData.subdealerDetails.SDName}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDName: text }
-                    })}
-                    style={styles.input}
-                  />
 
-                  <Text style={styles.roleLabel}>Sub Dealer Type *</Text>
-                  <View style={styles.roleOptions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.roleOption,
-                        formData.subdealerDetails.SDType === 'Sub Dealer' && styles.roleOptionSelected
-                      ]}
-                      onPress={() => setFormData({ 
-                        ...formData, 
-                        subdealerDetails: { ...formData.subdealerDetails, SDType: 'Sub Dealer' }
-                      })}
-                    >
-                      <Text style={[
-                        styles.roleOptionText,
-                        formData.subdealerDetails.SDType === 'Sub Dealer' && styles.roleOptionTextSelected
-                      ]}>
-                        Sub Dealer
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.roleOption,
-                        formData.subdealerDetails.SDType === 'TSO' && styles.roleOptionSelected
-                      ]}
-                      onPress={() => setFormData({ 
-                        ...formData, 
-                        subdealerDetails: { ...formData.subdealerDetails, SDType: 'TSO' }
-                      })}
-                    >
-                      <Text style={[
-                        styles.roleOptionText,
-                        formData.subdealerDetails.SDType === 'TSO' && styles.roleOptionTextSelected
-                      ]}>
-                        TSO
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TextInput
-                    placeholder="Address Line 1"
-                    value={formData.subdealerDetails.SDAddress1}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDAddress1: text }
-                    })}
-                    style={styles.input}
-                  />
-
-                  <TextInput
-                    placeholder="Address Line 2"
-                    value={formData.subdealerDetails.SDAddress2}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDAddress2: text }
-                    })}
-                    style={styles.input}
-                  />
-
-                  <TextInput
-                    placeholder="Address Line 3"
-                    value={formData.subdealerDetails.SDAddress3}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDAddress3: text }
-                    })}
-                    style={styles.input}
-                  />
-
-                  <View style={styles.addressRow}>
-                    <TextInput
-                      placeholder="State"
-                      value={formData.subdealerDetails.SDState}
-                      onChangeText={(text) => setFormData({ 
-                        ...formData, 
-                        subdealerDetails: { ...formData.subdealerDetails, SDState: text }
-                      })}
-                      style={[styles.input, styles.halfInput]}
-                    />
-                    
-                    <TextInput
-                      placeholder="Country"
-                      value={formData.subdealerDetails.SDCountry}
-                      onChangeText={(text) => setFormData({ 
-                        ...formData, 
-                        subdealerDetails: { ...formData.subdealerDetails, SDCountry: text }
-                      })}
-                      style={[styles.input, styles.halfInput]}
-                    />
-                  </View>
-
-                  <TextInput
-                    placeholder="Pincode"
-                    value={formData.subdealerDetails.SDPincode}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDPincode: text }
-                    })}
-                    keyboardType="numeric"
-                    style={styles.input}
-                  />
-
-                  <TextInput
-                    placeholder="Contact Person"
-                    value={formData.subdealerDetails.SDContactPerson}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDContactPerson: text }
-                    })}
-                    style={styles.input}
-                  />
-
-                  <TextInput
-                    placeholder="Mobile Number"
-                    value={formData.subdealerDetails.SDMobileNo}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDMobileNo: text }
-                    })}
-                    keyboardType="phone-pad"
-                    style={styles.input}
-                  />
-
-                  <TextInput
-                    placeholder="Email Address"
-                    value={formData.subdealerDetails.SDEmail}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDEmail: text }
-                    })}
-                    keyboardType="email-address"
-                    style={styles.input}
-                  />
-
-                  <TextInput
-                    placeholder="GSTN Type"
-                    value={formData.subdealerDetails.SDGSTNType}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDGSTNType: text }
-                    })}
-                    style={styles.input}
-                  />
-
-                  <TextInput
-                    placeholder="GSTN Number"
-                    value={formData.subdealerDetails.SDGSTNNumber}
-                    onChangeText={(text) => setFormData({ 
-                      ...formData, 
-                      subdealerDetails: { ...formData.subdealerDetails, SDGSTNNumber: text }
-                    })}
-                    style={styles.input}
-                  />
-                </>
-              )}
+              {/* Note: Dealers and subdealers are now managed separately through Ledger and SubDealer models */}
 
 
 
@@ -2179,6 +1778,156 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   parentEmptySubtext: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  // Group selector styles
+  groupSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+  groupSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  groupSelectorText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  selectedGroupContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    gap: 12,
+  },
+  selectedGroupInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selectedGroupDetails: {
+    flex: 1,
+  },
+  selectedGroupName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E40AF',
+    marginBottom: 2,
+  },
+  selectedGroupGUID: {
+    fontSize: 12,
+    color: '#3B82F6',
+  },
+  removeGroupButton: {
+    padding: 4,
+  },
+  groupSelectorDropdown: {
+    marginTop: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    maxHeight: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  groupSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    gap: 8,
+  },
+  groupSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  groupListContainer: {
+    maxHeight: 350,
+  },
+  groupLoadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  groupLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  groupItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  groupItemSelected: {
+    backgroundColor: '#F0F9FF',
+  },
+  groupItemInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  groupItemDetails: {
+    flex: 1,
+  },
+  groupItemName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  groupItemNameSelected: {
+    color: '#0493D2',
+    fontWeight: '600',
+  },
+  groupItemGUID: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  groupItemRemarks: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  groupEmptyState: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  groupEmptyText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  groupEmptySubtext: {
     fontSize: 12,
     color: '#9CA3AF',
     textAlign: 'center',

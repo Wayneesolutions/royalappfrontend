@@ -61,10 +61,8 @@ import ZonalScreen from '../screens/dashboard/admin/ZonalScreen';
 import RSMScreen from '../screens/dashboard/admin/RSMScreen';
 import ASMScreen from '../screens/dashboard/admin/ASMScreen';
 import SalesScreen from '../screens/dashboard/admin/SalesScreen';
-import DealerScreen from '../screens/dashboard/admin/DealerScreen';
 import DistributorsScreen from '../screens/dashboard/admin/DistributorsScreen';
 import InvoiceScreen from '../screens/dashboard/admin/InvoiceScreen';
-import LedgerScreen from '../screens/dashboard/admin/LedgerScreen';
 import TargetScreen from '../screens/dashboard/admin/TargetScreen';
 import PendingOrdersScreen from '../screens/dashboard/admin/PendingOrdersScreen';
 import ClearOrdersScreen from '../screens/dashboard/admin/ClearOrdersScreen';
@@ -116,13 +114,11 @@ export function ZonalNavigator() {
       <Stack.Screen name="ZonalScreen" component={ZonalScreen} />
       <Stack.Screen name="RSMScreen" component={RSMScreen} />
       <Stack.Screen name="ASMScreen" component={ASMScreen} />
-      <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="DistributorsScreen" component={DistributorsScreen} />
 
       {/* Business Operations */}
       <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
-      <Stack.Screen name="LedgerScreen" component={LedgerScreen} />
       <Stack.Screen name="TargetScreen" component={TargetScreen} />
       <Stack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
       <Stack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
@@ -178,13 +174,11 @@ export function RSMNavigator() {
       <Stack.Screen name="ZonalScreen" component={ZonalScreen} />
       <Stack.Screen name="RSMScreen" component={RSMScreen} />
       <Stack.Screen name="ASMScreen" component={ASMScreen} />
-      <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="DistributorsScreen" component={DistributorsScreen} />
 
       {/* Business Operations */}
       <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
-      <Stack.Screen name="LedgerScreen" component={LedgerScreen} />
       <Stack.Screen name="TargetScreen" component={TargetScreen} />
       <Stack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
       <Stack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
@@ -240,13 +234,11 @@ export function ASMNavigator() {
       <Stack.Screen name="ZonalScreen" component={ZonalScreen} />
       <Stack.Screen name="RSMScreen" component={RSMScreen} />
       <Stack.Screen name="ASMScreen" component={ASMScreen} />
-      <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="DistributorsScreen" component={DistributorsScreen} />
 
       {/* Business Operations */}
       <Stack.Screen name="SalesScreen" component={SalesScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
-      <Stack.Screen name="LedgerScreen" component={LedgerScreen} />
       <Stack.Screen name="TargetScreen" component={TargetScreen} />
       <Stack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
       <Stack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
@@ -286,7 +278,6 @@ export function DistributorNavigator() {
       <Stack.Screen name="DistributorEditOrder" component={DistributorEditOrder} />
       <Stack.Screen name="SalesReportScreen" component={DistributorSalesReportScreen} />
       {/* <Stack.Screen name="SalesScreen" component={SalesScreen} />
-      <Stack.Screen name="DealerScreen" component={DealerScreen} />
       <Stack.Screen name="InvoiceScreen" component={InvoiceScreen} />
       <Stack.Screen name="LedgerScreen" component={LedgerScreen} />
       <Stack.Screen name="TargetScreen" component={TargetScreen} />

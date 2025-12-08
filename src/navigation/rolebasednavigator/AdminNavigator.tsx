@@ -11,16 +11,15 @@ import ZonalScreen from '../../screens/dashboard/admin/ZonalScreen';
 import RSMScreen from '../../screens/dashboard/admin/RSMScreen';
 import ASMScreen from '../../screens/dashboard/admin/ASMScreen';
 import SalesScreen from '../../screens/dashboard/admin/SalesScreen';
-import DealerScreen from '../../screens/dashboard/admin/DealerScreen';
 import DistributorsScreen from '../../screens/dashboard/admin/DistributorsScreen';
 import InvoiceScreen from '../../screens/dashboard/admin/InvoiceScreen';
-import LedgerScreen from '../../screens/dashboard/admin/LedgerScreen';
 import TargetScreen from '../../screens/dashboard/admin/TargetScreen';
 import PendingOrdersScreen from '../../screens/dashboard/admin/PendingOrdersScreen';
 import ClearOrdersScreen from '../../screens/dashboard/admin/ClearOrdersScreen';
 import SettingsScreen from '../../screens/dashboard/admin/SettingsScreen';
 import ProfileScreen from '../../screens/common/ProfileScreen';
 import Users from '../../screens/dashboard/admin/saleOrder/Users';
+import Groups from '../../screens/dashboard/admin/saleOrder/Groups';
 import Companies from '../../screens/dashboard/admin/saleOrder/Companies';
 import ProductManagement from '../../screens/dashboard/admin/saleOrder/ProductManagement';
 import ProductSummary from '../../screens/dashboard/admin/saleOrder/ProductSummary';
@@ -37,6 +36,8 @@ import ApprovedOrdersScreen from '../../screens/dashboard/admin/ApprovedOrdersSc
 import AdminCreateOrder from '../../screens/dashboard/admin/AdminCreateOrder';
 import AdminOrderList from '../../screens/dashboard/admin/AdminOrderList';
 import AdminEditOrder from '../../screens/dashboard/admin/AdminEditOrder';
+import DealersListScreen from '../../screens/dashboard/admin/DealersListScreen';
+import SubDealersListScreen from '../../screens/dashboard/admin/SubDealersListScreen';
 // Order Management Screens (Admin can only monitor, not create)
 // import OrderManagement from '../../screens/dashboard/admin/saleOrder/OrderManagement';
 // import ProductManagement from '../../screens/dashboard/admin/saleOrder/ProductManagement';
@@ -58,13 +59,11 @@ export default function AdminNavigator() {
             <AdminStack.Screen name="ZonalScreen" component={ZonalScreen} />
             <AdminStack.Screen name="RSMScreen" component={RSMScreen} />
             <AdminStack.Screen name="ASMScreen" component={ASMScreen} />
-            <AdminStack.Screen name="DealerScreen" component={DealerScreen} />
             <AdminStack.Screen name="DistributorsScreen" component={DistributorsScreen} />
 
             {/* Business Operations */}
             <AdminStack.Screen name="SalesScreen" component={SalesScreen} />
             <AdminStack.Screen name="InvoiceScreen" component={InvoiceScreen} />
-            <AdminStack.Screen name="LedgerScreen" component={LedgerScreen} />
             <AdminStack.Screen name="TargetScreen" component={TargetScreen} />
             <AdminStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
         <AdminStack.Screen name="TargetAssignmentScreen" component={TargetAssignmentScreen} />
@@ -95,6 +94,9 @@ export default function AdminNavigator() {
 
             {/* User Management */}
             <AdminStack.Screen name="Users" component={Users} />
+            <AdminStack.Screen name="Groups" component={Groups} />
+            <AdminStack.Screen name="DealersList" component={DealersListScreen} />
+            <AdminStack.Screen name="SubDealersList" component={SubDealersListScreen} />
 
             {/* Settings & Profile */}
             <AdminStack.Screen name="ProfileScreen" component={ProfileScreen} />

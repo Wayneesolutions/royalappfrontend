@@ -511,6 +511,245 @@ class ApiService {
     }
   }
 
+  async adminGetAllGroups(params?: { includeInactive?: boolean }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/groups', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminGetUsersByGroup(groupId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/admin/groups/${groupId}/users`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminCreateGroup(data: {
+    GroupGUID?: string;
+    GroupName: string;
+    GroupParent?: string | null;
+    Remarks?: string;
+    other1?: string;
+    other2?: string;
+    other3?: string;
+    other4?: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/admin/groups', data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminUpdateGroup(groupId: string, data: {
+    GroupName?: string;
+    GroupParent?: string | null;
+    Remarks?: string;
+    other1?: string;
+    other2?: string;
+    other3?: string;
+    other4?: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/admin/groups/${groupId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminDeleteGroup(groupId: string, hardDelete: boolean = false): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.delete(`/admin/groups/${groupId}`, {
+        params: { hardDelete }
+      });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== DEALER (LEDGER) MANAGEMENT ====================
+  async adminGetAllDealers(params?: { includeInactive?: boolean }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/dealers', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminCreateDealer(data: {
+    LedgerGUID?: string;
+    LedgerName: string;
+    LedgerParent?: string;
+    SalesMan?: string;
+    ASM?: string;
+    RSM?: string;
+    ZSM?: string;
+    LedgerMobile?: string;
+    LedgerContact?: string;
+    Email?: string;
+    LedgerGSTIN?: string;
+    LedgerAddress1?: string;
+    LedgerAddress2?: string;
+    LedgerState?: string;
+    LedgerOpening?: number;
+    LedgerOpeningDate?: string;
+    LedgerJoinDate?: string;
+    Cmpguid?: string;
+    cmpCode?: string;
+    Remarks?: string;
+    Other1?: string;
+    Other2?: string;
+    Other3?: string;
+    Other4?: string;
+    Other5?: string;
+    other6?: string;
+    other7?: string;
+    other8?: string;
+    groupId?: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/admin/dealers', data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminUpdateDealer(dealerId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/admin/dealers/${dealerId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminDeleteDealer(dealerId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.delete(`/admin/dealers/${dealerId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== SUBDEALER MANAGEMENT ====================
+  async adminGetAllSubDealers(params?: { includeInactive?: boolean }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/subdealers', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminCreateSubDealer(data: {
+    SDName: string;
+    SDType: 'Sub Dealer' | 'TSO';
+    SDAddress1?: string;
+    SDAddress2?: string;
+    SDAddress3?: string;
+    SDState?: string;
+    SDCountry?: string;
+    SDPincode?: string;
+    SDContactPerson?: string;
+    SDMobileNo?: string;
+    SDEmail?: string;
+    SDGSTNType?: string;
+    SDGSTNNumber?: string;
+    groupId?: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/admin/subdealers', data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminUpdateSubDealer(subdealerId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/admin/subdealers/${subdealerId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminDeleteSubDealer(subdealerId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.delete(`/admin/subdealers/${subdealerId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   // General user endpoints (accessible by all roles)
   async getUserUsersByCompany(params?: { 
     companyId?: string; 
@@ -1561,6 +1800,114 @@ class ApiService {
   async getRSMRecentActivity(params?: { limit?: number; days?: number }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/rsm/recent-activity', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== DEALER (LEDGER) MANAGEMENT ====================
+  async adminGetAllDealers(params?: { includeInactive?: boolean }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/admin/dealers', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminCreateDealer(data: {
+    LedgerGUID?: string;
+    LedgerName: string;
+    LedgerParent?: string | null;
+    SalesMan?: string | null;
+    ASM?: string | null;
+    RSM?: string | null;
+    ZSM?: string | null;
+    LedgerMobile?: string;
+    LedgerContact?: string;
+    Email?: string;
+    LedgerAddress1?: string;
+    LedgerAddress2?: string;
+    LedgerState?: string;
+    LedgerOpening?: number;
+    LedgerOpeningDate?: string;
+    LedgerJoinDate?: string;
+    Remarks?: string;
+    Other1?: string;
+    Other2?: string;
+    Other3?: string;
+    Other4?: string;
+    Other5?: string;
+    other6?: string;
+    other7?: string;
+    other8?: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/admin/dealers', data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminUpdateDealer(dealerId: string, data: {
+    LedgerName?: string;
+    LedgerParent?: string | null;
+    SalesMan?: string | null;
+    ASM?: string | null;
+    RSM?: string | null;
+    ZSM?: string | null;
+    LedgerMobile?: string;
+    LedgerContact?: string;
+    Email?: string;
+    LedgerAddress1?: string;
+    LedgerAddress2?: string;
+    LedgerState?: string;
+    LedgerOpening?: number;
+    LedgerOpeningDate?: string;
+    LedgerJoinDate?: string;
+    Remarks?: string;
+    Other1?: string;
+    Other2?: string;
+    Other3?: string;
+    Other4?: string;
+    Other5?: string;
+    other6?: string;
+    other7?: string;
+    other8?: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/admin/dealers/${dealerId}`, data);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminDeleteDealer(dealerId: string, hardDelete: boolean = false): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.delete(`/admin/dealers/${dealerId}`, {
+        params: { hardDelete }
+      });
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);

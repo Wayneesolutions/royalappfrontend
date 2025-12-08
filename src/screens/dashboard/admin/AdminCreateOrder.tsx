@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import apiService from '../../../services/api';
 import {
   DEFAULT_GST_RATE,
   computeGstBreakdown,
@@ -26,9 +27,15 @@ const MODE_OPTIONS = ['Cash', 'Cheque', 'Bank Transfer', 'UPI', 'Credit Card', '
 
 interface Dealer {
   _id: string;
-  name: string;
-  email?: string;
-  mobile: string;
+  LedgerName: string;
+  name?: string; // For backward compatibility
+  LedgerMobile?: string;
+  mobile?: string; // For backward compatibility
+  Email?: string;
+  email?: string; // For backward compatibility
+  LedgerAddress1?: string;
+  LedgerAddress2?: string;
+  LedgerState?: string;
   address?: {
     street?: string;
     city?: string;
@@ -40,9 +47,16 @@ interface Dealer {
 
 interface SubDealer {
   _id: string;
-  name: string;
-  email?: string;
-  mobile: string;
+  SDName: string;
+  name?: string; // For backward compatibility
+  SDMobileNo?: string;
+  mobile?: string; // For backward compatibility
+  SDEmail?: string;
+  email?: string; // For backward compatibility
+  SDAddress1?: string;
+  SDAddress2?: string;
+  SDAddress3?: string;
+  SDState?: string;
   address?: {
     street?: string;
     city?: string;
@@ -50,7 +64,6 @@ interface SubDealer {
     pincode?: string;
     country?: string;
   };
-  dealerId: string;
 }
 
 interface Product {
@@ -261,7 +274,7 @@ const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
 
 const AdminCreateOrder = () => {
   const navigation = useNavigation();
-  const { user, getUsersByRole, getSubDealers, getProducts, getProductById, createOrder } = useAuth();
+  const { user, getProducts, getProductById, createOrder } = useAuth();
   
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
@@ -318,6 +331,15 @@ const AdminCreateOrder = () => {
   const [otherReference, setOtherReference] = useState('');
   const [termsOfDelivery1, setTermsOfDelivery1] = useState('');
   const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
+  
+  // Date of Order Entry - set to current date
+  const [orderEntryDate] = useState(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
 
   const deriveSellerState = useCallback(() => {
     if (!user) {
@@ -341,8 +363,14 @@ const AdminCreateOrder = () => {
   const sellerState = useMemo(() => deriveSellerState(), [deriveSellerState]);
 
   const buyerState = useMemo(() => {
+    if (selectedSubDealer?.SDState) {
+      return extractState(selectedSubDealer.SDState);
+    }
     if (selectedSubDealer?.address?.state) {
       return extractState(selectedSubDealer.address.state);
+    }
+    if (selectedDealer?.LedgerState) {
+      return extractState(selectedDealer.LedgerState);
     }
     if (selectedDealer?.address?.state) {
       return extractState(selectedDealer.address.state);
@@ -440,50 +468,69 @@ const AdminCreateOrder = () => {
     try {
       setLoading(true);
       
-      // Fetch dealers
-      console.log('🔍 Fetching dealers...');
-      const dealersResponse = await getUsersByRole('dealers');
+      // Fetch dealers from Ledger table
+      console.log('🔍 Fetching dealers from Ledger...');
+      const dealersResponse = await apiService.adminGetAllDealers({ includeInactive: false });
       console.log('📡 Dealers response:', dealersResponse);
       
-      // Handle different response formats
-      if (Array.isArray(dealersResponse)) {
-        // Direct array response
-        setDealers(dealersResponse);
-        console.log('✅ Dealers loaded (direct array):', dealersResponse.length);
-      } else if (dealersResponse?.success) {
-        // Response with success field - check for nested data.users structure
-        const dealersData = dealersResponse.data?.users || dealersResponse.data || dealersResponse.users || [];
-        setDealers(Array.isArray(dealersData) ? dealersData : []);
-        console.log('✅ Dealers loaded (wrapped with success):', Array.isArray(dealersData) ? dealersData.length : 0);
-      } else if (dealersResponse?.users && Array.isArray(dealersResponse.users)) {
-        // Response structure: {users: [...], role: 'dealers', count: 1}
-        setDealers(dealersResponse.users);
-        console.log('✅ Dealers loaded (users field):', dealersResponse.users.length);
+      if (dealersResponse?.success && dealersResponse.data?.dealers) {
+        // Map Ledger fields to Dealer interface
+        const mappedDealers = dealersResponse.data.dealers.map((ledger: any) => ({
+          _id: ledger._id,
+          LedgerName: ledger.LedgerName,
+          name: ledger.LedgerName, // For backward compatibility
+          LedgerMobile: ledger.LedgerMobile,
+          mobile: ledger.LedgerMobile, // For backward compatibility
+          Email: ledger.Email,
+          email: ledger.Email, // For backward compatibility
+          LedgerAddress1: ledger.LedgerAddress1,
+          LedgerAddress2: ledger.LedgerAddress2,
+          LedgerState: ledger.LedgerState,
+          address: {
+            street: ledger.LedgerAddress1 || '',
+            city: ledger.LedgerAddress2 || '',
+            state: ledger.LedgerState || '',
+            pincode: '',
+            country: 'India',
+          },
+        }));
+        setDealers(mappedDealers);
+        console.log('✅ Dealers loaded from Ledger:', mappedDealers.length);
       } else {
         console.log('❌ Failed to load dealers:', dealersResponse?.message || 'Unknown error');
         Alert.alert('Error', 'Failed to load dealers: ' + (dealersResponse?.message || 'Unknown error'));
         setDealers([]);
       }
       
-      // Fetch sub dealers using getUsersByRole instead of getSubDealers
-      console.log('🔍 Fetching sub dealers using getUsersByRole...');
-      const subDealersResponse = await getUsersByRole('subdealer');
+      // Fetch sub dealers from SubDealer table
+      console.log('🔍 Fetching sub dealers from SubDealer table...');
+      const subDealersResponse = await apiService.adminGetAllSubDealers({ includeInactive: false });
       console.log('📡 Sub dealers response:', subDealersResponse);
       
-      // Handle different response formats for sub dealers
-      if (Array.isArray(subDealersResponse)) {
-        // Direct array response
-        setSubDealers(subDealersResponse);
-        console.log('✅ Sub dealers loaded (direct array):', subDealersResponse.length);
-      } else if (subDealersResponse?.success) {
-        // Response with success field - check for nested data.users structure
-        const subDealersData = subDealersResponse.data?.users || subDealersResponse.data || subDealersResponse.subDealers || subDealersResponse.users || [];
-        setSubDealers(Array.isArray(subDealersData) ? subDealersData : []);
-        console.log('✅ Sub dealers loaded (wrapped with success):', Array.isArray(subDealersData) ? subDealersData.length : 0);
-      } else if (subDealersResponse?.users && Array.isArray(subDealersResponse.users)) {
-        // Response structure: {users: [...], role: 'subdealer', count: 3}
-        setSubDealers(subDealersResponse.users);
-        console.log('✅ Sub dealers loaded (users field):', subDealersResponse.users.length);
+      if (subDealersResponse?.success && subDealersResponse.data?.subdealers) {
+        // Map SubDealer fields to SubDealer interface
+        const mappedSubDealers = subDealersResponse.data.subdealers.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName, // For backward compatibility
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo, // For backward compatibility
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail, // For backward compatibility
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDAddress3: subdealer.SDAddress3,
+          SDState: subdealer.SDState,
+          address: {
+            street: subdealer.SDAddress1 || '',
+            city: subdealer.SDAddress2 || '',
+            state: subdealer.SDState || '',
+            pincode: subdealer.SDPincode || '',
+            country: subdealer.SDCountry || 'India',
+          },
+        }));
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Sub dealers loaded from SubDealer table:', mappedSubDealers.length);
       } else {
         console.log('❌ Failed to load sub dealers:', subDealersResponse?.message || 'Unknown error');
         // Don't show error alert for sub dealers since it's optional
@@ -885,14 +932,14 @@ const AdminCreateOrder = () => {
       const finalSummary = calculateOrderSummary(itemsWithQuantity);
       const orderData: any = {
         customerId: selectedDealer._id,
-        customerName: selectedDealer.name,
-        customerEmail: selectedDealer.email,
-        customerMobile: selectedDealer.mobile,
+        customerName: selectedDealer.LedgerName || selectedDealer.name,
+        customerEmail: selectedDealer.Email || selectedDealer.email || '',
+        customerMobile: selectedDealer.LedgerMobile || selectedDealer.mobile || '',
         customerAddress: normalizeAddress(selectedDealer.address),
-        dealerId: selectedDealer._id, // Save dealer ID separately
-        dealerName: selectedDealer.name,
-        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately
-        subDealerName: selectedSubDealer ? selectedSubDealer.name : null,
+        dealerId: selectedDealer._id, // Save dealer ID separately (from Ledger)
+        dealerName: selectedDealer.LedgerName || selectedDealer.name,
+        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately (from SubDealer)
+        subDealerName: selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name) : null,
         shippingAddress: selectedSubDealer
           ? normalizeAddress(selectedSubDealer.address)
           : normalizeAddress(selectedDealer.address),
@@ -926,6 +973,7 @@ const AdminCreateOrder = () => {
         otherReference: trimmedOtherReference,
         termsOfDelivery1: trimmedTermsOfDelivery1,
         termsOfDelivery2: trimmedTermsOfDelivery2,
+        orderEntryDate: orderEntryDate,
         status: 'draft',
         orderType: 'admin_created',
       };
@@ -990,10 +1038,10 @@ const AdminCreateOrder = () => {
       style={styles.dropdownItem}
       onPress={() => handleDealerSelect(item)}
     >
-      <Text style={styles.dropdownItemText}>{item.name}</Text>
-      <Text style={styles.dropdownItemSubtext}>{item.mobile}</Text>
-      {item.email ? (
-        <Text style={styles.dropdownItemMeta}>{item.email}</Text>
+      <Text style={styles.dropdownItemText}>{item.LedgerName || item.name}</Text>
+      <Text style={styles.dropdownItemSubtext}>{item.LedgerMobile || item.mobile}</Text>
+      {(item.Email || item.email) ? (
+        <Text style={styles.dropdownItemMeta}>{item.Email || item.email}</Text>
       ) : null}
       {item.address ? (
         <Text style={styles.dropdownItemMeta}>{formatAddress(item.address)}</Text>
@@ -1006,7 +1054,7 @@ const AdminCreateOrder = () => {
       style={styles.dropdownItem}
       onPress={() => handleSubDealerSelect(item)}
     >
-      <Text style={styles.dropdownItemText}>{item.name}</Text>
+      <Text style={styles.dropdownItemText}>{item.SDName || item.name}</Text>
       <Text style={styles.dropdownItemSubtext}>{formatAddress(item.address)}</Text>
     </TouchableOpacity>
   );
@@ -1301,7 +1349,7 @@ const AdminCreateOrder = () => {
               }}
             >
               <Text style={[styles.dropdownButtonText, !selectedDealer && styles.placeholderText]}>
-                {selectedDealer ? selectedDealer.name : 'Select Dealer'}
+                {selectedDealer ? (selectedDealer.LedgerName || selectedDealer.name) : 'Select Dealer'}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#6B7280" />
             </TouchableOpacity>
@@ -1342,7 +1390,7 @@ const AdminCreateOrder = () => {
             >
               <Text style={[styles.dropdownButtonText, !selectedSubDealer && styles.placeholderText]}>
                 {loading ? 'Loading sub dealers...' : 
-                selectedSubDealer ? selectedSubDealer.name : 
+                selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name) : 
                 subDealers.length > 0 ? 'Select Sub Dealer (Optional)' : 
                 'No Sub Dealers Available'}
               </Text>
@@ -1452,6 +1500,15 @@ const AdminCreateOrder = () => {
             </View>
           </View>
         )}
+
+        {/* Date of Order Entry */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Date of Order Entry</Text>
+          <View style={styles.dateDisplayContainer}>
+            <Ionicons name="calendar-outline" size={20} color="#3B82F6" />
+            <Text style={styles.dateDisplayText}>{orderEntryDate}</Text>
+          </View>
+        </View>
 
         {/* Payment Mode */}
         <View style={styles.section}>
@@ -1979,6 +2036,22 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     textAlignVertical: 'top',
     minHeight: 80,
+  },
+  dateDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  dateDisplayText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1F2937',
   },
   createButton: {
     backgroundColor: '#3B82F6',

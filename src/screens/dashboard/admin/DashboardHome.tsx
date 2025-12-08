@@ -21,6 +21,7 @@ import { RootStackParamList } from '../../../navigation/types';
 import Profile from '../../../../assets/images/profile.png'
 import DashboardHeader from './AdminHeader';
 import { useAuth } from '../../../context/AuthContext';
+import CreateDealerModal from './CreateDealerModal';
 
 const { width } = Dimensions.get('window');
 
@@ -49,25 +50,28 @@ const getMembers = (userCounts: {[key: string]: number}): Member[] => [
   { id: '2', name: 'RSM', role: 'rsm', color: '#10B981', navigationScreen: 'RSMScreen' as keyof RootStackParamList, count: userCounts.rsm || 0 },
   { id: '3', name: 'ASM', role: 'asm', color: '#F59E0B', navigationScreen: 'ASMScreen' as keyof RootStackParamList, count: userCounts.asm || 0 },
   { id: '4', name: 'Sales', role: 'salesman', color: '#EF4444', navigationScreen: 'SalesScreen' as keyof RootStackParamList, count: userCounts.salesman || 0 },
-  { id: '5', name: 'Dealer', role: 'dealers', color: '#8B5CF6', navigationScreen: 'DealerScreen' as keyof RootStackParamList, count: userCounts.dealers || 0 },
-  { id: '6', name: 'Sub Dealer', role: 'subdealer', color: '#EC4899', navigationScreen: 'DealerScreen' as keyof RootStackParamList, count: userCounts.subdealer || 0 },
-  { id: '7', name: 'Distributors', role: 'distibutors', color: '#06B6D4', navigationScreen: 'DistributorsScreen' as keyof RootStackParamList, count: userCounts.distibutors || 0 },
+  // Note: Dealers and subdealers are now managed separately through Ledger and SubDealer models
+  // Removed from user management menu items
+  { id: '6', name: 'Distributors', role: 'distibutors', color: '#06B6D4', navigationScreen: 'DistributorsScreen' as keyof RootStackParamList, count: userCounts.distibutors || 0 },
 ];
 
 const menuItems: MenuItem[] = [
   { label: 'User Management', icon: 'people-outline', iconType: 'Ionicons', navigationScreen: 'Users' },
+  { label: 'Groups', icon: 'folder-outline', iconType: 'Ionicons', navigationScreen: 'Groups' },
   { label: 'Product Management', icon: 'cube-outline', iconType: 'Ionicons', navigationScreen: 'Product' },
   { label: 'Create Order', icon: 'add-circle-outline', iconType: 'Ionicons', navigationScreen: 'AdminCreateOrder' },
   { label: 'My Orders', icon: 'list-outline', iconType: 'Ionicons', navigationScreen: 'AdminOrderList' },
   { label: 'Order Monitoring', icon: 'eye-outline', iconType: 'Ionicons', navigationScreen: 'SaleOrders' },
   { label: 'Sales Overview', icon: 'trending-up-outline', iconType: 'Ionicons', navigationScreen: 'Sales' },
   { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },
-  { label: 'Ledger', icon: 'book-outline', iconType: 'Ionicons', navigationScreen: 'LedgerScreen' },
   { label: 'Target Management', icon: 'target', iconType: 'MaterialCommunityIcons', navigationScreen: 'TargetScreen' },
   { label: 'Assign Targets', icon: 'add-circle-outline', iconType: 'Ionicons', navigationScreen: 'TargetAssignmentScreen' },
   { label: 'Pending Orders', icon: 'time-outline', iconType: 'Ionicons', navigationScreen: 'PendingOrdersScreen' },
   { label: 'Approved Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ApprovedOrdersScreen' },
 ];
+
+// Dealer section menu item (not in navigation, handled separately)
+const dealerMenuItem = { label: 'Create Dealer', icon: 'storefront-outline', iconType: 'Ionicons' as IconType };
 
 // Chart data will be fetched from API
 
@@ -81,6 +85,7 @@ const DashboardHome = () => {
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [stockData, setStockData] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [showCreateDealerModal, setShowCreateDealerModal] = useState(false);
 
   const { user, isAuthenticated, getCompanyData, getUsersByCompany, getStockSummary } = useAuth();
 
@@ -91,8 +96,7 @@ const DashboardHome = () => {
       'rsm': '#10B981',
       'asm': '#F59E0B',
       'salesman': '#EF4444',
-      'dealers': '#8B5CF6',
-      'subdealer': '#06B6D4',
+      // Dealers and subdealers removed - managed separately
       'distibutors': '#84CC16',
     };
     return colors[role] || '#6B7280';
@@ -104,7 +108,8 @@ const DashboardHome = () => {
 
     try {
       const roleCounts: {[key: string]: number} = {};
-      const roles = ['zonal', 'rsm', 'asm', 'salesman', 'dealers', 'subdealer', 'distibutors'];
+      // Exclude dealers and subdealers from user counts (managed separately)
+      const roles = ['zonal', 'rsm', 'asm', 'salesman', 'distibutors'];
       
       for (const role of roles) {
         try {
@@ -321,16 +326,20 @@ const DashboardHome = () => {
               
               <View style={styles.statsContainer}>
                 <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{companyData.statistics?.totalMembers || companyData.statistics?.totalUsers || 0}</Text>
+                  <Text style={styles.statLabel}>Total Members</Text>
+                </View>
+                <View style={styles.statItem}>
                   <Text style={styles.statValue}>{companyData.statistics?.totalUsers || 0}</Text>
-                  <Text style={styles.statLabel}>Total Users</Text>
+                  <Text style={styles.statLabel}>Users</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{companyData.statistics?.maxUsersAllowed || 0}</Text>
-                  <Text style={styles.statLabel}>Max Users</Text>
+                  <Text style={styles.statValue}>{companyData.statistics?.totalDealers || 0}</Text>
+                  <Text style={styles.statLabel}>Dealers</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{companyData.statistics?.usagePercentage || 0}%</Text>
-                  <Text style={styles.statLabel}>Usage</Text>
+                  <Text style={styles.statValue}>{companyData.statistics?.totalSubDealers || 0}</Text>
+                  <Text style={styles.statLabel}>SubDealers</Text>
                 </View>
               </View>
             </View>
@@ -383,8 +392,11 @@ const DashboardHome = () => {
                   <Ionicons name="people" size={24} color="#3B82F6" />
                 </View>
                 <View style={styles.userStatInfo}>
-                  <Text style={styles.userStatValue}>{companyData?.statistics?.totalUsers || 0}</Text>
-                  <Text style={styles.userStatLabel}>Total Users</Text>
+                  <Text style={styles.userStatValue}>{companyData?.statistics?.totalMembers || companyData?.statistics?.totalUsers || 0}</Text>
+                  <Text style={styles.userStatLabel}>Total Members</Text>
+                  <Text style={styles.userStatSubLabel}>
+                    {companyData?.statistics?.totalUsers || 0} Users, {companyData?.statistics?.totalDealers || 0} Dealers, {companyData?.statistics?.totalSubDealers || 0} SubDealers
+                  </Text>
                 </View>
               </View>
               <View style={styles.userStatItem}>
@@ -444,6 +456,46 @@ const DashboardHome = () => {
                 ))}
               </View>
             )}
+          </View>
+        </View>
+
+        {/* Dealer Section */}
+        <View style={styles.dealerSection}>
+          <Text style={styles.sectionTitle}>Dealer Management</Text>
+          <View style={styles.sectionCard}>
+            <TouchableOpacity
+              style={styles.dealerCard}
+              onPress={() => navigation.navigate('DealersList' as any)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.dealerCardContent}>
+                <View style={styles.dealerIconContainer}>
+                  {renderIcon(dealerMenuItem.icon, dealerMenuItem.iconType, 28, '#8B5CF6')}
+                </View>
+                <View style={styles.dealerCardText}>
+                  <Text style={styles.dealerCardTitle}>Dealers</Text>
+                  <Text style={styles.dealerCardSubtitle}>Manage all dealers</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.dealerCard, { marginTop: 12 }]}
+              onPress={() => navigation.navigate('SubDealersList' as any)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.dealerCardContent}>
+                <View style={[styles.dealerIconContainer, { backgroundColor: '#FEF3C7' }]}>
+                  {renderIcon('people-outline', 'Ionicons', 28, '#F59E0B')}
+                </View>
+                <View style={styles.dealerCardText}>
+                  <Text style={styles.dealerCardTitle}>Subdealers</Text>
+                  <Text style={styles.dealerCardSubtitle}>Manage all subdealers</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -513,6 +565,16 @@ const DashboardHome = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Create Dealer Modal */}
+      <CreateDealerModal
+        visible={showCreateDealerModal}
+        onClose={() => setShowCreateDealerModal(false)}
+        onSuccess={() => {
+          // Refresh data if needed
+          fetchUserCounts();
+        }}
+      />
     </View>
   );
 };
@@ -675,6 +737,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
+  userStatSubLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 2,
+  },
   roleStatsContainer: {
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
@@ -816,6 +884,49 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontWeight: '500',
     textAlign: 'center',
+  },
+  dealerSection: {
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  dealerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dealerCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dealerIconContainer: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#F3E8FF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  dealerCardText: {
+    flex: 1,
+  },
+  dealerCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  dealerCardSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
   },
   menuSection: {
     paddingHorizontal: 16,

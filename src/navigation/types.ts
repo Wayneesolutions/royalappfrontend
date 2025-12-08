@@ -64,6 +64,7 @@ type AdminStackParamList = {
   DashboardAdmin: undefined;
   Companies: undefined;
   Users: undefined;
+  Groups: undefined;
   Product: undefined;
   ProductSummary: { cart: any[] };
   Sales: undefined;
@@ -80,10 +81,8 @@ type AdminStackParamList = {
   RSMScreen: undefined;
   ASMScreen: undefined;
   DistributorsScreen: undefined;
-  DealerScreen: undefined;
   SalesScreen: undefined;
   InvoiceScreen: undefined;
-  LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
   ApprovedOrdersScreen: undefined;
@@ -94,6 +93,8 @@ type AdminStackParamList = {
       AdminCreateOrder: undefined;
       AdminOrderList: undefined;
       AdminEditOrder: undefined;
+      DealersList: undefined;
+      SubDealersList: undefined;
 } & CommonStackParamList;
 
 // ==================== ZONAL SCREENS (ZSM - Zonal Sales Manager) ====================
@@ -126,10 +127,8 @@ type ZonalStackParamList = {
   RSMScreen: undefined;
   ASMScreen: undefined;
   DistributorsScreen: undefined;
-  DealerScreen: undefined;
   SalesScreen: undefined;
   InvoiceScreen: undefined;
-  LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
   ApprovedOrdersScreen: undefined;
@@ -168,10 +167,8 @@ export type RSMStackParamList = {
   RSMScreen: undefined;
   ASMScreen: undefined;
   DistributorsScreen: undefined;
-  DealerScreen: undefined;
   SalesScreen: undefined;
   InvoiceScreen: undefined;
-  LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
   ApprovedOrdersScreen: undefined;
@@ -210,10 +207,8 @@ export type ASMStackParamList = {
   RSMScreen: undefined;
   ASMScreen: undefined;
   DistributorsScreen: undefined;
-  DealerScreen: undefined;
   SalesScreen: undefined;
   InvoiceScreen: undefined;
-  LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
   ApprovedOrdersScreen: undefined;
@@ -266,7 +261,6 @@ type SubDealerStackParamList = {
   PendingApprovalsScreen: undefined;
   SalesScreen: undefined;
   InvoiceScreen: undefined;
-  LedgerScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
 } & CommonStackParamList;
@@ -284,7 +278,6 @@ type SalesmanStackParamList = {
   PendingApprovalsScreen: undefined;
   SalesScreen: undefined;
   InvoiceScreen: undefined;
-  LedgerScreen: undefined;
   TargetScreen: undefined;
 } & CommonStackParamList;
 
