@@ -2,13 +2,10 @@
 export enum UserRole {
   SUPERADMIN = 'superadmin',
   ADMIN = 'admin',
-  ZONAL = 'zonal',
-  RSM = 'rsm',
-  ASM = 'asm',
-  DISTRIBUTOR = 'distibutors', // Backend uses 'distibutors' (with typo)
+  GROUP_USER = 'groupuser', // Regular users without specific roles - all get same dashboard
   DEALER = 'dealers', // Backend uses 'dealers' (plural)
   SUB_DEALER = 'subdealer', // Backend uses 'subdealer' (no hyphen)
-  SALESMAN = 'salesman',
+  // Removed roles: ZONAL, RSM, ASM, DISTRIBUTOR, SALESMAN - no longer used
 }
 
 export interface User {
@@ -217,6 +214,14 @@ export type ASMStackParamList = {
   TargetAssignmentScreen: undefined;
 } & CommonStackParamList;
 
+// ==================== GROUP USER SCREENS ====================
+type GroupUserStackParamList = {
+  DashboardGroupUser: undefined;
+  AdminCreateOrder: undefined;
+  AdminOrderList: undefined;
+  AdminEditOrder: { order: any };
+} & CommonStackParamList;
+
 // ==================== DISTRIBUTOR SCREENS ====================
 type DistributorStackParamList = {
   DashboardDistributor: undefined;
@@ -286,6 +291,7 @@ type SalesmanStackParamList = {
 export type RootStackParamList = 
   & SuperAdminStackParamList 
   & AdminStackParamList 
+  & GroupUserStackParamList
   & ZonalStackParamList
   & RSMStackParamList
   & ASMStackParamList
@@ -298,11 +304,8 @@ export type RootStackParamList =
 export type RoleStackParamList<T extends UserRole> = 
   T extends UserRole.SUPERADMIN ? SuperAdminStackParamList :
   T extends UserRole.ADMIN ? AdminStackParamList :
-  T extends UserRole.ZONAL ? ZonalStackParamList :
-  T extends UserRole.RSM ? RSMStackParamList :
-  T extends UserRole.ASM ? ASMStackParamList :
-  T extends UserRole.DISTRIBUTOR ? DistributorStackParamList :
+  T extends UserRole.GROUP_USER ? GroupUserStackParamList :
   T extends UserRole.DEALER ? DealerStackParamList :
   T extends UserRole.SUB_DEALER ? SubDealerStackParamList :
-  T extends UserRole.SALESMAN ? SalesmanStackParamList :
+  // Removed: ZONAL, RSM, ASM, DISTRIBUTOR, SALESMAN - no longer used
   never;

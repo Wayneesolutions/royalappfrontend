@@ -42,8 +42,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "3e40e954-0a02-49a9-b03d-527a5f9aa53f"
+        "projectId": "11f12180-3b65-4031-97d4-4e1282171b6e"
       }
-    }
+    },
+    "owner": "sanuexpo7"
   }
 }

@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
+  Platform,
+  Dimensions,
 } from "react-native";
 import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import { useAuth } from "../../../../context/AuthContext";
@@ -119,6 +121,8 @@ interface Group {
 
 const Users = () => {
   const { user, getUsersByCompany, createUser, editUser, deleteUser } = useAuth();
+  const screenWidth = Dimensions.get('window').width;
+  const isWeb = Platform.OS === 'web';
   const route = useRoute();
   const routeParams = route.params as { role?: string } | undefined;
   
@@ -165,13 +169,9 @@ const Users = () => {
   const [showGroupSelector, setShowGroupSelector] = useState(false);
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
 
-  const availableRoles = [
-    { value: 'zonal', label: 'Zonal Manager', level: 2 },
-    { value: 'rsm', label: 'Regional Sales Manager', level: 3 },
-    { value: 'asm', label: 'Area Sales Manager', level: 4 },
-    { value: 'distibutors', label: 'Distributor', level: 6 },
-    { value: 'salesman', label: 'Salesman', level: 5 },
-  ];
+  // Note: Regular users created by admin don't need roles - they are group users
+  // Only superadmin, admin, dealers, and subdealers have roles
+  const availableRoles: any[] = []; // Empty - no role selection for regular users
 
   // All roles that can be selected as parent (dealers and subdealers removed - managed separately)
   const parentRoles = [
@@ -301,30 +301,18 @@ const Users = () => {
 
   // Get role label
   const getRoleLabel = (role: string) => {
-    const roleObj = availableRoles.find(r => r.value === role);
-    return roleObj ? roleObj.label : role.toUpperCase();
+    // All users are group users
+    if (!role || role === 'groupuser' || role === '') {
+      return 'Group User';
+    }
+    // For legacy roles, show as-is
+    return role.charAt(0).toUpperCase() + role.slice(1);
   };
 
-  // Group users by role for main list display
+  // All users are group users - no need to group by role
   const groupUsersByRoleForDisplay = () => {
-    const grouped: { [key: string]: User[] } = {};
-    
-    filteredUsers.forEach((user) => {
-      if (!grouped[user.role]) {
-        grouped[user.role] = [];
-      }
-      grouped[user.role].push(user);
-    });
-
-    // Sort groups by role hierarchy order
-    const sortedGroups: { [key: string]: User[] } = {};
-    roleOrder.forEach((role) => {
-      if (grouped[role]) {
-        sortedGroups[role] = grouped[role].sort((a, b) => a.name.localeCompare(b.name));
-      }
-    });
-
-    return sortedGroups;
+    // Simply return all users as group users
+    return { 'groupuser': filteredUsers.sort((a, b) => a.name.localeCompare(b.name)) };
   };
 
   // Get group name from user.groups or primaryGroup
@@ -415,8 +403,8 @@ const Users = () => {
   };
 
   const handleCreateUser = async () => {
-    if (!formData.name || !formData.mobile || !formData.password || !formData.role) {
-      Alert.alert("Missing Fields", "Please fill in all required fields (Name, Mobile, Password, Role).");
+    if (!formData.name || !formData.mobile || !formData.password) {
+      Alert.alert("Missing Fields", "Please fill in all required fields (Name, Mobile, Password).");
       return;
     }
 
@@ -432,7 +420,9 @@ const Users = () => {
         email: formData.email || undefined, // Make email optional
         mobile: formData.mobile,
         password: formData.password,
-        role: formData.role,
+        // Note: Regular users don't have roles - they are group users
+        // Role will be set to 'groupuser' by backend if not provided
+        role: 'groupuser', // Default role for group users
         parentUserId: formData.parentUserId || undefined, // Make parent user optional
         groupId: formData.groupId || undefined, // Group assignment (optional)
         userName: formData.email || undefined, // Use email as username if provided
@@ -540,8 +530,8 @@ const Users = () => {
   const handleUpdateUser = async () => {
     if (!editingUser) return;
 
-    if (!formData.name || !formData.mobile || !formData.role) {
-      Alert.alert("Missing Fields", "Please fill in all required fields (Name, Mobile, Role).");
+    if (!formData.name || !formData.mobile) {
+      Alert.alert("Missing Fields", "Please fill in all required fields (Name, Mobile).");
       return;
     }
 
@@ -560,7 +550,7 @@ const Users = () => {
         name: formData.name,
         email: formData.email || undefined,
         mobile: formData.mobile,
-        role: formData.role,
+        role: 'groupuser', // All users are group users (no role selection)
         parentUserId: formData.parentUserId || undefined, // Make parent user optional
         groupId: formData.groupId || undefined, // Group assignment (optional)
         userName: formData.email || undefined,
@@ -648,6 +638,232 @@ const Users = () => {
     );
   };
 
+  // Render modal form content (reusable for both web and mobile)
+  const renderModalFormContent = () => {
+    return (
+      <>
+        <TextInput
+          placeholder="Full Name *"
+          value={formData.name}
+          onChangeText={(text) => setFormData({ ...formData, name: text })}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Email Address (Optional)"
+          value={formData.email}
+          onChangeText={(text) => setFormData({ ...formData, email: text })}
+          keyboardType="email-address"
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Mobile Number *"
+          value={formData.mobile}
+          onChangeText={(text) => setFormData({ ...formData, mobile: text })}
+          keyboardType="phone-pad"
+          style={styles.input}
+        />
+        <TextInput
+          placeholder={isEditMode ? "Password (Leave blank to keep current)" : "Password *"}
+          value={formData.password}
+          onChangeText={(text) => setFormData({ ...formData, password: text })}
+          secureTextEntry
+          style={styles.input}
+        />
+        
+        {/* Select Group Section */}
+        <Text style={styles.sectionLabel}>Assign to Group (Optional)</Text>
+        <Text style={styles.helperText}>
+          Optionally assign user to an existing group. If not selected, a group will be automatically created.
+        </Text>
+        
+        {formData.groupId ? (
+          <View style={styles.selectedGroupContainer}>
+            <View style={styles.selectedGroupInfo}>
+              <Ionicons name="folder" size={20} color="#0493D2" />
+              <View style={styles.selectedGroupDetails}>
+                <Text style={styles.selectedGroupName}>
+                  {allGroups.find(g => g._id === formData.groupId)?.GroupName || 'Selected Group'}
+                </Text>
+                <Text style={styles.selectedGroupGUID}>
+                  GUID: {allGroups.find(g => g._id === formData.groupId)?.GroupGUID || 'N/A'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.removeGroupButton}
+              onPress={() => setFormData({ ...formData, groupId: '' })}
+            >
+              <Ionicons name="close-circle" size={24} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.groupSelectorButton}
+            onPress={() => {
+              if (!showGroupSelector) {
+                fetchAllGroups();
+              }
+              setShowGroupSelector(!showGroupSelector);
+            }}
+          >
+            <View style={styles.groupSelectorContent}>
+              <Ionicons name="folder-outline" size={20} color="#6B7280" />
+              <Text style={styles.groupSelectorText}>Select Group (Optional)</Text>
+              <Ionicons 
+                name={showGroupSelector ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#6B7280" 
+              />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {showGroupSelector && (
+          <View style={styles.groupSelectorDropdown}>
+            <View style={styles.groupSearchContainer}>
+              <Ionicons name="search" size={16} color="#9CA3AF" />
+              <TextInput
+                style={styles.groupSearchInput}
+                placeholder="Search groups..."
+                value={groupSearchQuery}
+                onChangeText={setGroupSearchQuery}
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            
+            <ScrollView 
+              style={styles.groupListContainer} 
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {loadingGroups ? (
+                <View style={styles.groupLoadingContainer}>
+                  <ActivityIndicator size="small" color="#0493D2" />
+                  <Text style={styles.groupLoadingText}>Loading groups...</Text>
+                </View>
+              ) : (() => {
+                const filteredGroups = allGroups.filter(group => {
+                  const searchLower = groupSearchQuery.toLowerCase();
+                  return (
+                    group.GroupName.toLowerCase().includes(searchLower) ||
+                    group.GroupGUID.toLowerCase().includes(searchLower) ||
+                    (group.Remarks && group.Remarks.toLowerCase().includes(searchLower))
+                  );
+                });
+                
+                return filteredGroups.length > 0 ? (
+                  filteredGroups.map((group) => {
+                    const isSelected = formData.groupId === group._id;
+                    return (
+                      <TouchableOpacity
+                        key={group._id}
+                        style={[
+                          styles.groupItem,
+                          isSelected && styles.groupItemSelected
+                        ]}
+                        onPress={() => {
+                          setFormData({ ...formData, groupId: group._id });
+                          setShowGroupSelector(false);
+                          setGroupSearchQuery('');
+                        }}
+                      >
+                        <View style={styles.groupItemInfo}>
+                          <Ionicons name="folder" size={20} color={isSelected ? "#0493D2" : "#6B7280"} />
+                          <View style={styles.groupItemDetails}>
+                            <Text style={[
+                              styles.groupItemName,
+                              isSelected && styles.groupItemNameSelected
+                            ]}>
+                              {group.GroupName}
+                            </Text>
+                            <Text style={styles.groupItemGUID}>GUID: {group.GroupGUID}</Text>
+                            {group.Remarks && (
+                              <Text style={styles.groupItemRemarks} numberOfLines={1}>
+                                {group.Remarks}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        {isSelected && (
+                          <Ionicons name="checkmark-circle" size={20} color="#0493D2" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
+                ) : (
+                  <View style={styles.groupEmptyState}>
+                    <Ionicons name="folder-outline" size={32} color="#9CA3AF" />
+                    <Text style={styles.groupEmptyText}>No groups found</Text>
+                    <Text style={styles.groupEmptySubtext}>
+                      {groupSearchQuery ? 'Try adjusting your search' : 'Create groups first'}
+                    </Text>
+                  </View>
+                );
+              })()}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Address Section */}
+        <Text style={styles.sectionLabel}>Address Information</Text>
+        
+        <TextInput
+          placeholder="Street Address"
+          value={formData.address.street}
+          onChangeText={(text) => setFormData({ 
+            ...formData, 
+            address: { ...formData.address, street: text }
+          })}
+          style={styles.input}
+        />
+        
+        <View style={styles.addressRow}>
+          <TextInput
+            placeholder="City"
+            value={formData.address.city}
+            onChangeText={(text) => setFormData({ 
+              ...formData, 
+              address: { ...formData.address, city: text }
+            })}
+            style={[styles.input, styles.halfInput]}
+          />
+          
+          <TextInput
+            placeholder="State"
+            value={formData.address.state}
+            onChangeText={(text) => setFormData({ 
+              ...formData, 
+              address: { ...formData.address, state: text }
+            })}
+            style={[styles.input, styles.halfInput]}
+          />
+        </View>
+        
+        <View style={styles.addressRow}>
+          <TextInput
+            placeholder="Pincode"
+            value={formData.address.pincode}
+            onChangeText={(text) => setFormData({ 
+              ...formData, 
+              address: { ...formData.address, pincode: text }
+            })}
+            keyboardType="numeric"
+            style={[styles.input, styles.halfInput]}
+          />
+          
+          <TextInput
+            placeholder="Country"
+            value={formData.address.country}
+            onChangeText={(text) => setFormData({ 
+              ...formData, 
+              address: { ...formData.address, country: text }
+            })}
+            style={[styles.input, styles.halfInput]}
+          />
+        </View>
+      </>
+    );
+  };
 
   const filteredUsers = users.filter(user => 
     user.name.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -656,14 +872,12 @@ const Users = () => {
   );
 
   const getRoleColor = (role: string) => {
-    const colors: { [key: string]: string } = {
-      'zonal': '#3B82F6',
-      'rsm': '#10B981',
-      'asm': '#F59E0B',
-      'salesman': '#EF4444',
-      'distibutors': '#84CC16',
-    };
-    return colors[role] || '#6B7280';
+    // All users are group users - use a consistent color
+    if (!role || role === 'groupuser' || role === '') {
+      return '#3B82F6'; // Blue for group users
+    }
+    // For legacy roles, use gray
+    return '#6B7280';
   };
 
   const renderUserCard = ({ item }: { item: User }) => {
@@ -789,27 +1003,7 @@ const Users = () => {
             />
           </View>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleFilters}>
-            <TouchableOpacity
-              style={[styles.roleFilter, !selectedRole && styles.roleFilterActive]}
-              onPress={() => setSelectedRole('')}
-            >
-              <Text style={[styles.roleFilterText, !selectedRole && styles.roleFilterTextActive]}>
-                All
-              </Text>
-            </TouchableOpacity>
-            {availableRoles.map((role) => (
-              <TouchableOpacity
-                key={role.value}
-                style={[styles.roleFilter, selectedRole === role.value && styles.roleFilterActive]}
-                onPress={() => setSelectedRole(role.value)}
-              >
-                <Text style={[styles.roleFilterText, selectedRole === role.value && styles.roleFilterTextActive]}>
-                  {role.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {/* Role filters removed - all users created here are group users (no role-based filtering) */}
         </View>
 
         {/* Users List */}
@@ -831,63 +1025,198 @@ const Users = () => {
           </View>
         ) : (
           <View style={styles.usersListContainer}>
-            {Object.keys(groupUsersByRoleForDisplay()).map((role) => {
-              const roleUsers = groupUsersByRoleForDisplay()[role];
-              return (
-                <View key={role} style={styles.roleGroupContainer}>
-                  <View style={styles.roleGroupHeader}>
-                    <View style={[styles.roleGroupBadge, { backgroundColor: getRoleColor(role) }]}>
-                      <Text style={styles.roleGroupBadgeText}>{getRoleLabel(role)}</Text>
-                    </View>
-                    <Text style={styles.roleGroupCount}>({roleUsers.length} {roleUsers.length === 1 ? 'user' : 'users'})</Text>
-                  </View>
-                  {roleUsers.map((user) => (
-                    <View key={user._id}>
-                      {renderUserCard({ item: user })}
-                    </View>
-                  ))}
-                </View>
-              );
-            })}
+            {/* All users are group users - display in a single list */}
+            {filteredUsers.map((user: User) => (
+              <View key={user._id}>
+                {renderUserCard({ item: user })}
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Add User Sidebar - Bottom to Top */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <TouchableOpacity 
-          style={styles.sidebarOverlay}
-          activeOpacity={1}
-          onPress={() => {
-            setModalVisible(false);
-            setEditingUser(null);
-            setIsEditMode(false);
-            setShowParentSelector(false);
-            setParentSearchQuery('');
-            setFormData({ 
-              name: "", 
-              email: "", 
-              mobile: "", 
-              password: "", 
-              role: "",
-              parentUserId: "",
-              groupId: "", // Reset group selection
-              address: {
-                street: "",
-                city: "",
-                state: "",
-                pincode: "",
-                country: "India"
-              },
-            });
-          }}
-        >
+      {/* Add User Modal - Responsive for Mobile and Web */}
+      <Modal 
+        visible={modalVisible} 
+        animationType={isWeb ? 'fade' : 'slide'} 
+        transparent={isWeb}
+        presentationStyle={isWeb ? undefined : 'pageSheet'}
+        onRequestClose={() => {
+          setModalVisible(false);
+          setEditingUser(null);
+          setIsEditMode(false);
+          setShowParentSelector(false);
+          setParentSearchQuery('');
+          setFormData({ 
+            name: "", 
+            email: "", 
+            mobile: "", 
+            password: "", 
+            role: "",
+            parentUserId: "",
+            groupId: "",
+            address: {
+              street: "",
+              city: "",
+              state: "",
+              pincode: "",
+              country: "India"
+            },
+          });
+        }}
+      >
+        {isWeb ? (
+          // Web: Centered Modal
+          <View style={styles.webModalOverlay}>
+            <TouchableOpacity 
+              style={styles.webModalOverlayTouchable}
+              activeOpacity={1}
+              onPress={() => {
+                setModalVisible(false);
+                setEditingUser(null);
+                setIsEditMode(false);
+                setShowParentSelector(false);
+                setParentSearchQuery('');
+                setFormData({ 
+                  name: "", 
+                  email: "", 
+                  mobile: "", 
+                  password: "", 
+                  role: "",
+                  parentUserId: "",
+                  groupId: "",
+                  address: {
+                    street: "",
+                    city: "",
+                    state: "",
+                    pincode: "",
+                    country: "India"
+                  },
+                });
+              }}
+            >
+              <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+                <View style={[styles.webModalContainer, { maxWidth: Math.min(600, screenWidth - 40) }]}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>
+                      {isEditMode ? 'Edit User' : 'Add New User'}
+                    </Text>
+                    <TouchableOpacity onPress={() => {
+                      setModalVisible(false);
+                      setEditingUser(null);
+                      setIsEditMode(false);
+                      setShowParentSelector(false);
+                      setParentSearchQuery('');
+                      setFormData({ 
+                        name: "", 
+                        email: "", 
+                        mobile: "", 
+                        password: "", 
+                        role: "",
+                        parentUserId: "",
+                        groupId: "",
+                        address: {
+                          street: "",
+                          city: "",
+                          state: "",
+                          pincode: "",
+                          country: "India"
+                        },
+                      });
+                    }}>
+                      <Ionicons name="close" size={24} color="#6B7280" />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView
+                    style={styles.modalContent}
+                    contentContainerStyle={styles.modalContentContainer}
+                    showsVerticalScrollIndicator={true}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {renderModalFormContent()}
+                  </ScrollView>
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={styles.cancelBtn}
+                      onPress={() => {
+                        setModalVisible(false);
+                        setEditingUser(null);
+                        setIsEditMode(false);
+                        setShowParentSelector(false);
+                        setParentSearchQuery('');
+                        setFormData({ 
+                          name: "", 
+                          email: "", 
+                          mobile: "", 
+                          password: "", 
+                          role: "",
+                          parentUserId: "",
+                          groupId: "",
+                          address: {
+                            street: "",
+                            city: "",
+                            state: "",
+                            pincode: "",
+                            country: "India"
+                          },
+                        });
+                      }}
+                    >
+                      <Text style={styles.cancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.saveBtn, creatingUser && styles.saveBtnDisabled]}
+                      onPress={isEditMode ? handleUpdateUser : handleCreateUser}
+                      disabled={creatingUser}
+                    >
+                      {creatingUser ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.saveText}>
+                          {isEditMode ? 'Update' : 'Create'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          // Mobile: Bottom Sheet
+          <TouchableOpacity 
+            style={styles.sidebarOverlay}
+            activeOpacity={1}
+            onPress={() => {
+              setModalVisible(false);
+              setEditingUser(null);
+              setIsEditMode(false);
+              setShowParentSelector(false);
+              setParentSearchQuery('');
+              setFormData({ 
+                name: "", 
+                email: "", 
+                mobile: "", 
+                password: "", 
+                role: "",
+                parentUserId: "",
+                groupId: "",
+                address: {
+                  street: "",
+                  city: "",
+                  state: "",
+                  pincode: "",
+                  country: "India"
+                },
+              });
+            }}
+          >
             <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.sidebarContainer}>
-              {/* Drag Handle */}
-              <View style={styles.sidebarDragHandle} />
-              
-            <View style={styles.sidebarHeader}>
+              <View style={styles.sidebarContainer}>
+                {/* Drag Handle */}
+                <View style={styles.sidebarDragHandle} />
+                
+                <View style={styles.sidebarHeader}>
               <Text style={styles.sidebarTitle}>
                 {isEditMode ? 'Edit User' : 'Add New User'}
               </Text>
@@ -927,259 +1256,7 @@ const Users = () => {
               bounces={true}
               alwaysBounceVertical={false}
             >
-              <TextInput
-                placeholder="Full Name *"
-                value={formData.name}
-                onChangeText={(text) => setFormData({ ...formData, name: text })}
-                style={styles.input}
-              />
-              <TextInput
-                placeholder="Email Address (Optional)"
-                value={formData.email}
-                onChangeText={(text) => setFormData({ ...formData, email: text })}
-                keyboardType="email-address"
-                style={styles.input}
-              />
-              <TextInput
-                placeholder="Mobile Number *"
-                value={formData.mobile}
-                onChangeText={(text) => setFormData({ ...formData, mobile: text })}
-                keyboardType="phone-pad"
-                style={styles.input}
-              />
-              <TextInput
-                placeholder={isEditMode ? "Password (Leave blank to keep current)" : "Password *"}
-                value={formData.password}
-                onChangeText={(text) => setFormData({ ...formData, password: text })}
-                secureTextEntry
-                style={styles.input}
-              />
-              
-              <Text style={styles.roleLabel}>Select Role *</Text>
-              <View style={styles.roleOptions}>
-                {availableRoles.map((role) => (
-                  <TouchableOpacity
-                    key={role.value}
-                    style={[
-                      styles.roleOption,
-                      formData.role === role.value && styles.roleOptionSelected
-                    ]}
-                    onPress={() => {
-                      setFormData({ 
-                        ...formData, 
-                        role: role.value,
-                        // Note: Dealers and subdealers are managed separately
-                      });
-                    }}
-                  >
-                    <Text style={[
-                      styles.roleOptionText,
-                      formData.role === role.value && styles.roleOptionTextSelected
-                    ]}>
-                      {role.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Select Group Section */}
-              <Text style={styles.sectionLabel}>Assign to Group (Optional)</Text>
-              <Text style={styles.helperText}>
-                Optionally assign user to an existing group. If not selected, a group will be automatically created.
-              </Text>
-              
-              {formData.groupId ? (
-                <View style={styles.selectedGroupContainer}>
-                  <View style={styles.selectedGroupInfo}>
-                    <Ionicons name="folder" size={20} color="#0493D2" />
-                    <View style={styles.selectedGroupDetails}>
-                      <Text style={styles.selectedGroupName}>
-                        {allGroups.find(g => g._id === formData.groupId)?.GroupName || 'Selected Group'}
-                      </Text>
-                      <Text style={styles.selectedGroupGUID}>
-                        GUID: {allGroups.find(g => g._id === formData.groupId)?.GroupGUID || 'N/A'}
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.removeGroupButton}
-                    onPress={() => setFormData({ ...formData, groupId: '' })}
-                  >
-                    <Ionicons name="close-circle" size={24} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.groupSelectorButton}
-                  onPress={() => {
-                    if (!showGroupSelector) {
-                      fetchAllGroups();
-                    }
-                    setShowGroupSelector(!showGroupSelector);
-                  }}
-                >
-                  <View style={styles.groupSelectorContent}>
-                    <Ionicons name="folder-outline" size={20} color="#6B7280" />
-                    <Text style={styles.groupSelectorText}>Select Group (Optional)</Text>
-                    <Ionicons 
-                      name={showGroupSelector ? "chevron-up" : "chevron-down"} 
-                      size={20} 
-                      color="#6B7280" 
-                    />
-                  </View>
-                </TouchableOpacity>
-              )}
-
-              {showGroupSelector && (
-                <View style={styles.groupSelectorDropdown}>
-                  {/* Search */}
-                  <View style={styles.groupSearchContainer}>
-                    <Ionicons name="search" size={16} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.groupSearchInput}
-                      placeholder="Search groups..."
-                      value={groupSearchQuery}
-                      onChangeText={setGroupSearchQuery}
-                      placeholderTextColor="#9CA3AF"
-                    />
-                  </View>
-                  
-                  <ScrollView 
-                    style={styles.groupListContainer} 
-                    nestedScrollEnabled={true}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {loadingGroups ? (
-                      <View style={styles.groupLoadingContainer}>
-                        <ActivityIndicator size="small" color="#0493D2" />
-                        <Text style={styles.groupLoadingText}>Loading groups...</Text>
-                      </View>
-                    ) : (() => {
-                      const filteredGroups = allGroups.filter(group => {
-                        const searchLower = groupSearchQuery.toLowerCase();
-                        return (
-                          group.GroupName.toLowerCase().includes(searchLower) ||
-                          group.GroupGUID.toLowerCase().includes(searchLower) ||
-                          (group.Remarks && group.Remarks.toLowerCase().includes(searchLower))
-                        );
-                      });
-                      
-                      return filteredGroups.length > 0 ? (
-                        filteredGroups.map((group) => {
-                          const isSelected = formData.groupId === group._id;
-                          return (
-                            <TouchableOpacity
-                              key={group._id}
-                              style={[
-                                styles.groupItem,
-                                isSelected && styles.groupItemSelected
-                              ]}
-                              onPress={() => {
-                                setFormData({ ...formData, groupId: group._id });
-                                setShowGroupSelector(false);
-                                setGroupSearchQuery('');
-                              }}
-                            >
-                              <View style={styles.groupItemInfo}>
-                                <Ionicons name="folder" size={20} color={isSelected ? "#0493D2" : "#6B7280"} />
-                                <View style={styles.groupItemDetails}>
-                                  <Text style={[
-                                    styles.groupItemName,
-                                    isSelected && styles.groupItemNameSelected
-                                  ]}>
-                                    {group.GroupName}
-                                  </Text>
-                                  <Text style={styles.groupItemGUID}>GUID: {group.GroupGUID}</Text>
-                                  {group.Remarks && (
-                                    <Text style={styles.groupItemRemarks} numberOfLines={1}>
-                                      {group.Remarks}
-                                    </Text>
-                                  )}
-                                </View>
-                              </View>
-                              {isSelected && (
-                                <Ionicons name="checkmark-circle" size={20} color="#0493D2" />
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })
-                      ) : (
-                        <View style={styles.groupEmptyState}>
-                          <Ionicons name="folder-outline" size={32} color="#9CA3AF" />
-                          <Text style={styles.groupEmptyText}>No groups found</Text>
-                          <Text style={styles.groupEmptySubtext}>
-                            {groupSearchQuery ? 'Try adjusting your search' : 'Create groups first'}
-                          </Text>
-                        </View>
-                      );
-                    })()}
-                  </ScrollView>
-                </View>
-              )}
-
-
-
-              {/* Note: Dealers and subdealers are now managed separately through Ledger and SubDealer models */}
-
-
-
-              {/* Address Section */}
-              <Text style={styles.sectionLabel}>Address Information</Text>
-              
-              <TextInput
-                placeholder="Street Address"
-                value={formData.address.street}
-                onChangeText={(text) => setFormData({ 
-                  ...formData, 
-                  address: { ...formData.address, street: text }
-                })}
-                style={styles.input}
-              />
-              
-              <View style={styles.addressRow}>
-                <TextInput
-                  placeholder="City"
-                  value={formData.address.city}
-                  onChangeText={(text) => setFormData({ 
-                    ...formData, 
-                    address: { ...formData.address, city: text }
-                  })}
-                  style={[styles.input, styles.halfInput]}
-                />
-                
-                <TextInput
-                  placeholder="State"
-                  value={formData.address.state}
-                  onChangeText={(text) => setFormData({ 
-                    ...formData, 
-                    address: { ...formData.address, state: text }
-                  })}
-                  style={[styles.input, styles.halfInput]}
-                />
-              </View>
-              
-              <View style={[styles.addressRow, styles.addressRowLast]}>
-                <TextInput
-                  placeholder="Pincode"
-                  value={formData.address.pincode}
-                  onChangeText={(text) => setFormData({ 
-                    ...formData, 
-                    address: { ...formData.address, pincode: text }
-                  })}
-                  keyboardType="numeric"
-                  style={[styles.input, styles.halfInput]}
-                />
-                
-                <TextInput
-                  placeholder="Country"
-                  value={formData.address.country}
-                  onChangeText={(text) => setFormData({ 
-                    ...formData, 
-                    address: { ...formData.address, country: text }
-                  })}
-                  style={[styles.input, styles.halfInput]}
-                />
-              </View>
+              {renderModalFormContent()}
             </ScrollView>
 
             <View style={styles.sidebarActions}>
@@ -1203,9 +1280,10 @@ const Users = () => {
                 )}
               </TouchableOpacity>
             </View>
-            </View>
-            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
+          </TouchableOpacity>
+        )}
       </Modal>
     </View>
   );
@@ -1302,6 +1380,17 @@ const styles = StyleSheet.create({
   },
   roleFilterTextActive: {
     color: '#fff',
+  },
+  infoMessageContainer: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  infoMessageText: {
+    fontSize: 14,
+    color: '#1E40AF',
+    textAlign: 'center',
   },
   card: {
     backgroundColor: '#fff',
@@ -1422,6 +1511,69 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
   },
+  // Web Modal Styles
+  webModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  webModalOverlayTouchable: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: Platform.OS === 'web' ? 600 : undefined,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    flexDirection: 'column',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    paddingTop: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  modalContent: {
+    flex: 1,
+    maxHeight: 500,
+  },
+  modalContentContainer: {
+    padding: 24,
+    paddingBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 16,
+    backgroundColor: '#fff',
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
+  },
+  // Mobile Modal Styles
   sidebarOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

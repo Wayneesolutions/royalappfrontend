@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import apiService from '../../../services/api';
 import {
   DEFAULT_GST_RATE,
   computeGstBreakdown,
@@ -187,11 +188,17 @@ interface OrderItem {
   additionalUnits?: string;
 }
 
-interface User {
+interface Dealer {
   _id: string;
-  name: string;
-  email: string;
-  mobile: string;
+  LedgerName: string;
+  name?: string; // For backward compatibility
+  LedgerMobile?: string;
+  mobile?: string; // For backward compatibility
+  Email?: string;
+  email?: string; // For backward compatibility
+  LedgerAddress1?: string;
+  LedgerAddress2?: string;
+  LedgerState?: string;
   address?: {
     street?: string;
     city?: string;
@@ -199,7 +206,27 @@ interface User {
     pincode?: string;
     country?: string;
   };
-  role: string;
+}
+
+interface SubDealer {
+  _id: string;
+  SDName: string;
+  name?: string; // For backward compatibility
+  SDMobileNo?: string;
+  mobile?: string; // For backward compatibility
+  SDEmail?: string;
+  email?: string; // For backward compatibility
+  SDAddress1?: string;
+  SDAddress2?: string;
+  SDAddress3?: string;
+  SDState?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
 }
 
 interface Product {
@@ -256,6 +283,13 @@ interface Order {
   customerName: string;
   customerEmail?: string;
   customerMobile?: string;
+  customerAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
   dealerId?: string | {
     _id: string;
     email: string;
@@ -311,14 +345,24 @@ const AdminEditOrder = () => {
   const route = useRoute();
   const { order } = route.params as { order: Order };
   
+  // Store original order data for comparison
+  const [originalOrder, setOriginalOrder] = useState<Order | null>(null);
+  
   const { 
     user,
-    getUsersByRole, 
     getProducts, 
     getProductById, 
     updateOrder 
   } = useAuth();
   
+  // Helper function to validate MongoDB ObjectId format
+  const isValidObjectId = (id: string | undefined | null): boolean => {
+    if (!id || typeof id !== 'string') return false;
+    if (id === 'unknown' || id.trim() === '') return false;
+    // MongoDB ObjectId is 24 character hex string
+    return /^[0-9a-fA-F]{24}$/.test(id);
+  };
+
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
     if (!address) return 'Address not specified';
@@ -366,8 +410,8 @@ const mapPaymentMethodToLabel = (value?: string) => {
   const [updatingQuantity, setUpdatingQuantity] = useState<string | null>(null);
   
   // Form state
-  const [selectedDealer, setSelectedDealer] = useState<User | null>(null);
-  const [selectedSubDealer, setSelectedSubDealer] = useState<User | null>(null);
+  const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
+  const [selectedSubDealer, setSelectedSubDealer] = useState<SubDealer | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
 const [orderNotes, setOrderNotes] = useState('');
 const [mode, setMode] = useState('Cash');
@@ -378,15 +422,18 @@ const [termsOfDelivery1, setTermsOfDelivery1] = useState('');
 const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
   
   // Data state
-  const [dealers, setDealers] = useState<User[]>([]);
-  const [subDealers, setSubDealers] = useState<User[]>([]);
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [subDealers, setSubDealers] = useState<SubDealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   
   // UI state
   const [showDealerDropdown, setShowDealerDropdown] = useState(false);
   const [showSubDealerDropdown, setShowSubDealerDropdown] = useState(false);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState('');
+  const [dealerSearchQuery, setDealerSearchQuery] = useState('');
+  const [subDealerSearchQuery, setSubDealerSearchQuery] = useState('');
 
   const deriveSellerState = useCallback(() => {
     if ((order as any)?.sellerState) {
@@ -522,9 +569,35 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         : 'GST type unavailable';
 
   useEffect(() => {
+    // Store original order data
+    setOriginalOrder(JSON.parse(JSON.stringify(order)));
     fetchInitialData();
     initializeForm();
   }, []);
+
+  // Debug: Log when selected dealer/subdealer changes
+  useEffect(() => {
+    if (selectedDealer) {
+      console.log('📌 Selected Dealer Updated:', {
+        id: selectedDealer._id,
+        name: selectedDealer.LedgerName || selectedDealer.name,
+      });
+    } else {
+      console.log('📌 Selected Dealer is NULL');
+    }
+  }, [selectedDealer]);
+
+  useEffect(() => {
+    if (selectedSubDealer) {
+      console.log('📌 Selected SubDealer Updated:', {
+        id: selectedSubDealer._id,
+        name: selectedSubDealer.SDName || selectedSubDealer.name,
+      });
+    } else {
+      console.log('📌 Selected SubDealer is NULL');
+    }
+  }, [selectedSubDealer]);
+
 
   const initializeForm = () => {
     // Initialize form with existing order data and normalize items
@@ -642,36 +715,63 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
     try {
       setLoading(true);
       
-      // Fetch dealers
-      const dealersResponse = await getUsersByRole('dealers');
-      let dealersList = [];
-      if (Array.isArray(dealersResponse)) {
-        dealersList = dealersResponse;
-        setDealers(dealersResponse);
-      } else if (dealersResponse?.success) {
-        // Response with success field - handle nested data.users structure
-        dealersList = dealersResponse.data?.users || dealersResponse.data || dealersResponse.users || [];
-        setDealers(Array.isArray(dealersList) ? dealersList : []);
-      } else if (dealersResponse?.users && Array.isArray(dealersResponse.users)) {
-        // Response structure: {users: [...], role: 'dealers', count: 1}
-        dealersList = dealersResponse.users;
-        setDealers(dealersResponse.users);
+      // Fetch dealers from Ledger model
+      const dealersResponse = await apiService.adminGetAllDealers({ includeInactive: false });
+      console.log('📡 Dealers response:', dealersResponse);
+      
+      let dealersList: Dealer[] = [];
+      if (dealersResponse?.success && dealersResponse.data?.dealers) {
+        // Map Ledger fields to Dealer interface
+        dealersList = dealersResponse.data.dealers.map((ledger: any) => ({
+          _id: ledger._id,
+          LedgerName: ledger.LedgerName,
+          name: ledger.LedgerName, // For backward compatibility
+          LedgerMobile: ledger.LedgerMobile,
+          mobile: ledger.LedgerMobile, // For backward compatibility
+          Email: ledger.Email,
+          email: ledger.Email, // For backward compatibility
+          LedgerAddress1: ledger.LedgerAddress1,
+          LedgerAddress2: ledger.LedgerAddress2,
+          LedgerState: ledger.LedgerState,
+          address: {
+            street: ledger.LedgerAddress1 || '',
+            city: ledger.LedgerAddress2 || '',
+            state: ledger.LedgerState || '',
+            pincode: '',
+            country: 'India',
+          },
+        }));
+        setDealers(dealersList);
       }
       
-      // Fetch sub dealers
-      const subDealersResponse = await getUsersByRole('subdealer');
-      let subDealersList = [];
-      if (Array.isArray(subDealersResponse)) {
-        subDealersList = subDealersResponse;
-        setSubDealers(subDealersResponse);
-      } else if (subDealersResponse?.success) {
-        // Response with success field - handle nested data.users structure
-        subDealersList = subDealersResponse.data?.users || subDealersResponse.data || subDealersResponse.subDealers || subDealersResponse.users || [];
-        setSubDealers(Array.isArray(subDealersList) ? subDealersList : []);
-      } else if (subDealersResponse?.users && Array.isArray(subDealersResponse.users)) {
-        // Response structure: {users: [...], role: 'subdealer', count: 3}
-        subDealersList = subDealersResponse.users;
-        setSubDealers(subDealersResponse.users);
+      // Fetch sub dealers from SubDealer model
+      const subDealersResponse = await apiService.adminGetAllSubDealers({ includeInactive: false });
+      console.log('📡 Sub dealers response:', subDealersResponse);
+      
+      let subDealersList: SubDealer[] = [];
+      if (subDealersResponse?.success && subDealersResponse.data?.subdealers) {
+        // Map SubDealer fields to SubDealer interface
+        subDealersList = subDealersResponse.data.subdealers.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName, // For backward compatibility
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo, // For backward compatibility
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail, // For backward compatibility
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDAddress3: subdealer.SDAddress3,
+          SDState: subdealer.SDState,
+          address: {
+            street: subdealer.SDAddress1 || '',
+            city: subdealer.SDAddress2 || '',
+            state: subdealer.SDState || '',
+            pincode: subdealer.SDPincode || '',
+            country: subdealer.SDCountry || 'India',
+          },
+        }));
+        setSubDealers(subDealersList);
       }
       
       // Fetch products
@@ -736,6 +836,14 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       
       // Find and set current dealer and subdealer from order data
       console.log('🔍 Setting dealer and subdealer from order data...');
+      console.log('📋 Order data:', {
+        dealerId: order.dealerId,
+        dealerName: order.dealerName,
+        customerId: order.customerId,
+        customerName: order.customerName,
+        subDealerId: order.subDealerId,
+        subDealerName: order.subDealerName,
+      });
       
       // Set dealer - try dealerId first, then customerId as fallback
       let dealerId: string | undefined = undefined;
@@ -753,13 +861,90 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         }
       }
       
-      if (dealerId) {
-        const currentDealer = dealersList.find((d: any) => d._id === dealerId);
+      // Always try to set dealer if we have dealerName or customerName
+      if (order.dealerName || order.customerName) {
+        // First, try to find dealer by ID in the fetched list
+        let currentDealer: Dealer | null = null;
+        if (dealerId) {
+          currentDealer = dealersList.find((d: Dealer) => {
+            const dealerIdStr = d._id?.toString();
+            const orderIdStr = dealerId.toString();
+            return dealerIdStr === orderIdStr;
+          }) || null;
+        }
+        
         if (currentDealer) {
           setSelectedDealer(currentDealer);
-          console.log('✅ Dealer set:', currentDealer.name);
+          console.log('✅ Dealer set from list:', currentDealer.LedgerName || currentDealer.name);
         } else {
-          console.log('❌ Dealer not found in list:', dealerId);
+          // Dealer not found by ID, try to find by name
+          const dealerName = order.dealerName || order.customerName;
+          if (dealerName) {
+            const dealerByName = dealersList.find((d: Dealer) => {
+              const name1 = (d.LedgerName || d.name || '').toLowerCase().trim();
+              const name2 = dealerName.toLowerCase().trim();
+              return name1 === name2;
+            });
+            
+            if (dealerByName) {
+              setSelectedDealer(dealerByName);
+              console.log('✅ Dealer found by name and set:', dealerByName.LedgerName || dealerByName.name);
+            } else {
+              // Dealer not found in list, create fallback from order data
+              console.log('⚠️ Dealer not found in Ledger list. Creating fallback from order data.');
+              const customerAddress = order.customerAddress || {};
+              const dealerObj = typeof order.dealerId === 'object' ? order.dealerId : null;
+              const customerObj = typeof order.customerId === 'object' ? order.customerId : null;
+              
+              // Use dealerId if available, otherwise try to extract from order
+              const finalDealerId = dealerId || 
+                                   (typeof order.customerId === 'string' ? order.customerId : order.customerId?._id) ||
+                                   (typeof order.dealerId === 'string' ? order.dealerId : order.dealerId?._id);
+              
+              // Create fallback dealer even if we don't have a valid ObjectId
+              // Use a temporary ID if needed, or the actual ID if valid
+              const dealerIdToUse = (finalDealerId && isValidObjectId(finalDealerId)) 
+                ? finalDealerId 
+                : `temp-dealer-${Date.now()}`; // Temporary ID for display purposes
+              
+              const fallbackDealer: Dealer = {
+                _id: dealerIdToUse,
+                LedgerName: dealerName,
+                name: dealerName,
+                LedgerMobile: dealerObj?.mobile || customerObj?.mobile || order.customerMobile || '',
+                mobile: dealerObj?.mobile || customerObj?.mobile || order.customerMobile || '',
+                Email: dealerObj?.email || customerObj?.email || order.customerEmail || '',
+                email: dealerObj?.email || customerObj?.email || order.customerEmail || '',
+                LedgerAddress1: customerAddress?.street || '',
+                LedgerAddress2: customerAddress?.city || '',
+                LedgerState: customerAddress?.state || '',
+                address: customerAddress || {
+                  street: '',
+                  city: '',
+                  state: '',
+                  pincode: '',
+                  country: 'India',
+                },
+              };
+              
+              // Add fallback dealer to the dealers list so it appears in dropdown
+              const updatedDealers = [...dealersList, fallbackDealer];
+              setDealers(updatedDealers);
+              setSelectedDealer(fallbackDealer);
+              console.log('✅ Fallback dealer created and set:', fallbackDealer.LedgerName, 'ID:', fallbackDealer._id);
+            }
+          }
+        }
+      } else if (dealerId) {
+        // We have dealerId but no name, try to find it
+        const currentDealer = dealersList.find((d: Dealer) => {
+          const dealerIdStr = d._id?.toString();
+          const orderIdStr = dealerId.toString();
+          return dealerIdStr === orderIdStr;
+        });
+        if (currentDealer) {
+          setSelectedDealer(currentDealer);
+          console.log('✅ Dealer set from list (by ID only):', currentDealer.LedgerName || currentDealer.name);
         }
       }
       
@@ -775,13 +960,88 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         subDealerId = order.shippingAddress?.subDealerId;
       }
       
-      if (subDealerId) {
-        const currentSubDealer = subDealersList.find((s: any) => s._id === subDealerId);
+      // Always try to set subdealer if we have subDealerName
+      if (order.subDealerName || order.shippingAddress?.name) {
+        // First, try to find subdealer by ID in the fetched list
+        let currentSubDealer: SubDealer | null = null;
+        if (subDealerId) {
+          currentSubDealer = subDealersList.find((s: SubDealer) => {
+            const subDealerIdStr = s._id?.toString();
+            const orderIdStr = subDealerId.toString();
+            return subDealerIdStr === orderIdStr;
+          }) || null;
+        }
+        
         if (currentSubDealer) {
           setSelectedSubDealer(currentSubDealer);
-          console.log('✅ SubDealer set:', currentSubDealer.name);
+          console.log('✅ SubDealer set from list:', currentSubDealer.SDName || currentSubDealer.name);
         } else {
-          console.log('❌ SubDealer not found in list:', subDealerId);
+          // Subdealer not found by ID, try to find by name
+          const subDealerName = order.subDealerName || order.shippingAddress?.name;
+          if (subDealerName) {
+            const subDealerByName = subDealersList.find((s: SubDealer) => {
+              const name1 = (s.SDName || s.name || '').toLowerCase().trim();
+              const name2 = subDealerName.toLowerCase().trim();
+              return name1 === name2;
+            });
+            
+            if (subDealerByName) {
+              setSelectedSubDealer(subDealerByName);
+              console.log('✅ SubDealer found by name and set:', subDealerByName.SDName || subDealerByName.name);
+            } else {
+              // Subdealer not found in list, create fallback from order data
+              console.log('⚠️ SubDealer not found in SubDealer list. Creating fallback from order data.');
+              
+              // Use subDealerId if available, otherwise try to extract from order
+              const finalSubDealerId = subDealerId || 
+                                       (typeof order.subDealerId === 'string' ? order.subDealerId : order.subDealerId?._id) ||
+                                       order.shippingAddress?.subDealerId;
+              
+              // Create fallback subdealer even if we don't have a valid ObjectId
+              // Use a temporary ID if needed, or the actual ID if valid
+              const subDealerIdToUse = (finalSubDealerId && isValidObjectId(finalSubDealerId)) 
+                ? finalSubDealerId 
+                : `temp-subdealer-${Date.now()}`; // Temporary ID for display purposes
+              
+              const fallbackSubDealer: SubDealer = {
+                _id: subDealerIdToUse,
+                SDName: subDealerName,
+                name: subDealerName,
+                SDMobileNo: order.shippingAddress?.mobile || '',
+                mobile: order.shippingAddress?.mobile || '',
+                SDEmail: '',
+                email: '',
+                SDAddress1: order.shippingAddress?.address?.street || '',
+                SDAddress2: order.shippingAddress?.address?.city || '',
+                SDAddress3: '',
+                SDState: order.shippingAddress?.address?.state || '',
+                address: order.shippingAddress?.address || {
+                  street: '',
+                  city: '',
+                  state: '',
+                  pincode: '',
+                  country: 'India',
+                },
+              };
+              
+              // Add fallback subdealer to the subDealers list so it appears in dropdown
+              const updatedSubDealers = [...subDealersList, fallbackSubDealer];
+              setSubDealers(updatedSubDealers);
+              setSelectedSubDealer(fallbackSubDealer);
+              console.log('✅ Fallback subdealer created and set:', fallbackSubDealer.SDName, 'ID:', fallbackSubDealer._id);
+            }
+          }
+        }
+      } else if (subDealerId) {
+        // We have subDealerId but no name, try to find it
+        const currentSubDealer = subDealersList.find((s: SubDealer) => {
+          const subDealerIdStr = s._id?.toString();
+          const orderIdStr = subDealerId.toString();
+          return subDealerIdStr === orderIdStr;
+        });
+        if (currentSubDealer) {
+          setSelectedSubDealer(currentSubDealer);
+          console.log('✅ SubDealer set from list (by ID only):', currentSubDealer.SDName || currentSubDealer.name);
         }
       } else {
         console.log('ℹ️ No subdealer in order data');
@@ -947,6 +1207,46 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       return;
     }
     
+    // Validate dealer ID - allow any non-empty ID (including User model IDs and temp IDs)
+    // The backend will handle validation and lookup
+    if (!selectedDealer._id || selectedDealer._id === 'unknown' || (typeof selectedDealer._id === 'string' && selectedDealer._id.trim() === '')) {
+      console.log('❌ Invalid dealer ID:', selectedDealer._id);
+      Alert.alert(
+        'Validation Error',
+        'The dealer information is invalid. Please select a valid dealer from the list.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Try to refresh dealer list and reselect
+              fetchInitialData();
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Validate subdealer ID if selected - allow any non-empty ID
+    if (selectedSubDealer && (!selectedSubDealer._id || selectedSubDealer._id === 'unknown' || (typeof selectedSubDealer._id === 'string' && selectedSubDealer._id.trim() === ''))) {
+      console.log('❌ Invalid subdealer ID:', selectedSubDealer._id);
+      Alert.alert(
+        'Validation Error',
+        'The subdealer information is invalid. Please select a valid subdealer from the list or remove the subdealer selection.',
+        [
+          {
+            text: 'Remove Subdealer',
+            onPress: () => setSelectedSubDealer(null)
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          }
+        ]
+      );
+      return;
+    }
+    
     const itemsWithQuantity = orderItems.filter(item => item.quantity > 0);
     if (itemsWithQuantity.length === 0) {
       console.log('❌ No items with quantity > 0');
@@ -965,6 +1265,13 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       setSaving(true);
       console.log('🔄 Starting order update...');
       
+      if (!originalOrder) {
+        console.log('⚠️ Original order not available, sending full update');
+        Alert.alert('Error', 'Original order data not available. Please refresh and try again.');
+        setSaving(false);
+        return;
+      }
+      
       const trimmedCustomMode = customMode.trim();
       const trimmedTermsOfPayment = termsOfPayment.trim();
       const trimmedOtherReference = otherReference.trim();
@@ -972,67 +1279,253 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       const trimmedTermsOfDelivery2 = termsOfDelivery2.trim();
       const modePayload = mode === 'Other' ? (trimmedCustomMode || 'Other') : mode;
 
-      const finalSummary = calculateOrderSummary(itemsWithQuantity);
-      const orderData: any = {
-        customerId: selectedDealer._id,
-        customerName: selectedDealer.name,
-        customerEmail: selectedDealer.email,
-        customerMobile: selectedDealer.mobile,
-        customerAddress: normalizeAddress(selectedDealer.address),
-        dealerId: selectedDealer._id, // Save dealer ID separately
-        dealerName: selectedDealer.name,
-        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately
-        subDealerName: selectedSubDealer ? selectedSubDealer.name : null,
-        shippingAddress: selectedSubDealer
-          ? normalizeAddress(selectedSubDealer.address)
-          : normalizeAddress(selectedDealer.address),
-        items: itemsWithQuantity.map(item => ({
-          productId: item.productId,
-          productCode: item.productCode,
-          productName: item.productName,
-          partNo: item.partNo,
-          itemAlias: item.itemAlias,
-          category: item.category,
-          subCategory: item.subCategory,
-          brand: item.brand,
-          itemHsn: item.itemHsn,
-          itemHsnDesc: item.itemHsnDesc,
-          unit: item.unit,
-          baseUnits: item.baseUnits,
-          additionalUnits: item.additionalUnits,
-          description: item.description,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-          discount: item.discount ?? 0,
-          gstRate: item.gstRate ?? DEFAULT_GST_RATE,
-        })),
-        totalQuantity: finalSummary.totalQuantity,
-        totalAmount: finalSummary.totalAmount,
-        taxableValueTotal: finalSummary.taxableValue,
-        cgstTotal: finalSummary.cgstTotal,
-        sgstTotal: finalSummary.sgstTotal,
-        igstTotal: finalSummary.igstTotal,
-        taxAmount: finalSummary.taxTotal,
-        notes: orderNotes,
-        status: order.status, // Keep current status
-        orderType: order.orderType,
-        paymentMethod: modePayload,
-        modeSelection: mode,
-        mode: modePayload,
-        termsOfPayment: trimmedTermsOfPayment,
-        otherReference: trimmedOtherReference,
-        termsOfDelivery1: trimmedTermsOfDelivery1,
-        termsOfDelivery2: trimmedTermsOfDelivery2,
-        sellerState,
-        buyerState,
-        gstType,
-      };
+      // Build current order data
+      // Validate that dealer ID is a valid ObjectId or a temporary ID (for fallback dealers)
+      const currentDealerId = selectedDealer._id?.toString();
+      const isTempDealerId = currentDealerId?.startsWith('temp-');
+      
+      if (!currentDealerId) {
+        console.log('❌ No dealer ID found');
+        Alert.alert(
+          'Validation Error',
+          'The dealer information is invalid. Please select a valid dealer from the list.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                fetchInitialData();
+              }
+            }
+          ]
+        );
+        setSaving(false);
+        return;
+      }
+      
+      // If it's a temporary ID, we'll set dealerId to null and rely on dealerName
+      const finalDealerId = isTempDealerId ? null : (isValidObjectId(currentDealerId) ? currentDealerId : null);
+      if (!isTempDealerId && !isValidObjectId(currentDealerId)) {
+        console.log('❌ Invalid dealer ID:', currentDealerId);
+        Alert.alert(
+          'Validation Error',
+          'The dealer information is invalid. Please select a valid dealer from the list.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                fetchInitialData();
+              }
+            }
+          ]
+        );
+        setSaving(false);
+        return;
+      }
+      
+      const currentSubDealerId = selectedSubDealer?._id?.toString() || null;
+      const isTempSubDealerId = currentSubDealerId?.startsWith('temp-');
+      
+      // If it's a temporary ID, we'll set subDealerId to null and rely on subDealerName
+      const finalSubDealerId = selectedSubDealer 
+        ? (isTempSubDealerId ? null : (isValidObjectId(currentSubDealerId) ? currentSubDealerId : null))
+        : null;
+      
+      if (selectedSubDealer && !isTempSubDealerId && (!currentSubDealerId || !isValidObjectId(currentSubDealerId))) {
+        console.log('❌ Invalid subdealer ID:', currentSubDealerId);
+        Alert.alert(
+          'Validation Error',
+          'The subdealer information is invalid. Please select a valid subdealer from the list or remove the subdealer selection.',
+          [
+            {
+              text: 'Remove Subdealer',
+              onPress: () => setSelectedSubDealer(null)
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => {
+                setSaving(false);
+              }
+            }
+          ]
+        );
+        return;
+      }
+      const currentDealerName = selectedDealer.LedgerName || selectedDealer.name || '';
+      const currentSubDealerName = selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name || '') : null;
+      const currentCustomerEmail = selectedDealer.Email || selectedDealer.email || '';
+      const currentCustomerMobile = selectedDealer.LedgerMobile || selectedDealer.mobile || '';
+      const currentCustomerAddress = normalizeAddress(selectedDealer.address);
+      const currentShippingAddress = selectedSubDealer
+        ? normalizeAddress(selectedSubDealer.address)
+        : normalizeAddress(selectedDealer.address);
+      
+      const currentItems = itemsWithQuantity.map(item => ({
+        productId: item.productId?.toString(),
+        productCode: item.productCode,
+        productName: item.productName,
+        partNo: item.partNo,
+        itemAlias: item.itemAlias,
+        category: item.category,
+        subCategory: item.subCategory,
+        brand: item.brand,
+        itemHsn: item.itemHsn,
+        itemHsnDesc: item.itemHsnDesc,
+        unit: item.unit,
+        baseUnits: item.baseUnits,
+        additionalUnits: item.additionalUnits,
+        description: item.description,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        discount: item.discount ?? 0,
+        gstRate: item.gstRate ?? DEFAULT_GST_RATE,
+      }));
 
-      if (mode === 'Other') {
+      const finalSummary = calculateOrderSummary(itemsWithQuantity);
+      
+      // Compare with original order and build update object with only changed fields
+      const orderData: any = {};
+      
+      // Compare dealer/customer info
+      const originalDealerId = originalOrder.dealerId?.toString() || originalOrder.customerId?.toString() || null;
+      if (finalDealerId !== originalDealerId || isTempDealerId) {
+        // Always update if IDs differ or if we have a temporary ID (need to save name)
+        orderData.customerId = finalDealerId;
+        orderData.dealerId = finalDealerId;
+        orderData.customerName = currentDealerName;
+        orderData.dealerName = currentDealerName;
+        orderData.customerEmail = currentCustomerEmail;
+        orderData.customerMobile = currentCustomerMobile;
+        orderData.customerAddress = currentCustomerAddress;
+      } else {
+        // Check if other dealer fields changed
+        if (currentDealerName !== (originalOrder.dealerName || originalOrder.customerName || '')) {
+          orderData.customerName = currentDealerName;
+          orderData.dealerName = currentDealerName;
+        }
+        if (currentCustomerEmail !== (originalOrder.customerEmail || '')) {
+          orderData.customerEmail = currentCustomerEmail;
+        }
+        if (currentCustomerMobile !== (originalOrder.customerMobile || '')) {
+          orderData.customerMobile = currentCustomerMobile;
+        }
+        const originalAddress = originalOrder.customerAddress || {};
+        if (JSON.stringify(currentCustomerAddress) !== JSON.stringify(originalAddress)) {
+          orderData.customerAddress = currentCustomerAddress;
+        }
+      }
+      
+      // Compare subdealer info
+      const originalSubDealerId = originalOrder.subDealerId?.toString() || null;
+      if (finalSubDealerId !== originalSubDealerId || isTempSubDealerId) {
+        // Always update if IDs differ or if we have a temporary ID (need to save name)
+        orderData.subDealerId = finalSubDealerId;
+        orderData.subDealerName = currentSubDealerName;
+        orderData.shippingAddress = currentShippingAddress;
+      } else if (finalSubDealerId) {
+        // Subdealer exists, check if name or address changed
+        if (currentSubDealerName !== (originalOrder.subDealerName || '')) {
+          orderData.subDealerName = currentSubDealerName;
+        }
+        const originalShippingAddress = originalOrder.shippingAddress || {};
+        if (JSON.stringify(currentShippingAddress) !== JSON.stringify(originalShippingAddress)) {
+          orderData.shippingAddress = currentShippingAddress;
+        }
+      } else if (originalSubDealerId && !finalSubDealerId) {
+        // Subdealer was removed
+        orderData.subDealerId = null;
+        orderData.subDealerName = null;
+        orderData.shippingAddress = currentShippingAddress;
+      }
+      
+      // Compare items - check if items array changed
+      // Normalize original items for comparison
+      const originalItems = (originalOrder.items || []).map((it: any) => {
+        const productId = (typeof it.productId === 'object' ? it.productId?._id : it.productId)?.toString();
+        return {
+          productId,
+          quantity: it.quantity || 0,
+          unitPrice: it.unitPrice || it.price || 0,
+          discount: it.discount || 0,
+          gstRate: it.gstRate || DEFAULT_GST_RATE,
+          unit: it.unit || '',
+        };
+      }).sort((a, b) => (a.productId || '').localeCompare(b.productId || ''));
+      
+      // Normalize current items for comparison
+      const currentItemsForCompare = currentItems.map(item => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discount: item.discount,
+        gstRate: item.gstRate,
+        unit: item.unit || '',
+      })).sort((a, b) => (a.productId || '').localeCompare(b.productId || ''));
+      
+      // Deep comparison of items arrays
+      const itemsChanged = JSON.stringify(originalItems) !== JSON.stringify(currentItemsForCompare);
+      
+      if (itemsChanged) {
+        orderData.items = currentItems;
+        // Recalculate totals if items changed
+        orderData.totalQuantity = finalSummary.totalQuantity;
+        orderData.totalAmount = finalSummary.totalAmount;
+        orderData.taxableValueTotal = finalSummary.taxableValue;
+        orderData.cgstTotal = finalSummary.cgstTotal;
+        orderData.sgstTotal = finalSummary.sgstTotal;
+        orderData.igstTotal = finalSummary.igstTotal;
+        orderData.taxAmount = finalSummary.taxTotal;
+      }
+      
+      // Compare other fields
+      if (orderNotes !== (originalOrder.notes || '')) {
+        orderData.notes = orderNotes;
+      }
+      
+      if (modePayload !== (originalOrder.paymentMethod || originalOrder.mode || '')) {
+        orderData.paymentMethod = modePayload;
+        orderData.modeSelection = mode;
+        orderData.mode = modePayload;
+        if (mode === 'Other') {
+          orderData.customMode = trimmedCustomMode;
+        }
+      } else if (mode === 'Other' && trimmedCustomMode !== ((originalOrder as any).customMode || '')) {
         orderData.customMode = trimmedCustomMode;
       }
       
-      console.log('📤 Sending order data:', orderData);
+      if (trimmedTermsOfPayment !== (originalOrder.termsOfPayment || '')) {
+        orderData.termsOfPayment = trimmedTermsOfPayment;
+      }
+      
+      if (trimmedOtherReference !== (originalOrder.otherReference || '')) {
+        orderData.otherReference = trimmedOtherReference;
+      }
+      
+      if (trimmedTermsOfDelivery1 !== (originalOrder.termsOfDelivery1 || '')) {
+        orderData.termsOfDelivery1 = trimmedTermsOfDelivery1;
+      }
+      
+      if (trimmedTermsOfDelivery2 !== (originalOrder.termsOfDelivery2 || '')) {
+        orderData.termsOfDelivery2 = trimmedTermsOfDelivery2;
+      }
+      
+      // Always include GST-related fields if items changed (they're recalculated)
+      if (orderData.items) {
+        orderData.sellerState = sellerState;
+        orderData.buyerState = buyerState;
+        orderData.gstType = gstType;
+      }
+      
+      // If no changes detected, show message and return
+      if (Object.keys(orderData).length === 0) {
+        console.log('ℹ️ No changes detected');
+        Alert.alert('Info', 'No changes were made to the order.');
+        setSaving(false);
+        return;
+      }
+      
+      console.log('📤 Sending only changed fields:', orderData);
+      console.log('📊 Changed fields count:', Object.keys(orderData).length);
       console.log('📤 Order ID:', order._id);
       
       const response = await updateOrder(order._id, orderData);
@@ -1043,11 +1536,10 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         console.log('✅ Order updated successfully');
         const updatedOrder = response.order;
         
-        // Navigate back to previous screen (AdminOrderList) immediately
-        // The useFocusEffect in AdminOrderList will automatically refresh the orders
-        navigation.goBack();
+        // Navigate to AdminOrderList and trigger refresh
+        (navigation as any).navigate('AdminOrderList', { refreshOrders: true });
         
-        // Show success message after a brief delay
+        // Show success message after navigation
         setTimeout(() => {
           Alert.alert('Success', 'Order updated successfully!');
         }, 300);
@@ -1072,6 +1564,34 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
     }
     return name.includes(normalizedQuery) || code.includes(normalizedQuery);
   });
+
+  // Filter dealers based on search query
+  const filteredDealers = useMemo(() => {
+    if (!dealerSearchQuery.trim()) {
+      return dealers;
+    }
+    const query = dealerSearchQuery.toLowerCase().trim();
+    return dealers.filter(dealer => {
+      const name = (dealer.LedgerName || dealer.name || '').toLowerCase();
+      const email = (dealer.Email || dealer.email || '').toLowerCase();
+      const mobile = (dealer.LedgerMobile || dealer.mobile || '').toLowerCase();
+      return name.includes(query) || email.includes(query) || mobile.includes(query);
+    });
+  }, [dealers, dealerSearchQuery]);
+
+  // Filter subdealers based on search query
+  const filteredSubDealers = useMemo(() => {
+    if (!subDealerSearchQuery.trim()) {
+      return subDealers;
+    }
+    const query = subDealerSearchQuery.toLowerCase().trim();
+    return subDealers.filter(subDealer => {
+      const name = (subDealer.SDName || subDealer.name || '').toLowerCase();
+      const email = (subDealer.SDEmail || subDealer.email || '').toLowerCase();
+      const mobile = (subDealer.SDMobileNo || subDealer.mobile || '').toLowerCase();
+      return name.includes(query) || email.includes(query) || mobile.includes(query);
+    });
+  }, [subDealers, subDealerSearchQuery]);
 
   const renderOrderItem = ({ item }: { item: OrderItem }) => (
     <View style={styles.orderItemCard}>
@@ -1184,6 +1704,113 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       </View>
     </View>
   );
+
+  const renderDealerItem = ({ item }: { item: Dealer }) => {
+    const isSelected = selectedDealer && selectedDealer._id?.toString() === item._id?.toString();
+    return (
+      <TouchableOpacity
+        style={[
+          styles.productItem,
+          isSelected && styles.addedProductItem
+        ]}
+        onPress={() => {
+          setSelectedDealer(item);
+          setSelectedSubDealer(null);
+          setShowDealerDropdown(false);
+          setDealerSearchQuery('');
+        }}
+      >
+        <View style={styles.productInfo}>
+          <Text style={[
+            styles.productName,
+            isSelected && styles.addedProductText
+          ]}>
+            {item.LedgerName || item.name}
+          </Text>
+          {(item.Email || item.email) ? (
+            <Text style={[
+              styles.productCode,
+              isSelected && styles.addedProductSubtext
+            ]}>
+              {item.Email || item.email}
+            </Text>
+          ) : null}
+          {(item.LedgerMobile || item.mobile) ? (
+            <Text style={[
+              styles.productPrice,
+              isSelected && styles.addedProductSubtext
+            ]}>
+              {item.LedgerMobile || item.mobile}
+            </Text>
+          ) : null}
+          {formatAddress(item.address) !== 'Address not specified' ? (
+            <Text style={[
+              styles.dropdownItemMeta,
+              isSelected && styles.addedProductSubtext
+            ]}>
+              {formatAddress(item.address)}
+            </Text>
+          ) : null}
+        </View>
+        {isSelected && (
+          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSubDealerItem = ({ item }: { item: SubDealer }) => {
+    const isSelected = selectedSubDealer && selectedSubDealer._id?.toString() === item._id?.toString();
+    return (
+      <TouchableOpacity
+        style={[
+          styles.productItem,
+          isSelected && styles.addedProductItem
+        ]}
+        onPress={() => {
+          setSelectedSubDealer(item);
+          setShowSubDealerDropdown(false);
+          setSubDealerSearchQuery('');
+        }}
+      >
+        <View style={styles.productInfo}>
+          <Text style={[
+            styles.productName,
+            isSelected && styles.addedProductText
+          ]}>
+            {item.SDName || item.name}
+          </Text>
+          {(item.SDEmail || item.email) ? (
+            <Text style={[
+              styles.productCode,
+              isSelected && styles.addedProductSubtext
+            ]}>
+              {item.SDEmail || item.email}
+            </Text>
+          ) : null}
+          {(item.SDMobileNo || item.mobile) ? (
+            <Text style={[
+              styles.productPrice,
+              isSelected && styles.addedProductSubtext
+            ]}>
+              {item.SDMobileNo || item.mobile}
+            </Text>
+          ) : null}
+          {formatAddress(item.address) !== 'Address not specified' ? (
+            <Text style={[
+              styles.dropdownItemMeta,
+              isSelected && styles.addedProductSubtext
+            ]}>
+              {formatAddress(item.address)}
+            </Text>
+          ) : null}
+        </View>
+        {isSelected && (
+          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderProductItem = ({ item }: { item: Product }) => {
     const existingOrderItem = orderItems.find(orderItem => orderItem.productId === item._id);
@@ -1309,8 +1936,9 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                   styles.dropdownText,
                   !selectedDealer && styles.placeholderText
                 ]}
+                numberOfLines={1}
               >
-                {selectedDealer ? selectedDealer.name : 'Select Dealer'}
+                {selectedDealer ? (selectedDealer.LedgerName || selectedDealer.name) : 'Select Dealer'}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#6B7280" />
             </TouchableOpacity>
@@ -1334,38 +1962,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
               </Text>
             </View>
           )}
-
-          {showDealerDropdown && (
-            <View style={styles.dropdownList}>
-              <ScrollView
-                style={styles.dropdownScroll}
-                contentContainerStyle={styles.dropdownScrollContent}
-                showsVerticalScrollIndicator={false}
-              >
-                {dealers.map((item) => (
-                  <TouchableOpacity
-                    key={item._id}
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      setSelectedDealer(item);
-                      setSelectedSubDealer(null);
-                      setShowDealerDropdown(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownItemText}>{item.name}</Text>
-                    {item.email ? (
-                      <Text style={styles.dropdownItemSubtext}>{item.email}</Text>
-                    ) : null}
-                    {formatAddress(item.address) !== 'Address not specified' ? (
-                      <Text style={styles.dropdownItemMeta}>
-                        {formatAddress(item.address)}
-                      </Text>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
         </View>
 
         {/* Sub Dealer Selection */}
@@ -1386,11 +1982,12 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                   styles.dropdownText,
                   !selectedSubDealer && styles.placeholderText
                 ]}
+                numberOfLines={1}
               >
                 {subDealers.length === 0
                   ? 'No Sub Dealers Available'
                   : selectedSubDealer
-                    ? selectedSubDealer.name
+                    ? (selectedSubDealer.SDName || selectedSubDealer.name)
                     : 'Select Sub Dealer (Optional)'}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#6B7280" />
@@ -1417,37 +2014,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             <Text style={styles.infoText}>
               No sub dealers available for the selected dealer
             </Text>
-          )}
-
-          {showSubDealerDropdown && subDealers.length > 0 && (
-            <View style={styles.dropdownList}>
-              <ScrollView
-                style={styles.dropdownScroll}
-                contentContainerStyle={styles.dropdownScrollContent}
-                showsVerticalScrollIndicator={false}
-              >
-                {subDealers.map((item) => (
-                  <TouchableOpacity
-                    key={item._id}
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      setSelectedSubDealer(item);
-                      setShowSubDealerDropdown(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownItemText}>{item.name}</Text>
-                    {item.email ? (
-                      <Text style={styles.dropdownItemSubtext}>{item.email}</Text>
-                    ) : null}
-                    {formatAddress(item.address) !== 'Address not specified' ? (
-                      <Text style={styles.dropdownItemMeta}>
-                        {formatAddress(item.address)}
-                      </Text>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
           )}
         </View>
 
@@ -1661,6 +2227,108 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         </TouchableOpacity>
       </View>
 
+      {/* Dealer Selection Modal */}
+      <Modal
+        visible={showDealerDropdown}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => {
+          setShowDealerDropdown(false);
+          setDealerSearchQuery('');
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => {
+                setShowDealerDropdown(false);
+                setDealerSearchQuery('');
+              }}
+            >
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Select Dealer</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#6B7280" />
+            <TextInput
+              style={styles.searchInput}
+              value={dealerSearchQuery}
+              onChangeText={setDealerSearchQuery}
+              placeholder="Search dealers..."
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <FlatList
+            data={filteredDealers}
+            renderItem={renderDealerItem}
+            keyExtractor={(item) => item._id}
+            style={styles.productsList}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateText}>No dealers found</Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
+
+      {/* Sub Dealer Selection Modal */}
+      <Modal
+        visible={showSubDealerDropdown}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => {
+          setShowSubDealerDropdown(false);
+          setSubDealerSearchQuery('');
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => {
+                setShowSubDealerDropdown(false);
+                setSubDealerSearchQuery('');
+              }}
+            >
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Select Sub Dealer</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#6B7280" />
+            <TextInput
+              style={styles.searchInput}
+              value={subDealerSearchQuery}
+              onChangeText={setSubDealerSearchQuery}
+              placeholder="Search sub dealers..."
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <FlatList
+            data={filteredSubDealers}
+            renderItem={renderSubDealerItem}
+            keyExtractor={(item) => item._id}
+            style={styles.productsList}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateText}>No sub dealers found</Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
+
       {/* Product Selection Modal */}
       <Modal
         visible={showProductDropdown}
@@ -1750,12 +2418,17 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+    zIndex: 1,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
     marginBottom: 12,
+  },
+  selectionContainer: {
+    position: 'relative',
+    zIndex: 10,
   },
   dropdown: {
     flexDirection: 'row',
@@ -1805,11 +2478,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D1D5DB',
     zIndex: 1000,
-    maxHeight: 200,
+    maxHeight: 300,
     marginTop: 4,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
   dropdownScroll: {
-    maxHeight: 200,
+    maxHeight: 300,
   },
   dropdownScrollContent: {
     paddingBottom: 8,
@@ -1818,11 +2496,26 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownItemSelected: {
+    backgroundColor: '#EFF6FF',
+    borderLeftWidth: 3,
+    borderLeftColor: '#3B82F6',
+  },
+  dropdownItemContent: {
+    flex: 1,
   },
   dropdownItemText: {
     fontSize: 16,
     color: '#1F2937',
     fontWeight: '500',
+  },
+  dropdownItemTextSelected: {
+    color: '#3B82F6',
+    fontWeight: '600',
   },
   dropdownItemSubtext: {
     fontSize: 14,

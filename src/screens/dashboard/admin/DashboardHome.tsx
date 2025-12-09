@@ -36,24 +36,9 @@ interface MenuItem {
   navigationScreen: keyof RootStackParamList;
 }
 
-interface Member {
-  id: string;
-  name: string;
-  role: string;
-  color: string;
-  navigationScreen: keyof RootStackParamList;
-  count: number;
-}
+// Removed Member interface - no longer showing role-based field members
 
-const getMembers = (userCounts: {[key: string]: number}): Member[] => [
-  { id: '1', name: 'Zonal', role: 'zonal', color: '#3B82F6', navigationScreen: 'ZonalScreen' as keyof RootStackParamList, count: userCounts.zonal || 0 },
-  { id: '2', name: 'RSM', role: 'rsm', color: '#10B981', navigationScreen: 'RSMScreen' as keyof RootStackParamList, count: userCounts.rsm || 0 },
-  { id: '3', name: 'ASM', role: 'asm', color: '#F59E0B', navigationScreen: 'ASMScreen' as keyof RootStackParamList, count: userCounts.asm || 0 },
-  { id: '4', name: 'Sales', role: 'salesman', color: '#EF4444', navigationScreen: 'SalesScreen' as keyof RootStackParamList, count: userCounts.salesman || 0 },
-  // Note: Dealers and subdealers are now managed separately through Ledger and SubDealer models
-  // Removed from user management menu items
-  { id: '6', name: 'Distributors', role: 'distibutors', color: '#06B6D4', navigationScreen: 'DistributorsScreen' as keyof RootStackParamList, count: userCounts.distibutors || 0 },
-];
+// Removed getMembers function - no longer showing role-based field members
 
 const menuItems: MenuItem[] = [
   { label: 'User Management', icon: 'people-outline', iconType: 'Ionicons', navigationScreen: 'Users' },
@@ -77,78 +62,18 @@ const dealerMenuItem = { label: 'Create Dealer', icon: 'storefront-outline', ico
 
 const DashboardHome = () => {
   const navigation = useNavigation<NavigationProps>();
-  const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  // Removed selectedMember state - no longer needed
   const [companyData, setCompanyData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userCounts, setUserCounts] = useState<{[key: string]: number}>({});
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  // Removed userCounts and recentUsers state - no longer showing role-based sections
   const [stockData, setStockData] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
   const [showCreateDealerModal, setShowCreateDealerModal] = useState(false);
 
-  const { user, isAuthenticated, getCompanyData, getUsersByCompany, getStockSummary } = useAuth();
+  const { user, isAuthenticated, getCompanyData, getStockSummary } = useAuth();
 
-  // Helper function to get role colors
-  const getRoleColor = (role: string) => {
-    const colors: { [key: string]: string } = {
-      'zonal': '#3B82F6',
-      'rsm': '#10B981',
-      'asm': '#F59E0B',
-      'salesman': '#EF4444',
-      // Dealers and subdealers removed - managed separately
-      'distibutors': '#84CC16',
-    };
-    return colors[role] || '#6B7280';
-  };
-
-  // Fetch user counts for each role
-  const fetchUserCounts = async () => {
-    if (!isAuthenticated || !user?.defaultCompany) return;
-
-    try {
-      const roleCounts: {[key: string]: number} = {};
-      // Exclude dealers and subdealers from user counts (managed separately)
-      const roles = ['zonal', 'rsm', 'asm', 'salesman', 'distibutors'];
-      
-      for (const role of roles) {
-        try {
-          const result = await getUsersByCompany({ role, limit: 1 });
-          if (!result) {
-            roleCounts[role] = 0;
-            if (!isAuthenticated) {
-              break;
-            }
-            continue;
-          }
-          roleCounts[role] = result?.pagination?.totalUsers || 0;
-        } catch (err) {
-          console.error(`Failed to fetch ${role} users:`, err);
-          roleCounts[role] = 0;
-        }
-      }
-      
-      setUserCounts(roleCounts);
-    } catch (err) {
-      console.error('Failed to fetch user counts:', err);
-    }
-  };
-
-  // Fetch recent users
-  const fetchRecentUsers = async () => {
-    if (!isAuthenticated || !user?.defaultCompany) return;
-
-    try {
-      const result = await getUsersByCompany({ limit: 5 });
-      if (!result) {
-        setRecentUsers([]);
-        return;
-      }
-      setRecentUsers(result?.users || []);
-    } catch (err) {
-      console.error('Failed to fetch recent users:', err);
-    }
-  };
+  // Removed getRoleColor, fetchUserCounts, and fetchRecentUsers functions - no longer needed
 
   // Fetch stock data
   const fetchStockData = async () => {
@@ -182,11 +107,7 @@ const DashboardHome = () => {
         setCompanyData(data);
 
         if (isAuthenticated) {
-          await Promise.all([
-            fetchUserCounts(),
-            fetchRecentUsers(),
-            fetchStockData()
-          ]);
+          await fetchStockData();
         }
       } catch (err) {
         console.error('Failed to fetch company data:', err);
@@ -227,12 +148,7 @@ const DashboardHome = () => {
     }
   };
 
-  // Navigation handler for field members
-  const handleMemberPress = (member: Member) => {
-    setSelectedMember(member.id);
-    // Navigate to Users screen with role filter
-    navigation.navigate('Users' as any, { role: member.role });
-  };
+  // Removed handleMemberPress - no longer showing field members
 
   // Navigation handler for menu items
   const handleMenuPress = (menuItem: MenuItem) => {
@@ -346,32 +262,7 @@ const DashboardHome = () => {
           </View>
         )}
 
-        {/* Field Members Section */}
-        <View style={styles.fieldMembersSection}>
-          <Text style={styles.sectionTitle}>Your Field Members</Text>
-          <View style={styles.sectionCard}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.membersScrollContainer}
-            >
-              {getMembers(userCounts).map((member) => (
-                <TouchableOpacity
-                  key={member.id}
-                  style={styles.memberItem}
-                  onPress={() => handleMemberPress(member)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.memberCircle, { backgroundColor: member.color }]}>
-                    <Ionicons name="person" size={20} color="white" />
-                  </View>
-                  <Text style={styles.memberName}>{member.name}</Text>
-                  <Text style={styles.memberCount}>{member.count}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
+        {/* Removed Field Members Section - no longer showing role-based members */}
 
         {/* Users Management Section */}
         <View style={styles.usersSection}>
@@ -419,43 +310,7 @@ const DashboardHome = () => {
               </View>
             </View>
             
-            {/* Quick Role Stats */}
-            {companyData?.statistics?.userByRole && companyData.statistics.userByRole.length > 0 && (
-              <View style={styles.roleStatsContainer}>
-                <Text style={styles.roleStatsTitle}>Users by Role</Text>
-                <View style={styles.roleStatsList}>
-                  {companyData.statistics.userByRole.map((roleStat: any, index: number) => (
-                    <View key={index} style={styles.roleStatItem}>
-                      <View style={[styles.roleStatDot, { backgroundColor: getRoleColor(roleStat._id) }]} />
-                      <Text style={styles.roleStatText}>
-                        {roleStat._id}: {roleStat.count}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-            
-            {/* Recent Users */}
-            {recentUsers.length > 0 && (
-              <View style={styles.recentUsersContainer}>
-                <Text style={styles.recentUsersTitle}>Recent Users</Text>
-                {recentUsers.slice(0, 3).map((user, index) => (
-                  <View key={user._id} style={styles.recentUserItem}>
-                    <View style={[styles.recentUserAvatar, { backgroundColor: getRoleColor(user.role) }]}>
-                      <Text style={styles.recentUserInitial}>{user.name.charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <View style={styles.recentUserInfo}>
-                      <Text style={styles.recentUserName}>{user.name}</Text>
-                      <Text style={styles.recentUserRole}>{user.role.toUpperCase()}</Text>
-                    </View>
-                    <View style={[styles.recentUserStatus, { backgroundColor: user.isActive ? '#10B981' : '#EF4444' }]}>
-                      <Text style={styles.recentUserStatusText}>{user.isActive ? 'Active' : 'Inactive'}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
+            {/* Removed Users by Role and Recent Users sections - no longer showing role-based information */}
           </View>
         </View>
 
@@ -572,7 +427,6 @@ const DashboardHome = () => {
         onClose={() => setShowCreateDealerModal(false)}
         onSuccess={() => {
           // Refresh data if needed
-          fetchUserCounts();
         }}
       />
     </View>

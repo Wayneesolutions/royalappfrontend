@@ -202,6 +202,35 @@ interface User {
   role: string;
 }
 
+interface SubDealer {
+  _id: string;
+  SDName?: string;
+  name?: string; // For backward compatibility
+  SDEmail?: string;
+  email?: string; // For backward compatibility
+  SDMobileNo?: string;
+  mobile?: string; // For backward compatibility
+  SDAddress1?: string;
+  SDAddress2?: string;
+  SDAddress3?: string;
+  SDState?: string;
+  SDCountry?: string;
+  SDPincode?: string;
+  SDContactPerson?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
+  groupId?: string | {
+    _id: string;
+    GroupName: string;
+    GroupGUID: string;
+  };
+}
+
 interface Product {
   _id: string;
   productName: string;
@@ -368,7 +397,7 @@ const mapPaymentMethodToLabel = (value?: string) => {
   
   // Form state
   const [selectedDealer, setSelectedDealer] = useState<User | null>(null);
-  const [selectedSubDealer, setSelectedSubDealer] = useState<User | null>(null);
+  const [selectedSubDealer, setSelectedSubDealer] = useState<SubDealer | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
 const [orderNotes, setOrderNotes] = useState('');
 const [mode, setMode] = useState('Cash');
@@ -380,12 +409,13 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
   
   // Data state
   const [dealers, setDealers] = useState<User[]>([]);
-  const [subDealers, setSubDealers] = useState<User[]>([]);
+  const [subDealers, setSubDealers] = useState<SubDealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   
   // UI state
   const [showDealerDropdown, setShowDealerDropdown] = useState(false);
-  const [showSubDealerDropdown, setShowSubDealerDropdown] = useState(false);
+  const [showSubDealerModal, setShowSubDealerModal] = useState(false);
+  const [subDealerSearchQuery, setSubDealerSearchQuery] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -431,14 +461,32 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
   }, [order]);
 
   const buyerState = useMemo(() => {
+    // Check SubDealer model fields first (SDState)
+    if (selectedSubDealer?.SDState) {
+      return extractState(selectedSubDealer.SDState);
+    }
     if (selectedSubDealer?.address?.state) {
       return extractState(selectedSubDealer.address.state);
     }
     if (selectedDealer?.address?.state) {
       return extractState(selectedDealer.address.state);
     }
-    return buyerStateFromOrder;
+    return buyerStateFromOrder || '';
   }, [selectedDealer, selectedSubDealer, buyerStateFromOrder]);
+
+  // Filter subdealers based on search query
+  const filteredSubDealers = useMemo(() => {
+    if (!subDealerSearchQuery.trim()) {
+      return subDealers;
+    }
+    const query = subDealerSearchQuery.toLowerCase().trim();
+    return subDealers.filter((subdealer) => {
+      const name = (subdealer.SDName || subdealer.name || '').toLowerCase();
+      const email = (subdealer.SDEmail || subdealer.email || '').toLowerCase();
+      const mobile = (subdealer.SDMobileNo || subdealer.mobile || '').toLowerCase();
+      return name.includes(query) || email.includes(query) || mobile.includes(query);
+    });
+  }, [subDealers, subDealerSearchQuery]);
 
   const gstType = useMemo(
     () => determineGstType(sellerState, buyerState),
@@ -653,12 +701,13 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       
       // Auto-set the current user as the dealer if not already set
       if (user && !selectedDealer) {
-        const dealerData: Dealer = {
+        const dealerData: User = {
           _id: (user as any)?._id || (user as any)?.userDetails?._id || (user as any)?.id,
           name: (user as any)?.name || (user as any)?.userDetails?.name || 'Current User',
-          email: (user as any)?.email || (user as any)?.userDetails?.email,
+          email: (user as any)?.email || (user as any)?.userDetails?.email || '',
           mobile: (user as any)?.mobile || (user as any)?.userDetails?.mobile || '',
           address: (user as any)?.address || (user as any)?.userDetails?.address,
+          role: (user as any)?.role || (user as any)?.userDetails?.role || 'dealer',
         };
         setSelectedDealer(dealerData);
         console.log('✅ Auto-selected current user as dealer:', dealerData);
@@ -670,20 +719,90 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       console.log('📡 Sub dealers response:', subDealersResponse);
       
       // Handle getSubDealers response format: {success: true, data: {subDealers: [...]}}
+      // This API already filters by dealer's groupId on the backend
       if (subDealersResponse?.success && subDealersResponse?.data?.subDealers) {
         const subDealersList = Array.isArray(subDealersResponse.data.subDealers) 
           ? subDealersResponse.data.subDealers 
           : [];
-        setSubDealers(subDealersList);
-        console.log('✅ Sub dealers loaded:', subDealersList.length);
+        
+        // Map SubDealer model fields to interface (for backward compatibility)
+        const mappedSubDealers = subDealersList.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName || subdealer.name, // For backward compatibility
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail || subdealer.email, // For backward compatibility
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo || subdealer.mobile, // For backward compatibility
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDAddress3: subdealer.SDAddress3,
+          SDState: subdealer.SDState,
+          SDCountry: subdealer.SDCountry,
+          SDPincode: subdealer.SDPincode,
+          SDContactPerson: subdealer.SDContactPerson,
+          address: {
+            street: subdealer.SDAddress1 || subdealer.address?.street || '',
+            city: subdealer.SDAddress2 || subdealer.address?.city || '',
+            state: subdealer.SDState || subdealer.address?.state || '',
+            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
+            country: subdealer.SDCountry || subdealer.address?.country || 'India',
+          },
+          groupId: subdealer.groupId,
+        }));
+        
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Sub dealers loaded (filtered by dealer group):', mappedSubDealers.length);
       } else if (Array.isArray(subDealersResponse)) {
-        // Direct array response (fallback)
-        setSubDealers(subDealersResponse);
-        console.log('✅ Sub dealers loaded (direct array):', subDealersResponse.length);
+        // Direct array response (fallback) - map fields
+        const mappedSubDealers = subDealersResponse.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName || subdealer.name,
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail || subdealer.email,
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo || subdealer.mobile,
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDState: subdealer.SDState,
+          SDCountry: subdealer.SDCountry,
+          SDPincode: subdealer.SDPincode,
+          address: {
+            street: subdealer.SDAddress1 || subdealer.address?.street || '',
+            city: subdealer.SDAddress2 || subdealer.address?.city || '',
+            state: subdealer.SDState || subdealer.address?.state || '',
+            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
+            country: subdealer.SDCountry || subdealer.address?.country || 'India',
+          },
+        }));
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Sub dealers loaded (direct array):', mappedSubDealers.length);
       } else if (subDealersResponse?.data && Array.isArray(subDealersResponse.data)) {
-        // Response with data array
-        setSubDealers(subDealersResponse.data);
-        console.log('✅ Sub dealers loaded (data array):', subDealersResponse.data.length);
+        // Response with data array - map fields
+        const mappedSubDealers = subDealersResponse.data.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName || subdealer.name,
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail || subdealer.email,
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo || subdealer.mobile,
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDState: subdealer.SDState,
+          SDCountry: subdealer.SDCountry,
+          SDPincode: subdealer.SDPincode,
+          address: {
+            street: subdealer.SDAddress1 || subdealer.address?.street || '',
+            city: subdealer.SDAddress2 || subdealer.address?.city || '',
+            state: subdealer.SDState || subdealer.address?.state || '',
+            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
+            country: subdealer.SDCountry || subdealer.address?.country || 'India',
+          },
+        }));
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Sub dealers loaded (data array):', mappedSubDealers.length);
       } else {
         console.log('⚠️ No sub dealers found or failed to load:', subDealersResponse?.message || 'Unknown error');
         setSubDealers([]);
@@ -714,7 +833,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       const normalizedProducts = productList.map(normalizeProduct);
       setProducts(normalizedProducts);
       setShowDealerDropdown(false);
-      setShowSubDealerDropdown(false);
 
       // Sync order items with latest product info (stock, unit, price)
       if (normalizedProducts.length > 0) {
@@ -774,7 +892,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           name: order.customerId.name || order.customerName || 'Unknown',
           email: order.customerId.email || order.customerEmail || '',
           mobile: order.customerId.mobile || order.customerMobile || '',
-          address: order.customerAddress || (order.customerId as any).address,
+          address: (order as any).customerAddress || (order.customerId as any).address,
           role: order.customerId.role || 'dealers',
         };
       }
@@ -798,17 +916,32 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       }
       
       // Set subdealer - try subDealerId first, then shippingAddress.subDealerId as fallback
-      let subDealerData: User | null = null;
+      let subDealerData: SubDealer | null = null;
       
       // Try to get subdealer from order.subDealerId (object)
       if (typeof order.subDealerId === 'object' && order.subDealerId) {
+        // Map from populated subdealer object (could be from SubDealer or User model)
+        const subDealerObj = order.subDealerId as any; // Type assertion for flexibility
         subDealerData = {
-          _id: order.subDealerId._id,
-          name: order.subDealerId.name || order.subDealerName || 'Unknown',
-          email: order.subDealerId.email || '',
-          mobile: order.subDealerId.mobile || '',
-          address: order.subDealerId.address,
-          role: order.subDealerId.role || 'subdealer',
+          _id: subDealerObj._id,
+          SDName: subDealerObj.SDName || subDealerObj.name || order.subDealerName || 'Unknown',
+          name: subDealerObj.SDName || subDealerObj.name || order.subDealerName || 'Unknown',
+          SDEmail: subDealerObj.SDEmail || subDealerObj.email || '',
+          email: subDealerObj.SDEmail || subDealerObj.email || '',
+          SDMobileNo: subDealerObj.SDMobileNo || subDealerObj.mobile || '',
+          mobile: subDealerObj.SDMobileNo || subDealerObj.mobile || '',
+          SDAddress1: subDealerObj.SDAddress1 || subDealerObj.address?.street || '',
+          SDAddress2: subDealerObj.SDAddress2 || subDealerObj.address?.city || '',
+          SDState: subDealerObj.SDState || subDealerObj.address?.state || '',
+          SDCountry: subDealerObj.SDCountry || subDealerObj.address?.country || 'India',
+          SDPincode: subDealerObj.SDPincode || subDealerObj.address?.pincode || '',
+          address: subDealerObj.address || {
+            street: subDealerObj.SDAddress1 || '',
+            city: subDealerObj.SDAddress2 || '',
+            state: subDealerObj.SDState || '',
+            pincode: subDealerObj.SDPincode || '',
+            country: subDealerObj.SDCountry || 'India',
+          },
         };
       }
       // Try to get subdealer from order data by ID
@@ -830,7 +963,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       
       if (subDealerData) {
         setSelectedSubDealer(subDealerData);
-        console.log('✅ SubDealer set:', subDealerData.name);
+        console.log('✅ SubDealer set:', subDealerData.SDName || subDealerData.name);
       } else {
         console.log('ℹ️ No subdealer in order data or not found in list');
       }
@@ -971,10 +1104,8 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         console.log('📦 Full response:', productResponse);
       }
 
-      if (newQuantity > currentStock) {
-        Alert.alert('Insufficient Stock', `Only ${currentStock} ${unitLabel} available in stock.`);
-        return;
-      }
+      // No stock validation for dealers - they can enter any quantity
+      // Removed stock check: if (newQuantity > currentStock)
 
       setOrderItems((prevItems) =>
         applyGstToItems(
@@ -1034,21 +1165,8 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       setSaving(true);
       console.log('🔄 Starting order update...');
       
-      // Final stock validation
-      for (const item of itemsWithQuantity) {
-        const productResponse = await getProductById(item.productId);
-        if (productResponse?.success) {
-          const currentStock = getStockNumber(productResponse.product?.stock);
-          if (item.quantity > currentStock) {
-            Alert.alert(
-              'Stock Validation Failed', 
-              `${item.productName}: Only ${currentStock} ${item.unit} available, but ${item.quantity} requested.`
-            );
-            setSaving(false);
-            return;
-          }
-        }
-      }
+      // No stock validation for dealers - they can order any quantity they need
+      // Removed final stock validation check
       
       const trimmedCustomMode = customMode.trim();
       const trimmedTermsOfPayment = termsOfPayment.trim();
@@ -1066,10 +1184,18 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         customerAddress: normalizeAddress(selectedDealer.address),
         dealerId: selectedDealer._id, // Save dealer ID separately
         dealerName: selectedDealer.name,
-        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately
-        subDealerName: selectedSubDealer ? selectedSubDealer.name : null,
+        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately (from SubDealer model)
+        subDealerName: selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name || '') : null,
         shippingAddress: selectedSubDealer
-          ? normalizeAddress(selectedSubDealer.address)
+          ? normalizeAddress(
+              selectedSubDealer.address || {
+                street: selectedSubDealer.SDAddress1 || '',
+                city: selectedSubDealer.SDAddress2 || '',
+                state: selectedSubDealer.SDState || '',
+                pincode: selectedSubDealer.SDPincode || '',
+                country: selectedSubDealer.SDCountry || 'India',
+              }
+            )
           : normalizeAddress(selectedDealer.address),
         items: itemsWithQuantity.map(item => ({
           productId: item.productId,
@@ -1220,10 +1346,10 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             <TouchableOpacity
               style={[
                 styles.quantityButton,
-                (item.quantity >= item.availableStock || updatingQuantity === item.productId) && styles.quantityButtonDisabled
+                updatingQuantity === item.productId && styles.quantityButtonDisabled
               ]}
               onPress={() => updateQuantity(item.productId, item.quantity + 1)}
-              disabled={item.quantity >= item.availableStock || updatingQuantity === item.productId}
+              disabled={updatingQuantity === item.productId}
             >
               {updatingQuantity === item.productId ? (
                 <ActivityIndicator size="small" color="#6B7280" />
@@ -1272,6 +1398,33 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       </View>
     </View>
   );
+
+  const renderSubDealerItem = ({ item }: { item: SubDealer }) => {
+    const subDealerName = item.SDName || item.name || 'N/A';
+    const subDealerAddress = item.address || {
+      street: item.SDAddress1 || '',
+      city: item.SDAddress2 || '',
+      state: item.SDState || '',
+      pincode: item.SDPincode || '',
+      country: item.SDCountry || 'India',
+    };
+    
+    return (
+      <TouchableOpacity
+        style={styles.dropdownItem}
+        onPress={() => {
+          setSelectedSubDealer(item);
+          setShowSubDealerModal(false);
+          setSubDealerSearchQuery('');
+        }}
+      >
+        <Text style={styles.dropdownItemText}>{subDealerName}</Text>
+        {subDealerAddress && (
+          <Text style={styles.dropdownItemSubtext}>{formatAddress(subDealerAddress)}</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderProductItem = ({ item }: { item: Product }) => {
     const existingOrderItem = orderItems.find(orderItem => orderItem.productId === item._id);
@@ -1433,7 +1586,13 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                 styles.selectionButton,
                 subDealers.length === 0 && styles.disabledDropdown
               ]}
-              onPress={() => subDealers.length > 0 && setShowSubDealerDropdown(true)}
+              onPress={() => {
+                if (subDealers.length > 0) {
+                  setShowSubDealerModal(true);
+                } else {
+                  Alert.alert('Info', 'No sub dealers available. Order will use dealer address.');
+                }
+              }}
               disabled={subDealers.length === 0}
             >
               <Text
@@ -1445,7 +1604,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                 {subDealers.length === 0
                   ? 'No Sub Dealers Available'
                   : selectedSubDealer
-                    ? selectedSubDealer.name
+                    ? (selectedSubDealer.SDName || selectedSubDealer.name || 'N/A')
                     : 'Select Sub Dealer (Optional)'}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#6B7280" />
@@ -1463,7 +1622,15 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           {selectedSubDealer && (
             <View style={styles.selectedInfoCard}>
               <Text style={styles.addressText}>
-                {formatAddress(selectedSubDealer.address)}
+                {formatAddress(
+                  selectedSubDealer.address || {
+                    street: selectedSubDealer.SDAddress1 || '',
+                    city: selectedSubDealer.SDAddress2 || '',
+                    state: selectedSubDealer.SDState || '',
+                    pincode: selectedSubDealer.SDPincode || '',
+                    country: selectedSubDealer.SDCountry || 'India',
+                  }
+                )}
               </Text>
             </View>
           )}
@@ -1472,37 +1639,6 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             <Text style={styles.infoText}>
               No sub dealers available for the selected dealer
             </Text>
-          )}
-
-          {showSubDealerDropdown && subDealers.length > 0 && (
-            <View style={styles.dropdownList}>
-              <ScrollView
-                style={styles.dropdownScroll}
-                contentContainerStyle={styles.dropdownScrollContent}
-                showsVerticalScrollIndicator={false}
-              >
-                {subDealers.map((item) => (
-                  <TouchableOpacity
-                    key={item._id}
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      setSelectedSubDealer(item);
-                      setShowSubDealerDropdown(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownItemText}>{item.name}</Text>
-                    {item.email ? (
-                      <Text style={styles.dropdownItemSubtext}>{item.email}</Text>
-                    ) : null}
-                    {formatAddress(item.address) !== 'Address not specified' ? (
-                      <Text style={styles.dropdownItemMeta}>
-                        {formatAddress(item.address)}
-                      </Text>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
           )}
         </View>
 
@@ -1752,6 +1888,60 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             keyExtractor={(item) => item._id}
             style={styles.productsList}
             showsVerticalScrollIndicator={false}
+          />
+        </View>
+      </Modal>
+
+      {/* SubDealer Selection Modal */}
+      <Modal
+        visible={showSubDealerModal}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => {
+          setShowSubDealerModal(false);
+          setSubDealerSearchQuery('');
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => {
+                setShowSubDealerModal(false);
+                setSubDealerSearchQuery('');
+              }}
+            >
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Select Sub Dealer</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#6B7280" />
+            <TextInput
+              style={styles.searchInput}
+              value={subDealerSearchQuery}
+              onChangeText={setSubDealerSearchQuery}
+              placeholder="Search sub dealers..."
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <FlatList
+            data={filteredSubDealers}
+            renderItem={renderSubDealerItem}
+            keyExtractor={(item) => item._id}
+            style={styles.productsList}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyStateContainer}>
+                <Ionicons name="people-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.emptyStateText}>
+                  {subDealerSearchQuery.trim() ? 'No sub dealers found' : 'No sub dealers available'}
+                </Text>
+              </View>
+            }
           />
         </View>
       </Modal>

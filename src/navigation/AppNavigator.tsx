@@ -5,14 +5,10 @@ import AuthNavigator from './AuthNavigator';
 import AdminNavigator from './rolebasednavigator/AdminNavigator';
 import SuperAdminNavigator from './rolebasednavigator/SuperAdminNavigator';
 import {
-  ZonalNavigator,
-  RSMNavigator,
-  ASMNavigator,
-  DistributorNavigator,
   DealerNavigator,
   SubDealerNavigator,
-  SalesmanNavigator
 } from './RoleNavigators';
+import GroupUserNavigator from './rolebasednavigator/GroupUserNavigator';
 
 interface AppNavigatorProps {
   user: User | null;
@@ -26,6 +22,7 @@ export default function AppNavigator({ user, isAuthenticated }: AppNavigatorProp
   }
 
   // Route to appropriate navigator based on user role
+  // Only superadmin, admin, dealer, subdealer, and groupuser roles are supported
   switch (user.role) {
     case UserRole.SUPERADMIN:
       return <SuperAdminNavigator />;
@@ -33,30 +30,23 @@ export default function AppNavigator({ user, isAuthenticated }: AppNavigatorProp
     case UserRole.ADMIN:
       return <AdminNavigator />;
     
-    case UserRole.ZONAL:
-      return <ZonalNavigator />;
-    
-    case UserRole.RSM:
-      return <RSMNavigator />;
-    
-    case UserRole.ASM:
-      return <ASMNavigator />;
-    
-    case UserRole.DISTRIBUTOR:
-      return <DistributorNavigator />;
-    
     case UserRole.DEALER:
       return <DealerNavigator />;
     
     case UserRole.SUB_DEALER:
       return <SubDealerNavigator />;
     
-    case UserRole.SALESMAN:
-      return <SalesmanNavigator />;
+    case UserRole.GROUP_USER:
+    case 'groupuser': // Handle string literal as well
+      return <GroupUserNavigator />;
     
     default:
-      // Fallback to auth if role is unknown
-      console.warn(`Unknown user role: ${user.role}`);
-      return <AuthNavigator />;
+      // For users without roles or unknown roles, treat as group users
+      if (!user.role || user.role === '' || user.role === null || user.role === undefined) {
+        return <GroupUserNavigator />;
+      }
+      // Fallback to group user navigator for legacy roles
+      console.warn(`Unknown user role: ${user.role}, routing to GroupUserNavigator`);
+      return <GroupUserNavigator />;
   }
 }

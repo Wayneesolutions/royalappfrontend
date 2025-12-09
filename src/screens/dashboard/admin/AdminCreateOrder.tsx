@@ -897,6 +897,12 @@ const AdminCreateOrder = () => {
       return;
     }
     
+    // Validate dealer ID
+    if (!selectedDealer._id) {
+      Alert.alert('Validation Error', 'Dealer ID is missing. Please select a valid dealer.');
+      return;
+    }
+    
     // Make sub dealer optional for now due to API permission issues
     // if (!selectedSubDealer) {
     //   Alert.alert('Validation Error', 'Please select a shipping address (sub dealer)');
@@ -930,16 +936,32 @@ const AdminCreateOrder = () => {
       const modePayload = mode === 'Other' ? (trimmedCustomMode || 'Other') : mode;
 
       const finalSummary = calculateOrderSummary(itemsWithQuantity);
+      
+      // Ensure IDs are properly converted to strings
+      const dealerId = selectedDealer._id?.toString();
+      const subDealerId = selectedSubDealer?._id?.toString() || null;
+      
+      if (!dealerId) {
+        Alert.alert('Validation Error', 'Invalid dealer ID. Please select a valid dealer.');
+        setSaving(false);
+        return;
+      }
+      
+      console.log('📋 Order creation - Dealer ID:', dealerId);
+      console.log('📋 Order creation - SubDealer ID:', subDealerId);
+      console.log('📋 Order creation - Selected Dealer:', selectedDealer);
+      console.log('📋 Order creation - Selected SubDealer:', selectedSubDealer);
+      
       const orderData: any = {
-        customerId: selectedDealer._id,
-        customerName: selectedDealer.LedgerName || selectedDealer.name,
+        customerId: dealerId,
+        customerName: selectedDealer.LedgerName || selectedDealer.name || '',
         customerEmail: selectedDealer.Email || selectedDealer.email || '',
         customerMobile: selectedDealer.LedgerMobile || selectedDealer.mobile || '',
         customerAddress: normalizeAddress(selectedDealer.address),
-        dealerId: selectedDealer._id, // Save dealer ID separately (from Ledger)
-        dealerName: selectedDealer.LedgerName || selectedDealer.name,
-        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately (from SubDealer)
-        subDealerName: selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name) : null,
+        dealerId: dealerId, // Save dealer ID separately (from Ledger)
+        dealerName: selectedDealer.LedgerName || selectedDealer.name || '',
+        subDealerId: subDealerId, // Save subdealer ID separately (from SubDealer)
+        subDealerName: selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name || '') : null,
         shippingAddress: selectedSubDealer
           ? normalizeAddress(selectedSubDealer.address)
           : normalizeAddress(selectedDealer.address),

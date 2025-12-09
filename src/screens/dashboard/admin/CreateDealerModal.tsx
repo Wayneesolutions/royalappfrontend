@@ -76,12 +76,15 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
   const [showOpeningDatePicker, setShowOpeningDatePicker] = useState(false);
   const [showJoinDatePicker, setShowJoinDatePicker] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
+    LedgerGUID: '',
     LedgerName: '',
     LedgerMobile: '',
     LedgerContact: '',
     Email: '',
+    password: '',
     LedgerGSTIN: '',
     LedgerAddress1: '',
     LedgerAddress2: '',
@@ -119,10 +122,12 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
         }
         
         setFormData({
+          LedgerGUID: dealer.LedgerGUID || '',
           LedgerName: dealer.LedgerName || '',
           LedgerMobile: dealer.LedgerMobile || '',
           LedgerContact: dealer.LedgerContact || '',
           Email: dealer.Email || '',
+          password: '', // Don't populate password in edit mode for security
           LedgerGSTIN: dealer.LedgerGSTIN || '',
           LedgerAddress1: dealer.LedgerAddress1 || '',
           LedgerAddress2: dealer.LedgerAddress2 || '',
@@ -144,10 +149,12 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
       } else {
         // Reset form for create
         setFormData({
+          LedgerGUID: '',
           LedgerName: '',
           LedgerMobile: '',
           LedgerContact: '',
           Email: '',
+          password: '',
           LedgerGSTIN: '',
           LedgerAddress1: '',
           LedgerAddress2: '',
@@ -227,10 +234,12 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
     try {
       // Company info is automatically fetched from user's current company
       const dealerData: any = {
+        LedgerGUID: formData.LedgerGUID && formData.LedgerGUID.trim() ? formData.LedgerGUID.trim() : undefined,
         LedgerName: formData.LedgerName.trim(),
         LedgerMobile: formData.LedgerMobile || undefined,
         LedgerContact: formData.LedgerContact || undefined,
         Email: formData.Email || undefined,
+        password: formData.password && formData.password.trim() ? formData.password.trim() : undefined,
         LedgerGSTIN: formData.LedgerGSTIN || undefined,
         LedgerAddress1: formData.LedgerAddress1 || undefined,
         LedgerAddress2: formData.LedgerAddress2 || undefined,
@@ -295,6 +304,24 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
             <Text style={styles.sectionTitle}>Required Information</Text>
             
             <View style={styles.formGroup}>
+              <Text style={styles.label}>Ledger GUID {isEditMode ? '' : '(Optional - auto-generated if not provided)'}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Ledger GUID (e.g., LED-COM-001-0001)"
+                value={formData.LedgerGUID}
+                onChangeText={(text) => setFormData({ ...formData, LedgerGUID: text })}
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {!isEditMode && (
+                <Text style={styles.helperText}>
+                  Leave blank to auto-generate a unique GUID
+                </Text>
+              )}
+            </View>
+            
+            <View style={styles.formGroup}>
               <Text style={styles.label}>Ledger Name *</Text>
               <TextInput
                 style={styles.input}
@@ -357,6 +384,38 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
                 autoCapitalize="none"
                 placeholderTextColor="#9CA3AF"
               />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Password {isEditMode ? '(Optional - leave blank to keep current)' : '(Optional - for dealer login)'}
+              </Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder={isEditMode ? "Enter new password (optional)" : "Enter password for dealer login"}
+                  value={formData.password}
+                  onChangeText={(text) => setFormData({ ...formData, password: text })}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  placeholderTextColor="#9CA3AF"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.passwordToggle}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              </View>
+              {!isEditMode && (
+                <Text style={styles.helperText}>
+                  If provided, dealer can login using email/mobile and this password
+                </Text>
+              )}
             </View>
 
             <View style={styles.formGroup}>
@@ -971,6 +1030,29 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 14,
+    color: '#111827',
+  },
+  passwordToggle: {
+    padding: 12,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });
 

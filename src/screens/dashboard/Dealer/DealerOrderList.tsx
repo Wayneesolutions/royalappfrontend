@@ -48,10 +48,10 @@ interface Order {
   dealerName?: string;
   subDealerId?: string | {
     _id: string;
-    email: string;
-    name: string;
-    mobile: string;
-    role: string;
+    email?: string;
+    name?: string;
+    mobile?: string;
+    role?: string;
     address?: {
       street?: string;
       city?: string;
@@ -59,6 +59,16 @@ interface Order {
       pincode?: string;
       country?: string;
     };
+    // SubDealer model fields
+    SDName?: string;
+    SDEmail?: string;
+    SDMobileNo?: string;
+    SDAddress1?: string;
+    SDAddress2?: string;
+    SDAddress3?: string;
+    SDState?: string;
+    SDCountry?: string;
+    SDPincode?: string;
   };
   subDealerName?: string;
   shippingAddress: {
@@ -114,20 +124,73 @@ const DealerOrderList = () => {
 
   // Helper function to get subdealer name (shipping address)
   const getSubDealerName = (order: Order) => {
-    if (typeof order.subDealerId === 'object' && order.subDealerId?.name) {
-      return order.subDealerId.name;
+    if (typeof order.subDealerId === 'object' && order.subDealerId) {
+      // Check SubDealer model fields first
+      if (order.subDealerId.SDName) {
+        return order.subDealerId.SDName;
+      }
+      if (order.subDealerId.name) {
+        return order.subDealerId.name;
+      }
     }
     return order.subDealerName || order.shippingAddress?.name || 'No Sub Dealer';
   };
 
+  // Helper function to get subdealer email
+  const getSubDealerEmail = (order: Order) => {
+    if (typeof order.subDealerId === 'object' && order.subDealerId) {
+      // Check SubDealer model fields first
+      if (order.subDealerId.SDEmail) {
+        return order.subDealerId.SDEmail;
+      }
+      if (order.subDealerId.email) {
+        return order.subDealerId.email;
+      }
+    }
+    return 'N/A';
+  };
+
+  // Helper function to get subdealer mobile
+  const getSubDealerMobile = (order: Order) => {
+    if (typeof order.subDealerId === 'object' && order.subDealerId) {
+      // Check SubDealer model fields first
+      if (order.subDealerId.SDMobileNo) {
+        return order.subDealerId.SDMobileNo;
+      }
+      if (order.subDealerId.mobile) {
+        return order.subDealerId.mobile;
+      }
+    }
+    return order.shippingAddress?.mobile || 'N/A';
+  };
+
   // Helper function to get subdealer address
   const getSubDealerAddress = (order: Order) => {
-    // If subDealerId is populated as an object with address, use it
-    if (typeof order.subDealerId === 'object' && order.subDealerId?.address) {
-      return formatAddress(order.subDealerId.address);
+    if (typeof order.subDealerId === 'object' && order.subDealerId) {
+      // Check SubDealer model fields first (SDAddress1, SDAddress2, etc.)
+      if (order.subDealerId.SDAddress1 || order.subDealerId.SDAddress2 || order.subDealerId.SDState) {
+        const address = {
+          street: order.subDealerId.SDAddress1 || '',
+          city: order.subDealerId.SDAddress2 || '',
+          state: order.subDealerId.SDState || '',
+          pincode: order.subDealerId.SDPincode || '',
+          country: order.subDealerId.SDCountry || 'India',
+        };
+        return formatAddress(address);
+      }
+      // Fallback to address object
+      if (order.subDealerId.address) {
+        return formatAddress(order.subDealerId.address);
+      }
     }
     // Otherwise, use the shippingAddress field
-    return order.shippingAddress?.address || 'Address not specified';
+    if (order.shippingAddress?.address) {
+      if (typeof order.shippingAddress.address === 'string') {
+        return order.shippingAddress.address;
+      }
+      return formatAddress(order.shippingAddress.address);
+    }
+    return 'Address not specified';
   };
   
   const [orders, setOrders] = useState<Order[]>([]);
@@ -399,20 +462,12 @@ const DealerOrderList = () => {
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Email</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' && selectedOrder.subDealerId?.email 
-                    ? selectedOrder.subDealerId.email 
-                    : 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getSubDealerEmail(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' && selectedOrder.subDealerId?.mobile 
-                    ? selectedOrder.subDealerId.mobile 
-                    : selectedOrder.shippingAddress?.mobile || 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getSubDealerMobile(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>

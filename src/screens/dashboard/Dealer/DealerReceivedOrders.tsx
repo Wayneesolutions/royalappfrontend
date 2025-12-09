@@ -48,10 +48,10 @@ interface Order {
   dealerName?: string;
   subDealerId?: string | {
     _id: string;
-    email: string;
-    name: string;
-    mobile: string;
-    role: string;
+    email?: string;
+    name?: string;
+    mobile?: string;
+    role?: string;
     address?: {
       street?: string;
       city?: string;
@@ -59,6 +59,16 @@ interface Order {
       pincode?: string;
       country?: string;
     };
+    // SubDealer model fields
+    SDName?: string;
+    SDEmail?: string;
+    SDMobileNo?: string;
+    SDAddress1?: string;
+    SDAddress2?: string;
+    SDAddress3?: string;
+    SDState?: string;
+    SDCountry?: string;
+    SDPincode?: string;
   };
   subDealerName?: string;
   shippingAddress: {
@@ -111,7 +121,7 @@ const DealerReceivedOrders = () => {
 
   // Helper function to get dealer name (customer)
   const getDealerName = (order: Order) => {
-    if (typeof order.dealerId === 'object' && order.dealerId?.name) {
+    if (order.dealerId && typeof order.dealerId === 'object' && order.dealerId !== null && order.dealerId.name) {
       return order.dealerId.name;
     }
     return order.dealerName || order.customerName || 'Unknown Dealer';
@@ -119,28 +129,81 @@ const DealerReceivedOrders = () => {
 
   // Helper function to get created by name
   const getCreatedByName = (order: Order) => {
-    if (typeof order.createdBy === 'object' && order.createdBy?.name) {
-      return `${order.createdBy.name} (${order.createdBy.role})`;
+    if (order.createdBy && typeof order.createdBy === 'object' && order.createdBy !== null && order.createdBy.name) {
+      return `${order.createdBy.name} (${order.createdBy.role || 'Unknown Role'})`;
     }
     return 'Unknown';
   };
 
   // Helper function to get subdealer name (shipping address)
   const getSubDealerName = (order: Order) => {
-    if (typeof order.subDealerId === 'object' && order.subDealerId?.name) {
-      return order.subDealerId.name;
+    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
+      // Check SubDealer model fields first
+      if (order.subDealerId.SDName) {
+        return order.subDealerId.SDName;
+      }
+      if (order.subDealerId.name) {
+        return order.subDealerId.name;
+      }
     }
     return order.subDealerName || order.shippingAddress?.name || 'No Sub Dealer';
   };
 
+  // Helper function to get subdealer email
+  const getSubDealerEmail = (order: Order) => {
+    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
+      // Check SubDealer model fields first
+      if (order.subDealerId.SDEmail) {
+        return order.subDealerId.SDEmail;
+      }
+      if (order.subDealerId.email) {
+        return order.subDealerId.email;
+      }
+    }
+    return 'N/A';
+  };
+
+  // Helper function to get subdealer mobile
+  const getSubDealerMobile = (order: Order) => {
+    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
+      // Check SubDealer model fields first
+      if (order.subDealerId.SDMobileNo) {
+        return order.subDealerId.SDMobileNo;
+      }
+      if (order.subDealerId.mobile) {
+        return order.subDealerId.mobile;
+      }
+    }
+    return order.shippingAddress?.mobile || 'N/A';
+  };
+
   // Helper function to get subdealer address
   const getSubDealerAddress = (order: Order) => {
-    // If subDealerId is populated as an object with address, use it
-    if (typeof order.subDealerId === 'object' && order.subDealerId?.address) {
-      return formatAddress(order.subDealerId.address);
+    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
+      // Check SubDealer model fields first (SDAddress1, SDAddress2, etc.)
+      if (order.subDealerId.SDAddress1 || order.subDealerId.SDAddress2 || order.subDealerId.SDState) {
+        const address = {
+          street: order.subDealerId.SDAddress1 || '',
+          city: order.subDealerId.SDAddress2 || '',
+          state: order.subDealerId.SDState || '',
+          pincode: order.subDealerId.SDPincode || '',
+          country: order.subDealerId.SDCountry || 'India',
+        };
+        return formatAddress(address);
+      }
+      // Fallback to address object
+      if (order.subDealerId.address) {
+        return formatAddress(order.subDealerId.address);
+      }
     }
     // Otherwise, use the shippingAddress field
-    return order.shippingAddress?.address || 'Address not specified';
+    if (order.shippingAddress?.address) {
+      if (typeof order.shippingAddress.address === 'string') {
+        return order.shippingAddress.address;
+      }
+      return formatAddress(order.shippingAddress.address);
+    }
+    return 'Address not specified';
   };
   
   const [orders, setOrders] = useState<Order[]>([]);
@@ -188,11 +251,12 @@ const DealerReceivedOrders = () => {
 
       setLoading(true);
       
-      // Filter orders created by OTHER users FOR this dealer (customerId = dealer._id AND createdBy != dealer._id)
+      // Filter orders created by OTHER users (admin/group users) FOR this dealer
+      // Orders where dealerId matches current dealer AND createdBy is not the current dealer
       const params: any = { 
         page: 1, 
         limit: 50,
-        customerId: user._id // Filter orders where this dealer is the customer
+        dealerId: user._id // Filter orders where this dealer is assigned (dealerId)
       };
       
       if (filter !== 'all') {
@@ -204,18 +268,45 @@ const DealerReceivedOrders = () => {
       console.log('📡 Orders response:', response);
       
       if (response?.success) {
-        // Filter to show only orders created by OTHER users (not by this dealer)
+        // Filter to show only orders created by OTHER users (admin/group users, not by this dealer)
         let filteredOrders = response.orders || [];
         filteredOrders = filteredOrders.filter((order: Order) => {
-          const customerId = typeof order.customerId === 'object' ? order.customerId._id : order.customerId;
-          const dealerId = typeof order.dealerId === 'object' ? order.dealerId._id : order.dealerId;
-          const createdBy = typeof order.createdBy === 'object' ? order.createdBy._id : order.createdBy;
+          // Safely extract dealerId - handle null, object, or string
+          let dealerId: string | null = null;
+          if (order.dealerId) {
+            if (typeof order.dealerId === 'object' && order.dealerId !== null && order.dealerId._id) {
+              dealerId = order.dealerId._id;
+            } else if (typeof order.dealerId === 'string') {
+              dealerId = order.dealerId;
+            }
+          }
           
-          // Must be for this dealer AND created by someone else
-          const isForThisDealer = (customerId === user._id || dealerId === user._id);
-          const isCreatedByOther = createdBy !== user._id;
+          // Safely extract customerId - handle null, object, or string
+          let customerId: string | null = null;
+          if (order.customerId) {
+            if (typeof order.customerId === 'object' && order.customerId !== null && order.customerId._id) {
+              customerId = order.customerId._id;
+            } else if (typeof order.customerId === 'string') {
+              customerId = order.customerId;
+            }
+          }
           
-          return isForThisDealer && isCreatedByOther;
+          // Safely extract createdBy - handle null, object, or string
+          let createdBy: string | null = null;
+          if (order.createdBy) {
+            if (typeof order.createdBy === 'object' && order.createdBy !== null && order.createdBy._id) {
+              createdBy = order.createdBy._id;
+            } else if (typeof order.createdBy === 'string') {
+              createdBy = order.createdBy;
+            }
+          }
+          
+          // Must be assigned to this dealer (dealerId OR customerId matches) AND created by someone else (admin/group user)
+          // Check both dealerId and customerId because dealerId may fallback to customerId when order is created
+          const isAssignedToThisDealer = (dealerId === user._id) || (customerId === user._id);
+          const isCreatedByOther = createdBy && createdBy !== user._id;
+          
+          return isAssignedToThisDealer && isCreatedByOther;
         });
         setOrders(filteredOrders);
         console.log('✅ Loaded received orders for dealer:', filteredOrders.length);
@@ -390,8 +481,8 @@ const DealerReceivedOrders = () => {
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Created By</Text>
                 <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.createdBy === 'object' 
-                    ? `${selectedOrder.createdBy.name} (${selectedOrder.createdBy.role})`
+                  {selectedOrder.createdBy && typeof selectedOrder.createdBy === 'object' && selectedOrder.createdBy !== null
+                    ? `${selectedOrder.createdBy.name} (${selectedOrder.createdBy.role || 'Unknown Role'})`
                     : 'Unknown'
                   }
                 </Text>
@@ -410,14 +501,18 @@ const DealerReceivedOrders = () => {
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Dealer Email</Text>
                 <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.dealerId === 'object' ? selectedOrder.dealerId.email : selectedOrder.customerEmail || 'N/A'}
+                  {selectedOrder.dealerId && typeof selectedOrder.dealerId === 'object' && selectedOrder.dealerId !== null 
+                    ? selectedOrder.dealerId.email 
+                    : selectedOrder.customerEmail || 'N/A'}
                 </Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Dealer Mobile</Text>
                 <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.dealerId === 'object' ? selectedOrder.dealerId.mobile : selectedOrder.customerMobile || 'N/A'}
+                  {selectedOrder.dealerId && typeof selectedOrder.dealerId === 'object' && selectedOrder.dealerId !== null 
+                    ? selectedOrder.dealerId.mobile 
+                    : selectedOrder.customerMobile || 'N/A'}
                 </Text>
               </View>
               
@@ -440,16 +535,12 @@ const DealerReceivedOrders = () => {
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Email</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' ? selectedOrder.subDealerId.email : 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getSubDealerEmail(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>
                 <Text style={styles.detailsLabel}>Sub Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>
-                  {typeof selectedOrder.subDealerId === 'object' ? selectedOrder.subDealerId.mobile : selectedOrder.shippingAddress?.mobile || 'N/A'}
-                </Text>
+                <Text style={styles.detailsValue}>{getSubDealerMobile(selectedOrder)}</Text>
               </View>
               
               <View style={styles.detailsRow}>

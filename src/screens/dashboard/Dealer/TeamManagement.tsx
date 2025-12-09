@@ -18,43 +18,41 @@ import { useNavigation } from '@react-navigation/native';
 
 interface SubDealer {
   _id: string;
-  email: string;
-  name: string;
-  mobile: string;
-  role: string;
+  SDName: string;
+  SDEmail?: string;
+  SDMobileNo: string;
+  SDContactPerson?: string;
+  SDType?: 'Sub Dealer' | 'TSO';
+  SDAddress1?: string;
+  SDAddress2?: string;
+  SDAddress3?: string;
+  SDState?: string;
+  SDPincode?: string;
+  SDCountry?: string;
+  SDGSTNType?: string;
+  SDGSTNNumber?: string;
   isActive: boolean;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-    country?: string;
-  };
-  companies: Array<{
-    companyId: {
-      _id: string;
-      companyName: string;
-      companyCode: string;
-    };
-    role: string;
-    isActive: boolean;
-  }>;
-  hierarchy: {
-    parentUser: {
-      _id: string;
-      name: string;
-      email: string;
-      role: string;
-    };
-    level: number;
-  };
-  createdBy: {
+  groupId?: {
+    _id: string;
+    GroupName: string;
+    GroupGUID: string;
+  } | string;
+  companyId?: {
+    _id: string;
+    companyName: string;
+    companyCode: string;
+  } | string;
+  createdBy?: {
     _id: string;
     name: string;
     email: string;
-  };
+  } | string;
   createdAt: string;
   updatedAt: string;
+  // Legacy fields for backward compatibility
+  name?: string;
+  email?: string;
+  mobile?: string;
 }
 
 const TeamManagement = () => {
@@ -81,17 +79,19 @@ const TeamManagement = () => {
   
   // Form states
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    name: '',
-    mobile: '',
-    address: {
-      street: '',
-      city: '',
-      state: '',
-      pincode: '',
-      country: 'India',
-    },
+    SDName: '',
+    SDEmail: '',
+    SDMobileNo: '',
+    SDContactPerson: '',
+    SDType: 'Sub Dealer' as 'Sub Dealer' | 'TSO',
+    SDAddress1: '',
+    SDAddress2: '',
+    SDAddress3: '',
+    SDState: '',
+    SDCountry: 'India',
+    SDPincode: '',
+    SDGSTNType: '',
+    SDGSTNNumber: '',
   });
 
   // Fetch sub-dealers
@@ -143,20 +143,20 @@ const TeamManagement = () => {
       
       switch (sortBy) {
         case 'name':
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
+          aValue = (a.SDName || a.name || '').toLowerCase();
+          bValue = (b.SDName || b.name || '').toLowerCase();
           break;
         case 'email':
-          aValue = a.email.toLowerCase();
-          bValue = b.email.toLowerCase();
+          aValue = (a.SDEmail || a.email || '').toLowerCase();
+          bValue = (b.SDEmail || b.email || '').toLowerCase();
           break;
         case 'createdAt':
           aValue = new Date(a.createdAt).getTime();
           bValue = new Date(b.createdAt).getTime();
           break;
         default:
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
+          aValue = (a.SDName || a.name || '').toLowerCase();
+          bValue = (b.SDName || b.name || '').toLowerCase();
       }
       
       if (order === 'asc') {
@@ -182,12 +182,27 @@ const TeamManagement = () => {
     try {
       setLoading(true);
       
+      // Validate required fields
+      if (!formData.SDName || !formData.SDMobileNo) {
+        Alert.alert('Validation Error', 'Sub-dealer name and mobile are required');
+        setLoading(false);
+        return;
+      }
+      
       const subDealerData = {
-        email: formData.email,
-        password: formData.password,
-        name: formData.name,
-        mobile: formData.mobile,
-        address: formData.address,
+        SDName: formData.SDName,
+        SDEmail: formData.SDEmail || '',
+        SDMobileNo: formData.SDMobileNo,
+        SDContactPerson: formData.SDContactPerson || formData.SDName,
+        SDType: formData.SDType,
+        SDAddress1: formData.SDAddress1 || '',
+        SDAddress2: formData.SDAddress2 || '',
+        SDAddress3: formData.SDAddress3 || '',
+        SDState: formData.SDState || '',
+        SDCountry: formData.SDCountry || 'India',
+        SDPincode: formData.SDPincode || '',
+        SDGSTNType: formData.SDGSTNType || '',
+        SDGSTNNumber: formData.SDGSTNNumber || '',
       };
 
       const result = await createSubDealer(subDealerData);
@@ -216,9 +231,19 @@ const TeamManagement = () => {
       setLoading(true);
       
       const updateData = {
-        name: formData.name,
-        mobile: formData.mobile,
-        address: formData.address,
+        SDName: formData.SDName,
+        SDEmail: formData.SDEmail || '',
+        SDMobileNo: formData.SDMobileNo,
+        SDContactPerson: formData.SDContactPerson || formData.SDName,
+        SDType: formData.SDType,
+        SDAddress1: formData.SDAddress1 || '',
+        SDAddress2: formData.SDAddress2 || '',
+        SDAddress3: formData.SDAddress3 || '',
+        SDState: formData.SDState || '',
+        SDCountry: formData.SDCountry || 'India',
+        SDPincode: formData.SDPincode || '',
+        SDGSTNType: formData.SDGSTNType || '',
+        SDGSTNNumber: formData.SDGSTNNumber || '',
       };
 
       const result = await updateSubDealer(selectedSubDealer._id, updateData);
@@ -279,17 +304,19 @@ const TeamManagement = () => {
   // Reset form
   const resetForm = () => {
     setFormData({
-      email: '',
-      password: '',
-      name: '',
-      mobile: '',
-      address: {
-        street: '',
-        city: '',
-        state: '',
-        pincode: '',
-        country: 'India',
-      },
+      SDName: '',
+      SDEmail: '',
+      SDMobileNo: '',
+      SDContactPerson: '',
+      SDType: 'Sub Dealer',
+      SDAddress1: '',
+      SDAddress2: '',
+      SDAddress3: '',
+      SDState: '',
+      SDCountry: 'India',
+      SDPincode: '',
+      SDGSTNType: '',
+      SDGSTNNumber: '',
     });
   };
 
@@ -297,92 +324,126 @@ const TeamManagement = () => {
   const openEditModal = (subDealer: SubDealer) => {
     setSelectedSubDealer(subDealer);
     setFormData({
-      email: subDealer.email,
-      password: '', // Don't show password
-      name: subDealer.name,
-      mobile: subDealer.mobile,
-      address: {
-        street: subDealer.address?.street || '',
-        city: subDealer.address?.city || '',
-        state: subDealer.address?.state || '',
-        pincode: subDealer.address?.pincode || '',
-        country: subDealer.address?.country || 'India',
-      },
+      SDName: subDealer.SDName || subDealer.name || '',
+      SDEmail: subDealer.SDEmail || subDealer.email || '',
+      SDMobileNo: subDealer.SDMobileNo || subDealer.mobile || '',
+      SDContactPerson: subDealer.SDContactPerson || subDealer.SDName || subDealer.name || '',
+      SDType: subDealer.SDType || 'Sub Dealer',
+      SDAddress1: subDealer.SDAddress1 || '',
+      SDAddress2: subDealer.SDAddress2 || '',
+      SDAddress3: subDealer.SDAddress3 || '',
+      SDState: subDealer.SDState || '',
+      SDCountry: subDealer.SDCountry || 'India',
+      SDPincode: subDealer.SDPincode || '',
+      SDGSTNType: subDealer.SDGSTNType || '',
+      SDGSTNNumber: subDealer.SDGSTNNumber || '',
     });
     setShowEditModal(true);
   };
 
   // Render sub-dealer item
-  const renderSubDealerItem = ({ item }: { item: SubDealer }) => (
-    <TouchableOpacity
-      style={styles.subDealerCard}
-      onPress={() => handleSubDealerClick(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.subDealerInfo}>
-        <Text style={styles.subDealerName}>{item.name}</Text>
-        <Text style={styles.subDealerEmail}>{item.email}</Text>
-        <Text style={styles.subDealerMobile}>{item.mobile}</Text>
-        
-        {item.address && (
-          <View style={styles.addressContainer}>
-            <Text style={styles.addressText}>
-              {item.address.street && `${item.address.street}, `}
-              {item.address.city && `${item.address.city}, `}
-              {item.address.state && `${item.address.state} `}
-              {item.address.pincode && `- ${item.address.pincode}`}
-            </Text>
-            {item.address.country && (
-              <Text style={styles.countryText}>{item.address.country}</Text>
-            )}
+  const renderSubDealerItem = ({ item }: { item: SubDealer }) => {
+    // Safely get group name
+    let groupName = 'No Group';
+    if (item.groupId && typeof item.groupId === 'object' && item.groupId !== null && item.groupId.GroupName) {
+      groupName = item.groupId.GroupName;
+    } else if (item.groupId && typeof item.groupId === 'string' && item.groupId.trim() !== '') {
+      groupName = 'No Group';
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.subDealerCard}
+        onPress={() => handleSubDealerClick(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.subdealerInfoHeader}>
+            <Text style={styles.subDealerName}>{item.SDName || item.name || 'N/A'}</Text>
+            <View style={styles.badgesContainer}>
+              {item.SDType && (
+                <View style={styles.typeBadge}>
+                  <Text style={styles.typeText}>{item.SDType}</Text>
+                </View>
+              )}
+              <View style={[
+                styles.statusBadge,
+                { backgroundColor: item.isActive ? '#10B981' : '#EF4444' }
+              ]}>
+                <Text style={styles.statusText}>{item.isActive ? 'Active' : 'Inactive'}</Text>
+              </View>
+            </View>
           </View>
-        )}
-        
-        <View style={styles.statusContainer}>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: item.isActive ? '#D1FAE5' : '#FEE2E2' }
-          ]}>
-            <Text style={[
-              styles.statusText,
-              { color: item.isActive ? '#059669' : '#DC2626' }
-            ]}>
-              {item.isActive ? 'Active' : 'Inactive'}
-            </Text>
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                openEditModal(item);
+              }}
+            >
+              <Ionicons name="pencil" size={18} color="#3B82F6" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDeactivateSubDealer(item);
+              }}
+            >
+              <Ionicons name="trash" size={18} color="#EF4444" />
+            </TouchableOpacity>
           </View>
-          <Text style={styles.createdDate}>
-            Created: {new Date(item.createdAt).toLocaleDateString()}
-          </Text>
         </View>
-      </View>
-      
-      <View style={styles.subDealerActions}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            openEditModal(item);
-          }}
-        >
-          <Ionicons name="create-outline" size={20} color="#3B82F6" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleDeactivateSubDealer(item);
-          }}
-        >
-          <Ionicons name="trash-outline" size={20} color="#EF4444" />
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.clickIndicator}>
-        <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-        <Text style={styles.clickIndicatorText}>Tap to view details</Text>
-      </View>
-    </TouchableOpacity>
-  );
+
+        <View style={styles.subdealerDetails}>
+          {item.SDMobileNo && (
+            <View style={styles.detailRow}>
+              <Ionicons name="call-outline" size={16} color="#6B7280" />
+              <Text style={styles.detailText}>{item.SDMobileNo}</Text>
+            </View>
+          )}
+
+          {item.SDEmail && (
+            <View style={styles.detailRow}>
+              <Ionicons name="mail-outline" size={16} color="#6B7280" />
+              <Text style={styles.detailText}>{item.SDEmail}</Text>
+            </View>
+          )}
+
+          {item.SDContactPerson && (
+            <View style={styles.detailRow}>
+              <Ionicons name="person-outline" size={16} color="#6B7280" />
+              <Text style={styles.detailText}>{item.SDContactPerson}</Text>
+            </View>
+          )}
+
+          <View style={styles.detailRow}>
+            <Ionicons name="folder-outline" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>Group: {groupName}</Text>
+          </View>
+
+          {item.SDState && (
+            <View style={styles.detailRow}>
+              <Ionicons name="location-outline" size={16} color="#6B7280" />
+              <Text style={styles.detailText}>
+                {item.SDAddress1 && `${item.SDAddress1}, `}
+                {item.SDState}
+                {item.SDPincode && ` - ${item.SDPincode}`}
+              </Text>
+            </View>
+          )}
+
+          {item.SDGSTNNumber && (
+            <View style={styles.detailRow}>
+              <Ionicons name="document-text-outline" size={16} color="#6B7280" />
+              <Text style={styles.detailText}>GST: {item.SDGSTNNumber}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   // Render empty state
   const renderEmptyState = () => (
@@ -539,114 +600,194 @@ const TeamManagement = () => {
           </View>
           
           <ScrollView style={styles.modalContent}>
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Name *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.name}
-                onChangeText={(text) => setFormData({...formData, name: text})}
-                placeholder="Enter sub-dealer name"
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Email *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.email}
-                onChangeText={(text) => setFormData({...formData, email: text})}
-                placeholder="Enter email address"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Mobile *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.mobile}
-                onChangeText={(text) => setFormData({...formData, mobile: text})}
-                placeholder="Enter mobile number"
-                keyboardType="phone-pad"
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Password *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.password}
-                onChangeText={(text) => setFormData({...formData, password: text})}
-                placeholder="Enter password"
-                secureTextEntry
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Street Address</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.address.street}
-                onChangeText={(text) => setFormData({
-                  ...formData, 
-                  address: {...formData.address, street: text}
-                })}
-                placeholder="Enter street address"
-              />
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>City</Text>
+            {/* Required Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Required Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Sub Dealer Name *</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.address.city}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, city: text}
-                  })}
-                  placeholder="Enter city"
+                  value={formData.SDName}
+                  onChangeText={(text) => setFormData({...formData, SDName: text})}
+                  placeholder="Enter subdealer name"
+                  placeholderTextColor="#9CA3AF"
                 />
               </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Type *</Text>
+                <View style={styles.typeSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      formData.SDType === 'Sub Dealer' && styles.typeButtonActive
+                    ]}
+                    onPress={() => setFormData({...formData, SDType: 'Sub Dealer'})}
+                  >
+                    <Text style={[
+                      styles.typeButtonText,
+                      formData.SDType === 'Sub Dealer' && styles.typeButtonTextActive
+                    ]}>
+                      Sub Dealer
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      formData.SDType === 'TSO' && styles.typeButtonActive
+                    ]}
+                    onPress={() => setFormData({...formData, SDType: 'TSO'})}
+                  >
+                    <Text style={[
+                      styles.typeButtonText,
+                      formData.SDType === 'TSO' && styles.typeButtonTextActive
+                    ]}>
+                      TSO
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Address Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Address Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Address Line 1</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDAddress1}
+                  onChangeText={(text) => setFormData({...formData, SDAddress1: text})}
+                  placeholder="Enter address line 1"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Address Line 2</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDAddress2}
+                  onChangeText={(text) => setFormData({...formData, SDAddress2: text})}
+                  placeholder="Enter address line 2"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Address Line 3</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDAddress3}
+                  onChangeText={(text) => setFormData({...formData, SDAddress3: text})}
+                  placeholder="Enter address line 3"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>State</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.address.state}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, state: text}
-                  })}
+                  value={formData.SDState}
+                  onChangeText={(text) => setFormData({...formData, SDState: text})}
                   placeholder="Enter state"
+                  placeholderTextColor="#9CA3AF"
                 />
               </View>
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Pincode</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.address.pincode}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, pincode: text}
-                  })}
-                  placeholder="Enter pincode"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+              
+              <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Country</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.address.country}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, country: text}
-                  })}
+                  value={formData.SDCountry}
+                  onChangeText={(text) => setFormData({...formData, SDCountry: text})}
                   placeholder="Enter country"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Pincode</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDPincode}
+                  onChangeText={(text) => setFormData({...formData, SDPincode: text})}
+                  placeholder="Enter pincode"
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+            </View>
+
+            {/* Contact Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Contact Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Contact Person</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDContactPerson}
+                  onChangeText={(text) => setFormData({...formData, SDContactPerson: text})}
+                  placeholder="Enter contact person name"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Mobile Number</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDMobileNo}
+                  onChangeText={(text) => setFormData({...formData, SDMobileNo: text})}
+                  placeholder="Enter mobile number"
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Email</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDEmail}
+                  onChangeText={(text) => setFormData({...formData, SDEmail: text})}
+                  placeholder="Enter email address"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+            </View>
+
+            {/* GST Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>GST Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>GSTN Type</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDGSTNType}
+                  onChangeText={(text) => setFormData({...formData, SDGSTNType: text})}
+                  placeholder="Enter GSTN type"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>GSTN Number</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDGSTNNumber}
+                  onChangeText={(text) => setFormData({...formData, SDGSTNNumber: text.toUpperCase()})}
+                  placeholder="Enter GSTN number"
+                  autoCapitalize="characters"
+                  maxLength={15}
+                  placeholderTextColor="#9CA3AF"
                 />
               </View>
             </View>
@@ -672,100 +813,194 @@ const TeamManagement = () => {
           </View>
           
           <ScrollView style={styles.modalContent}>
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Email</Text>
-              <TextInput
-                style={[styles.formInput, styles.disabledInput]}
-                value={formData.email}
-                editable={false}
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Name *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.name}
-                onChangeText={(text) => setFormData({...formData, name: text})}
-                placeholder="Enter sub-dealer name"
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Mobile *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.mobile}
-                onChangeText={(text) => setFormData({...formData, mobile: text})}
-                placeholder="Enter mobile number"
-                keyboardType="phone-pad"
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Street Address</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.address.street}
-                onChangeText={(text) => setFormData({
-                  ...formData, 
-                  address: {...formData.address, street: text}
-                })}
-                placeholder="Enter street address"
-              />
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>City</Text>
+            {/* Required Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Required Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Sub Dealer Name *</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.address.city}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, city: text}
-                  })}
-                  placeholder="Enter city"
+                  value={formData.SDName}
+                  onChangeText={(text) => setFormData({...formData, SDName: text})}
+                  placeholder="Enter subdealer name"
+                  placeholderTextColor="#9CA3AF"
                 />
               </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Type *</Text>
+                <View style={styles.typeSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      formData.SDType === 'Sub Dealer' && styles.typeButtonActive
+                    ]}
+                    onPress={() => setFormData({...formData, SDType: 'Sub Dealer'})}
+                  >
+                    <Text style={[
+                      styles.typeButtonText,
+                      formData.SDType === 'Sub Dealer' && styles.typeButtonTextActive
+                    ]}>
+                      Sub Dealer
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      formData.SDType === 'TSO' && styles.typeButtonActive
+                    ]}
+                    onPress={() => setFormData({...formData, SDType: 'TSO'})}
+                  >
+                    <Text style={[
+                      styles.typeButtonText,
+                      formData.SDType === 'TSO' && styles.typeButtonTextActive
+                    ]}>
+                      TSO
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Address Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Address Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Address Line 1</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDAddress1}
+                  onChangeText={(text) => setFormData({...formData, SDAddress1: text})}
+                  placeholder="Enter address line 1"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Address Line 2</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDAddress2}
+                  onChangeText={(text) => setFormData({...formData, SDAddress2: text})}
+                  placeholder="Enter address line 2"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Address Line 3</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDAddress3}
+                  onChangeText={(text) => setFormData({...formData, SDAddress3: text})}
+                  placeholder="Enter address line 3"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>State</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.address.state}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, state: text}
-                  })}
+                  value={formData.SDState}
+                  onChangeText={(text) => setFormData({...formData, SDState: text})}
                   placeholder="Enter state"
+                  placeholderTextColor="#9CA3AF"
                 />
               </View>
-            </View>
-            
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.formLabel}>Pincode</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={formData.address.pincode}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, pincode: text}
-                  })}
-                  placeholder="Enter pincode"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+              
+              <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Country</Text>
                 <TextInput
                   style={styles.formInput}
-                  value={formData.address.country}
-                  onChangeText={(text) => setFormData({
-                    ...formData, 
-                    address: {...formData.address, country: text}
-                  })}
+                  value={formData.SDCountry}
+                  onChangeText={(text) => setFormData({...formData, SDCountry: text})}
                   placeholder="Enter country"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Pincode</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDPincode}
+                  onChangeText={(text) => setFormData({...formData, SDPincode: text})}
+                  placeholder="Enter pincode"
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+            </View>
+
+            {/* Contact Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Contact Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Contact Person</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDContactPerson}
+                  onChangeText={(text) => setFormData({...formData, SDContactPerson: text})}
+                  placeholder="Enter contact person name"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Mobile Number</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDMobileNo}
+                  onChangeText={(text) => setFormData({...formData, SDMobileNo: text})}
+                  placeholder="Enter mobile number"
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Email</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDEmail}
+                  onChangeText={(text) => setFormData({...formData, SDEmail: text})}
+                  placeholder="Enter email address"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+            </View>
+
+            {/* GST Information Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>GST Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>GSTN Type</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDGSTNType}
+                  onChangeText={(text) => setFormData({...formData, SDGSTNType: text})}
+                  placeholder="Enter GSTN type"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>GSTN Number</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.SDGSTNNumber}
+                  onChangeText={(text) => setFormData({...formData, SDGSTNNumber: text.toUpperCase()})}
+                  placeholder="Enter GSTN number"
+                  autoCapitalize="characters"
+                  maxLength={15}
+                  placeholderTextColor="#9CA3AF"
                 />
               </View>
             </View>
@@ -802,20 +1037,30 @@ const TeamManagement = () => {
                   <Text style={styles.detailsSectionTitle}>Basic Information</Text>
                   <View style={styles.detailsRow}>
                     <Text style={styles.detailsLabel}>Name:</Text>
-                    <Text style={styles.detailsValue}>{selectedSubDealer.name}</Text>
+                    <Text style={styles.detailsValue}>{selectedSubDealer.SDName || selectedSubDealer.name || 'N/A'}</Text>
                   </View>
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Email:</Text>
-                    <Text style={styles.detailsValue}>{selectedSubDealer.email}</Text>
-                  </View>
+                  {selectedSubDealer.SDContactPerson && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Contact Person:</Text>
+                      <Text style={styles.detailsValue}>{selectedSubDealer.SDContactPerson}</Text>
+                    </View>
+                  )}
+                  {selectedSubDealer.SDEmail && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Email:</Text>
+                      <Text style={styles.detailsValue}>{selectedSubDealer.SDEmail}</Text>
+                    </View>
+                  )}
                   <View style={styles.detailsRow}>
                     <Text style={styles.detailsLabel}>Mobile:</Text>
-                    <Text style={styles.detailsValue}>{selectedSubDealer.mobile}</Text>
+                    <Text style={styles.detailsValue}>{selectedSubDealer.SDMobileNo || selectedSubDealer.mobile || 'N/A'}</Text>
                   </View>
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Role:</Text>
-                    <Text style={styles.detailsValue}>{selectedSubDealer.role}</Text>
-                  </View>
+                  {selectedSubDealer.SDType && (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Type:</Text>
+                      <Text style={styles.detailsValue}>{selectedSubDealer.SDType}</Text>
+                    </View>
+                  )}
                   <View style={styles.detailsRow}>
                     <Text style={styles.detailsLabel}>Status:</Text>
                     <View style={[
@@ -832,37 +1077,61 @@ const TeamManagement = () => {
                   </View>
                 </View>
 
-                {selectedSubDealer.address && (
+                {(selectedSubDealer.SDAddress1 || selectedSubDealer.SDAddress2 || selectedSubDealer.SDAddress3 || selectedSubDealer.SDState || selectedSubDealer.SDPincode) && (
                   <View style={styles.detailsSection}>
                     <Text style={styles.detailsSectionTitle}>Address Information</Text>
-                    {selectedSubDealer.address.street && (
+                    {selectedSubDealer.SDAddress1 && (
                       <View style={styles.detailsRow}>
-                        <Text style={styles.detailsLabel}>Street:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.address.street}</Text>
+                        <Text style={styles.detailsLabel}>Address Line 1:</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDAddress1}</Text>
                       </View>
                     )}
-                    {selectedSubDealer.address.city && (
+                    {selectedSubDealer.SDAddress2 && (
                       <View style={styles.detailsRow}>
-                        <Text style={styles.detailsLabel}>City:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.address.city}</Text>
+                        <Text style={styles.detailsLabel}>Address Line 2:</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDAddress2}</Text>
                       </View>
                     )}
-                    {selectedSubDealer.address.state && (
+                    {selectedSubDealer.SDAddress3 && (
+                      <View style={styles.detailsRow}>
+                        <Text style={styles.detailsLabel}>Address Line 3:</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDAddress3}</Text>
+                      </View>
+                    )}
+                    {selectedSubDealer.SDState && (
                       <View style={styles.detailsRow}>
                         <Text style={styles.detailsLabel}>State:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.address.state}</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDState}</Text>
                       </View>
                     )}
-                    {selectedSubDealer.address.pincode && (
+                    {selectedSubDealer.SDPincode && (
                       <View style={styles.detailsRow}>
                         <Text style={styles.detailsLabel}>Pincode:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.address.pincode}</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDPincode}</Text>
                       </View>
                     )}
-                    {selectedSubDealer.address.country && (
+                    {selectedSubDealer.SDCountry && (
                       <View style={styles.detailsRow}>
                         <Text style={styles.detailsLabel}>Country:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.address.country}</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDCountry}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {(selectedSubDealer.SDGSTNType || selectedSubDealer.SDGSTNNumber) && (
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.detailsSectionTitle}>GST Information</Text>
+                    {selectedSubDealer.SDGSTNType && (
+                      <View style={styles.detailsRow}>
+                        <Text style={styles.detailsLabel}>GSTN Type:</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDGSTNType}</Text>
+                      </View>
+                    )}
+                    {selectedSubDealer.SDGSTNNumber && (
+                      <View style={styles.detailsRow}>
+                        <Text style={styles.detailsLabel}>GSTN Number:</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.SDGSTNNumber}</Text>
                       </View>
                     )}
                   </View>
@@ -870,39 +1139,69 @@ const TeamManagement = () => {
 
                 <View style={styles.detailsSection}>
                   <Text style={styles.detailsSectionTitle}>Company Information</Text>
-                  {selectedSubDealer.companies && selectedSubDealer.companies.length > 0 && (
+                  {selectedSubDealer.companyId && (
                     <>
                       <View style={styles.detailsRow}>
                         <Text style={styles.detailsLabel}>Company:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.companies[0].companyId.companyName}</Text>
+                        <Text style={styles.detailsValue}>
+                          {typeof selectedSubDealer.companyId === 'object' 
+                            ? selectedSubDealer.companyId.companyName 
+                            : 'N/A'}
+                        </Text>
                       </View>
                       <View style={styles.detailsRow}>
                         <Text style={styles.detailsLabel}>Company Code:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.companies[0].companyId.companyCode}</Text>
+                        <Text style={styles.detailsValue}>
+                          {typeof selectedSubDealer.companyId === 'object' 
+                            ? selectedSubDealer.companyId.companyCode 
+                            : 'N/A'}
+                        </Text>
                       </View>
                     </>
                   )}
                 </View>
 
-                <View style={styles.detailsSection}>
-                  <Text style={styles.detailsSectionTitle}>Hierarchy Information</Text>
-                  {selectedSubDealer.hierarchy && selectedSubDealer.hierarchy.parentUser && (
-                    <>
+                {selectedSubDealer.groupId && (
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.detailsSectionTitle}>Group Information</Text>
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Group Name:</Text>
+                      <Text style={styles.detailsValue}>
+                        {typeof selectedSubDealer.groupId === 'object' 
+                          ? selectedSubDealer.groupId.GroupName 
+                          : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Group GUID:</Text>
+                      <Text style={styles.detailsValue}>
+                        {typeof selectedSubDealer.groupId === 'object' 
+                          ? selectedSubDealer.groupId.GroupGUID 
+                          : 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {selectedSubDealer.createdBy && (
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.detailsSectionTitle}>Created By</Text>
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Name:</Text>
+                      <Text style={styles.detailsValue}>
+                        {typeof selectedSubDealer.createdBy === 'object' 
+                          ? selectedSubDealer.createdBy.name 
+                          : 'N/A'}
+                      </Text>
+                    </View>
+                    {typeof selectedSubDealer.createdBy === 'object' && selectedSubDealer.createdBy.email && (
                       <View style={styles.detailsRow}>
-                        <Text style={styles.detailsLabel}>Parent User:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.hierarchy.parentUser.name}</Text>
+                        <Text style={styles.detailsLabel}>Email:</Text>
+                        <Text style={styles.detailsValue}>{selectedSubDealer.createdBy.email}</Text>
                       </View>
-                      <View style={styles.detailsRow}>
-                        <Text style={styles.detailsLabel}>Parent Role:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.hierarchy.parentUser.role}</Text>
-                      </View>
-                      <View style={styles.detailsRow}>
-                        <Text style={styles.detailsLabel}>Hierarchy Level:</Text>
-                        <Text style={styles.detailsValue}>{selectedSubDealer.hierarchy.level}</Text>
-                      </View>
-                    </>
-                  )}
-                </View>
+                    )}
+                  </View>
+                )}
 
                 <View style={styles.detailsSection}>
                   <Text style={styles.detailsSectionTitle}>Timeline Information</Text>
@@ -914,12 +1213,6 @@ const TeamManagement = () => {
                     <Text style={styles.detailsLabel}>Last Updated:</Text>
                     <Text style={styles.detailsValue}>{new Date(selectedSubDealer.updatedAt).toLocaleString()}</Text>
                   </View>
-                  {selectedSubDealer.createdBy && (
-                    <View style={styles.detailsRow}>
-                      <Text style={styles.detailsLabel}>Created By:</Text>
-                      <Text style={styles.detailsValue}>{selectedSubDealer.createdBy.name}</Text>
-                    </View>
-                  )}
                 </View>
               </>
             )}
@@ -942,7 +1235,7 @@ const TeamManagement = () => {
             
             <View style={styles.deleteModalContent}>
               <Text style={styles.deleteModalMessage}>
-                Are you sure you want to deactivate "{selectedSubDealer?.name}"?
+                Are you sure you want to deactivate "{selectedSubDealer?.SDName || selectedSubDealer?.name || 'this sub-dealer'}"?
               </Text>
               <Text style={styles.deleteModalSubMessage}>
                 This action will make the sub-dealer inactive and they won't be able to access the system.
@@ -1098,70 +1391,77 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    flexDirection: 'row',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  subDealerInfo: {
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  subdealerInfoHeader: {
     flex: 1,
   },
   subDealerName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  subDealerEmail: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  subDealerMobile: {
-    fontSize: 14,
-    color: '#6B7280',
+    color: '#111827',
     marginBottom: 8,
   },
-  addressContainer: {
-    marginBottom: 8,
-  },
-  addressText: {
-    fontSize: 12,
-    color: '#6B7280',
-    lineHeight: 16,
-  },
-  countryText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  statusContainer: {
+  badgesContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  typeBadge: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  typeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6366F1',
   },
   statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   statusText: {
     fontSize: 12,
     fontWeight: '500',
+    color: '#FFFFFF',
   },
-  createdDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  subDealerActions: {
-    justifyContent: 'space-between',
-    paddingLeft: 8,
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
   },
   actionButton: {
     padding: 8,
-    marginBottom: 4,
+    borderRadius: 6,
+    backgroundColor: '#F3F4F6',
+  },
+  subdealerDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#374151',
+    flex: 1,
   },
   emptyState: {
     alignItems: 'center',
@@ -1374,6 +1674,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  typeButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  typeButtonActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  typeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  typeButtonTextActive: {
+    color: '#FFFFFF',
+  },
 });
 
 export default TeamManagement;
+

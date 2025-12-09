@@ -89,79 +89,12 @@ export const ROLE_HIERARCHY: Record<UserRole, RoleScreenAccess> = {
     ]
   },
 
-  // ==================== ZONAL MANAGER ====================
-  [UserRole.ZONAL]: {
-    dashboard: 'DashboardZonal',
-    hierarchyLevel: 2,
+  // ==================== GROUP USER ====================
+  [UserRole.GROUP_USER]: {
+    dashboard: 'DashboardGroupUser',
+    hierarchyLevel: 10, // No hierarchy - just grouping
     allowedScreens: [
-      'DashboardZonal',
-      'RSMScreen',
-      'ASMScreen',
-      'SalesScreen',
-      'DealerScreen',
-      'DistributorsScreen',
-      'InvoiceScreen',
-      'LedgerScreen',
-      'TargetScreen',
-      'PendingOrdersScreen',
-      'ClearOrdersScreen',
-      'SettingsScreen',
-      'ProfileScreen'
-    ]
-  },
-
-  // ==================== RSM (Regional Sales Manager) ====================
-  [UserRole.RSM]: {
-    dashboard: 'DashboardRSM',
-    hierarchyLevel: 3,
-    allowedScreens: [
-      'DashboardRSM',
-      'ASMScreen',
-      'SalesScreen',
-      'DealerScreen',
-      'DistributorsScreen',
-      'InvoiceScreen',
-      'LedgerScreen',
-      'TargetScreen',
-      'PendingOrdersScreen',
-      'ClearOrdersScreen',
-      'SettingsScreen',
-      'ProfileScreen'
-    ]
-  },
-
-  // ==================== ASM (Area Sales Manager) ====================
-  [UserRole.ASM]: {
-    dashboard: 'DashboardASM',
-    hierarchyLevel: 4,
-    allowedScreens: [
-      'DashboardASM',
-      'SalesScreen',
-      'DealerScreen',
-      'DistributorsScreen',
-      'InvoiceScreen',
-      'LedgerScreen',
-      'TargetScreen',
-      'PendingOrdersScreen',
-      'ClearOrdersScreen',
-      'SettingsScreen',
-      'ProfileScreen'
-    ]
-  },
-
-  // ==================== DISTRIBUTOR ====================
-  [UserRole.DISTRIBUTOR]: {
-    dashboard: 'DashboardDistributor',
-    hierarchyLevel: 5,
-    allowedScreens: [
-      'DashboardDistributor',
-      'SalesScreen',
-      'DealerScreen',
-      'InvoiceScreen',
-      'LedgerScreen',
-      'TargetScreen',
-      'PendingOrdersScreen',
-      'ClearOrdersScreen',
+      'DashboardGroupUser',
       'SettingsScreen',
       'ProfileScreen'
     ]
@@ -200,20 +133,7 @@ export const ROLE_HIERARCHY: Record<UserRole, RoleScreenAccess> = {
     ]
   },
 
-  // ==================== SALESMAN (Lowest Level) ====================
-  [UserRole.SALESMAN]: {
-    dashboard: 'DashboardSalesman',
-    hierarchyLevel: 8,
-    allowedScreens: [
-      'DashboardSalesman',
-      'SalesScreen',
-      'InvoiceScreen',
-      'LedgerScreen',
-      'TargetScreen',
-      'SettingsScreen',
-      'ProfileScreen'
-    ]
-  }
+  // Removed roles: ZONAL, RSM, ASM, DISTRIBUTOR, SALESMAN - no longer used
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -263,14 +183,10 @@ export const getRoleDisplayName = (role: UserRole): string => {
   const roleNames: Record<UserRole, string> = {
     [UserRole.SUPERADMIN]: 'Super Administrator',
     [UserRole.ADMIN]: 'Company Admin',
-    [UserRole.ZONAL]: 'Zonal Manager',
-    [UserRole.RSM]: 'Regional Sales Manager',
-    [UserRole.ASM]: 'Area Sales Manager',
-    [UserRole.DISTRIBUTOR]: 'Distributor',
+    [UserRole.GROUP_USER]: 'Group User',
     [UserRole.DEALER]: 'Dealer',
     [UserRole.SUB_DEALER]: 'Sub Dealer',
-    [UserRole.SALESMAN]: 'Salesman',
   };
   
-  return roleNames[role] || 'Unknown Role';
+  return roleNames[role] || 'Group User'; // Default to Group User for unknown roles
 };

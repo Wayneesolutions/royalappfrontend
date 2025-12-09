@@ -40,9 +40,19 @@ interface Dealer {
 
 interface SubDealer {
   _id: string;
-  name: string;
-  email?: string;
-  mobile: string;
+  SDName?: string;
+  name?: string; // For backward compatibility
+  SDEmail?: string;
+  email?: string; // For backward compatibility
+  SDMobileNo?: string;
+  mobile?: string; // For backward compatibility
+  SDAddress1?: string;
+  SDAddress2?: string;
+  SDAddress3?: string;
+  SDState?: string;
+  SDCountry?: string;
+  SDPincode?: string;
+  SDContactPerson?: string;
   address?: {
     street?: string;
     city?: string;
@@ -50,7 +60,12 @@ interface SubDealer {
     pincode?: string;
     country?: string;
   };
-  dealerId: string;
+  dealerId?: string;
+  groupId?: string | {
+    _id: string;
+    GroupName: string;
+    GroupGUID: string;
+  };
 }
 
 interface Product {
@@ -341,6 +356,10 @@ const DealerCreateOrder = () => {
   const sellerState = useMemo(() => deriveSellerState(), [deriveSellerState]);
 
   const buyerState = useMemo(() => {
+    // Check SubDealer model fields first (SDState)
+    if (selectedSubDealer?.SDState) {
+      return extractState(selectedSubDealer.SDState);
+    }
     if (selectedSubDealer?.address?.state) {
       return extractState(selectedSubDealer.address.state);
     }
@@ -465,20 +484,90 @@ const DealerCreateOrder = () => {
       console.log('📡 Sub dealers response:', subDealersResponse);
       
       // Handle getSubDealers response format: {success: true, data: {subDealers: [...]}}
+      // This API already filters by dealer's groupId on the backend
       if (subDealersResponse?.success && subDealersResponse?.data?.subDealers) {
         const subDealersList = Array.isArray(subDealersResponse.data.subDealers) 
           ? subDealersResponse.data.subDealers 
           : [];
-        setSubDealers(subDealersList);
-        console.log('✅ Sub dealers loaded:', subDealersList.length);
+        
+        // Map SubDealer model fields to interface (for backward compatibility)
+        const mappedSubDealers = subDealersList.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName || subdealer.name, // For backward compatibility
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail || subdealer.email, // For backward compatibility
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo || subdealer.mobile, // For backward compatibility
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDAddress3: subdealer.SDAddress3,
+          SDState: subdealer.SDState,
+          SDCountry: subdealer.SDCountry,
+          SDPincode: subdealer.SDPincode,
+          SDContactPerson: subdealer.SDContactPerson,
+          address: {
+            street: subdealer.SDAddress1 || subdealer.address?.street || '',
+            city: subdealer.SDAddress2 || subdealer.address?.city || '',
+            state: subdealer.SDState || subdealer.address?.state || '',
+            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
+            country: subdealer.SDCountry || subdealer.address?.country || 'India',
+          },
+          groupId: subdealer.groupId,
+        }));
+        
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Sub dealers loaded (filtered by dealer group):', mappedSubDealers.length);
       } else if (Array.isArray(subDealersResponse)) {
-        // Direct array response (fallback)
-        setSubDealers(subDealersResponse);
-        console.log('✅ Sub dealers loaded (direct array):', subDealersResponse.length);
+        // Direct array response (fallback) - map fields
+        const mappedSubDealers = subDealersResponse.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName || subdealer.name,
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail || subdealer.email,
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo || subdealer.mobile,
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDState: subdealer.SDState,
+          SDCountry: subdealer.SDCountry,
+          SDPincode: subdealer.SDPincode,
+          address: {
+            street: subdealer.SDAddress1 || subdealer.address?.street || '',
+            city: subdealer.SDAddress2 || subdealer.address?.city || '',
+            state: subdealer.SDState || subdealer.address?.state || '',
+            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
+            country: subdealer.SDCountry || subdealer.address?.country || 'India',
+          },
+        }));
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Sub dealers loaded (direct array):', mappedSubDealers.length);
       } else if (subDealersResponse?.data && Array.isArray(subDealersResponse.data)) {
-        // Response with data array
-        setSubDealers(subDealersResponse.data);
-        console.log('✅ Sub dealers loaded (data array):', subDealersResponse.data.length);
+        // Response with data array - map fields
+        const mappedSubDealers = subDealersResponse.data.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName || subdealer.name,
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail || subdealer.email,
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo || subdealer.mobile,
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDState: subdealer.SDState,
+          SDCountry: subdealer.SDCountry,
+          SDPincode: subdealer.SDPincode,
+          address: {
+            street: subdealer.SDAddress1 || subdealer.address?.street || '',
+            city: subdealer.SDAddress2 || subdealer.address?.city || '',
+            state: subdealer.SDState || subdealer.address?.state || '',
+            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
+            country: subdealer.SDCountry || subdealer.address?.country || 'India',
+          },
+        }));
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Sub dealers loaded (data array):', mappedSubDealers.length);
       } else {
         console.log('⚠️ No sub dealers found or failed to load:', subDealersResponse?.message || 'Unknown error');
         setSubDealers([]);
@@ -595,11 +684,11 @@ const DealerCreateOrder = () => {
       return;
     }
 
+    // No stock validation for dealers - they can enter any quantity
     const validate = async () => {
       try {
         const freshProduct = await getFreshProduct(product._id);
         const availableStock = getStockNumber(freshProduct.stock);
-        const isValid = quantityNumber <= availableStock;
 
         setProductSelections((prev) => {
           const prevState = prev[product._id] ?? createSelectionState(getStockNumber(product.stock));
@@ -611,9 +700,9 @@ const DealerCreateOrder = () => {
             [product._id]: {
               ...prevState,
               validating: false,
-              isValid,
+              isValid: true, // Always valid - no stock check for dealers
               availableStock,
-              error: isValid ? '' : `Only ${availableStock} units available`,
+              error: '', // No error - dealers can order any quantity
               productData: freshProduct,
               lastValidatedQuantity: quantityNumber,
             },
@@ -630,10 +719,10 @@ const DealerCreateOrder = () => {
             [product._id]: {
               ...prevState,
               validating: false,
-              isValid: false,
-              error: error instanceof Error ? error.message : 'Unable to validate stock',
+              isValid: true, // Always valid even on error
+              error: '', // No error message
               productData: undefined,
-              lastValidatedQuantity: undefined,
+              lastValidatedQuantity: quantityNumber,
             },
           };
         });
@@ -677,24 +766,7 @@ const DealerCreateOrder = () => {
       if (!selection.isValid || selection.lastValidatedQuantity !== quantityNumber || !freshProduct) {
         freshProduct = await getFreshProduct(product._id);
         availableStock = getStockNumber(freshProduct.stock);
-
-        if (quantityNumber > availableStock) {
-          setProductSelections((prev) => ({
-            ...prev,
-            [product._id]: {
-              ...(prev[product._id] ?? createSelectionState(availableStock)),
-              quantity: selection.quantity,
-              validating: false,
-              isValid: false,
-              availableStock,
-              error: `Only ${availableStock} units available`,
-              adding: false,
-              productData: freshProduct,
-              lastValidatedQuantity: quantityNumber,
-            },
-          }));
-          return;
-        }
+        // No stock validation - dealers can order any quantity
       }
 
       const success = await addProductToOrder(product, quantityNumber, freshProduct);
@@ -770,26 +842,7 @@ const DealerCreateOrder = () => {
           availableStock = getStockNumber(freshProduct.stock);
         }
 
-        if (quantity > availableStock) {
-          const message = `${freshProduct.productName}: Only ${availableStock} available.`;
-          errorMessages.push(message);
-          setProductSelections((prev) => ({
-            ...prev,
-            [product._id]: {
-              ...(prev[product._id] ?? createSelectionState(availableStock)),
-              quantity: String(quantity),
-              validating: false,
-              isValid: false,
-              availableStock,
-              error: `Only ${availableStock} units available`,
-              adding: false,
-              lastValidatedQuantity: undefined,
-              productData: freshProduct,
-            },
-          }));
-          continue;
-        }
-
+        // No stock validation - dealers can order any quantity
         const success = await addProductToOrder(product, quantity, freshProduct);
         if (success) {
           addedCount += 1;
@@ -858,13 +911,8 @@ const DealerCreateOrder = () => {
       const hsnCode = getProductHsn(freshProduct);
       const category = getProductCategory(freshProduct);
 
-      if (quantity > availableStock) {
-        Alert.alert(
-          'Insufficient Stock',
-          `Only ${availableStock} ${unitLabel} available for ${freshProduct.productName}.`
-        );
-        return false;
-      }
+      // No stock validation for dealers - they can order any quantity they need
+      // Removed stock check: if (quantity > availableStock)
 
       setOrderItems((prevItems) => {
         const updatedItems = [...prevItems];
@@ -942,20 +990,16 @@ const DealerCreateOrder = () => {
     if (newQuantity < 0) return; // Don't allow negative quantities
     
     try {
-      // Check stock availability using backend API
-      console.log(`🔍 Checking stock for product ${item.productName}, requested quantity: ${newQuantity}`);
+      // No stock validation for dealers - they can enter any quantity
+      console.log(`✅ Updating quantity for ${item.productName}: ${newQuantity}`);
       
-      // Get fresh product data to check current stock
+      // Get fresh product data to update availableStock (for display only, not validation)
       const productResponse = await getProductById(productId);
       const currentStock = (productResponse?.success
         ? getStockNumber(productResponse.product?.stock)
         : undefined) ?? item.availableStock;
 
-      if (newQuantity > currentStock) {
-        Alert.alert('Insufficient Stock', `Only ${currentStock} ${item.unit} available in stock.`);
-        return;
-      }
-
+      // Update quantity without stock validation
       setOrderItems((prevItems) =>
         applyGstToItems(
           prevItems.map((it) =>
@@ -963,7 +1007,7 @@ const DealerCreateOrder = () => {
               ? {
                   ...it,
                   quantity: newQuantity,
-                  availableStock: currentStock,
+                  availableStock: currentStock, // Keep for display, but don't validate
                 }
               : it
           ),
@@ -973,7 +1017,20 @@ const DealerCreateOrder = () => {
       console.log(`✅ Updated quantity for ${item.productName}: ${newQuantity}`);
     } catch (error) {
       console.error('❌ Error updating quantity:', error);
-      Alert.alert('Error', 'Failed to update quantity');
+      // Even on error, allow quantity update - dealers can order any quantity
+      setOrderItems((prevItems) =>
+        applyGstToItems(
+          prevItems.map((it) =>
+            it.productId === productId
+              ? {
+                  ...it,
+                  quantity: newQuantity,
+                }
+              : it
+          ),
+          gstType
+        )
+      );
     }
   };
 
@@ -1012,22 +1069,8 @@ const DealerCreateOrder = () => {
         return;
       }
       
-      // Final stock validation before creating order
-      console.log('🔍 Performing final stock validation...');
-      for (const item of itemsWithQuantity) {
-        const productResponse = await getProductById(item.productId);
-        if (productResponse?.success) {
-          const currentStock = getStockNumber(productResponse.product.stock);
-          if (item.quantity > currentStock) {
-            Alert.alert(
-              'Stock Validation Failed', 
-              `${item.productName}: Only ${currentStock} ${item.unit} available, but ${item.quantity} requested.`
-            );
-            setSaving(false);
-            return;
-          }
-        }
-      }
+      // No stock validation for dealers - they can order any quantity they need
+      // Removed final stock validation check
       
       const trimmedCustomMode = customMode.trim();
       const trimmedTermsOfPayment = termsOfPayment.trim();
@@ -1045,10 +1088,18 @@ const DealerCreateOrder = () => {
         customerAddress: normalizeAddress(selectedDealer.address),
         dealerId: selectedDealer._id, // Save dealer ID separately
         dealerName: selectedDealer.name,
-        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately
-        subDealerName: selectedSubDealer ? selectedSubDealer.name : null,
+        subDealerId: selectedSubDealer ? selectedSubDealer._id : null, // Save subdealer ID separately (from SubDealer model)
+        subDealerName: selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name || '') : null,
         shippingAddress: selectedSubDealer
-          ? normalizeAddress(selectedSubDealer.address)
+          ? normalizeAddress(
+              selectedSubDealer.address || {
+                street: selectedSubDealer.SDAddress1 || '',
+                city: selectedSubDealer.SDAddress2 || '',
+                state: selectedSubDealer.SDState || '',
+                pincode: selectedSubDealer.SDPincode || '',
+                country: selectedSubDealer.SDCountry || 'India',
+              }
+            )
           : normalizeAddress(selectedDealer.address),
         items: itemsWithQuantity.map(item => ({
           productId: item.productId,
@@ -1155,15 +1206,28 @@ const DealerCreateOrder = () => {
     </TouchableOpacity>
   );
 
-  const renderSubDealerItem = ({ item }: { item: SubDealer }) => (
-    <TouchableOpacity
-      style={styles.dropdownItem}
-      onPress={() => handleSubDealerSelect(item)}
-    >
-      <Text style={styles.dropdownItemText}>{item.name}</Text>
-      <Text style={styles.dropdownItemSubtext}>{formatAddress(item.address)}</Text>
-    </TouchableOpacity>
-  );
+  const renderSubDealerItem = ({ item }: { item: SubDealer }) => {
+    const subDealerName = item.SDName || item.name || 'N/A';
+    const subDealerAddress = item.address || {
+      street: item.SDAddress1 || '',
+      city: item.SDAddress2 || '',
+      state: item.SDState || '',
+      pincode: item.SDPincode || '',
+      country: item.SDCountry || 'India',
+    };
+    
+    return (
+      <TouchableOpacity
+        style={styles.dropdownItem}
+        onPress={() => handleSubDealerSelect(item)}
+      >
+        <Text style={styles.dropdownItemText}>{subDealerName}</Text>
+        {subDealerAddress && (
+          <Text style={styles.dropdownItemSubtext}>{formatAddress(subDealerAddress)}</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderProductItem = ({ item }: { item: Product }) => {
     const selection = getSelectionState(item);
@@ -1509,7 +1573,7 @@ const DealerCreateOrder = () => {
             >
               <Text style={[styles.dropdownButtonText, !selectedSubDealer && styles.placeholderText]}>
                 {loading ? 'Loading sub dealers...' : 
-                selectedSubDealer ? selectedSubDealer.name : 
+                selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name || 'N/A') : 
                 subDealers.length > 0 ? 'Select Sub Dealer (Optional)' : 
                 'No Sub Dealers Available'}
               </Text>
@@ -1525,7 +1589,17 @@ const DealerCreateOrder = () => {
             )}
           </View>
           {selectedSubDealer && (
-            <Text style={styles.addressText}>{formatAddress(selectedSubDealer.address)}</Text>
+            <Text style={styles.addressText}>
+              {formatAddress(
+                selectedSubDealer.address || {
+                  street: selectedSubDealer.SDAddress1 || '',
+                  city: selectedSubDealer.SDAddress2 || '',
+                  state: selectedSubDealer.SDState || '',
+                  pincode: selectedSubDealer.SDPincode || '',
+                  country: selectedSubDealer.SDCountry || 'India',
+                }
+              )}
+            </Text>
           )}
           {subDealers.length === 0 && !loading && (
             <Text style={styles.infoText}>Order will be shipped to dealer address</Text>

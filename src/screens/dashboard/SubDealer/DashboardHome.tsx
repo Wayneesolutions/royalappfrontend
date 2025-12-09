@@ -18,27 +18,17 @@ import { RootStackParamList } from '../../../navigation/types';
 
 interface DashboardStats {
   totalOrders: number;
-  pendingOrders: number;
-  completedOrders: number;
-  totalSales: number;
-  targetAchievement: number;
-  monthlyTarget: number;
-  availableProducts: number;
-  newOrders: number;
+  pendingOrders: number; // Draft orders
+  approvedOrders: number; // Approved orders
 }
 
 const DashboardHome = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, getOrderStats, getMyOrders } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [stats, setStats] = useState<DashboardStats>({
     totalOrders: 0,
-    pendingOrders: 0,
-    completedOrders: 0,
-    totalSales: 0,
-    targetAchievement: 0,
-    monthlyTarget: 0,
-    availableProducts: 0,
-    newOrders: 0,
+    pendingOrders: 0, // Draft orders
+    approvedOrders: 0, // Approved orders
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,16 +43,37 @@ const DashboardHome = () => {
     try {
       setLoading(true);
       
-      // Mock data for subdealer - replace with actual API calls
+      // Fetch order statistics and draft orders
+      const [orderStatsResult, draftOrdersResult] = await Promise.all([
+        getOrderStats(),
+        getMyOrders({ status: 'draft', page: 1, limit: 1 }).catch(() => null) // Get draft orders count
+      ]);
+
+      console.log('Dashboard - Order stats result:', orderStatsResult);
+      console.log('Dashboard - Draft orders result:', draftOrdersResult);
+
+      const orderStats = orderStatsResult?.success ? orderStatsResult.stats : {
+        totalOrders: 0,
+        pendingOrders: 0,
+        confirmedOrders: 0,
+        approvedOrders: 0,
+      };
+
+      // Get draft orders count (pending/draft orders)
+      const draftOrdersCount = draftOrdersResult?.success 
+        ? (draftOrdersResult.pagination?.totalOrders || draftOrdersResult.stats?.totalOrders || 0)
+        : 0;
+
+      // Approved orders (confirmedOrders from backend)
+      const approvedOrders = orderStats.confirmedOrders || orderStats.approvedOrders || 0;
+
+      // Total orders that dealer can create (all orders created by this dealer)
+      const totalOrders = orderStats.totalOrders || 0;
+
       setStats({
-        totalOrders: 12,
-        pendingOrders: 2,
-        completedOrders: 10,
-        totalSales: 35000,
-        targetAchievement: 82,
-        monthlyTarget: 50000,
-        availableProducts: 18,
-        newOrders: 1,
+        totalOrders: totalOrders,
+        pendingOrders: draftOrdersCount, // Draft orders
+        approvedOrders: approvedOrders, // Approved orders
       });
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
@@ -101,11 +112,12 @@ const DashboardHome = () => {
     setShowLogoutModal(false);
   };
 
-  const StatCard = ({ title, value, icon, color, onPress }: {
+  const StatCard = ({ title, value, icon, color, subtitle, onPress }: {
     title: string;
     value: number | string;
     icon: string;
     color: string;
+    subtitle?: string;
     onPress?: () => void;
   }) => (
     <TouchableOpacity style={[styles.statCard, { borderLeftColor: color }]} onPress={onPress}>
@@ -116,6 +128,7 @@ const DashboardHome = () => {
         <Text style={styles.statValue}>{value}</Text>
       </View>
       <Text style={styles.statTitle}>{title}</Text>
+      {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
     </TouchableOpacity>
   );
 
@@ -187,30 +200,13 @@ const DashboardHome = () => {
             value={stats.pendingOrders}
             icon="time"
             color="#F59E0B"
+            subtitle="Draft Orders"
           />
           <StatCard
-            title="Completed Orders"
-            value={stats.completedOrders}
+            title="Approved Orders"
+            value={stats.approvedOrders}
             icon="checkmark-circle"
             color="#10B981"
-          />
-          <StatCard
-            title="Total Sales"
-            value={`₹${stats.totalSales.toLocaleString()}`}
-            icon="trending-up"
-            color="#059669"
-          />
-          <StatCard
-            title="Target Achievement"
-            value={`${stats.targetAchievement}%`}
-            icon="target"
-            color="#DC2626"
-          />
-          <StatCard
-            title="Available Products"
-            value={stats.availableProducts}
-            icon="cube"
-            color="#3B82F6"
           />
         </View>
       </View>
@@ -221,38 +217,24 @@ const DashboardHome = () => {
         <View style={styles.actionsGrid}>
           <QuickActionCard
             title="Place Order"
-            description="Order new products"
+            description="Create new order"
             icon="add-circle-outline"
             color="#8B5CF6"
-            onPress={() => Alert.alert('Coming Soon', 'Order placement feature will be available soon')}
+            onPress={() => navigation.navigate('CreateOrderScreen' as any)}
           />
           <QuickActionCard
             title="Order History"
-            description="View order status"
+            description="View all orders"
             icon="list-outline"
             color="#3B82F6"
-            onPress={() => Alert.alert('Coming Soon', 'Order history feature will be available soon')}
-          />
-          <QuickActionCard
-            title="Sales Report"
-            description="View performance"
-            icon="bar-chart-outline"
-            color="#10B981"
-            onPress={() => Alert.alert('Coming Soon', 'Sales report feature will be available soon')}
-          />
-          <QuickActionCard
-            title="Product Catalog"
-            description="Browse products"
-            icon="cube-outline"
-            color="#F59E0B"
-            onPress={() => Alert.alert('Coming Soon', 'Product catalog feature will be available soon')}
+            onPress={() => navigation.navigate('OrderListScreen' as any)}
           />
           <QuickActionCard
             title="Pending Approvals"
             description="Approve orders"
             icon="checkmark-circle-outline"
-            color="#8B5CF6"
-            onPress={() => navigation.navigate('PendingApprovalsScreen')}
+            color="#10B981"
+            onPress={() => navigation.navigate('PendingApprovalsScreen' as any)}
           />
         </View>
       </View>
@@ -262,13 +244,13 @@ const DashboardHome = () => {
         <Text style={styles.sectionTitle}>Recent Activity</Text>
         <View style={styles.activityCard}>
           <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#8B5CF6' }]}>
-              <Ionicons name="checkmark" size={16} color="white" />
+            <View style={[styles.activityIcon, { backgroundColor: '#10B981' }]}>
+              <Ionicons name="checkmark-circle" size={16} color="white" />
             </View>
             <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>Order Completed</Text>
-              <Text style={styles.activityDescription}>Order #12345 has been completed</Text>
-              <Text style={styles.activityTime}>2 hours ago</Text>
+              <Text style={styles.activityTitle}>Order Approved</Text>
+              <Text style={styles.activityDescription}>Order has been approved</Text>
+              <Text style={styles.activityTime}>Recently</Text>
             </View>
           </View>
           
@@ -277,20 +259,9 @@ const DashboardHome = () => {
               <Ionicons name="add" size={16} color="white" />
             </View>
             <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>New Order Placed</Text>
-              <Text style={styles.activityDescription}>Order #12346 placed successfully</Text>
-              <Text style={styles.activityTime}>4 hours ago</Text>
-            </View>
-          </View>
-          
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#10B981' }]}>
-              <Ionicons name="trending-up" size={16} color="white" />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>Sales Target Met</Text>
-              <Text style={styles.activityDescription}>Monthly target achieved</Text>
-              <Text style={styles.activityTime}>1 day ago</Text>
+              <Text style={styles.activityTitle}>New Order Created</Text>
+              <Text style={styles.activityDescription}>Draft order created successfully</Text>
+              <Text style={styles.activityTime}>Recently</Text>
             </View>
           </View>
         </View>
@@ -467,6 +438,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
+  },
+  statSubtitle: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   actionsSection: {
     padding: 20,

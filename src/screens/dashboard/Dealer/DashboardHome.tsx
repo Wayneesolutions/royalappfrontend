@@ -19,8 +19,8 @@ import GlobalFAB from './GlobalFAB';
 
 interface DashboardStats {
   totalOrders: number;
-  pendingOrders: number;
-  completedOrders: number;
+  draftOrders: number;
+  approvedOrders: number;
   totalSales: number;
   targetAchievement: number;
   monthlyTarget: number;
@@ -29,12 +29,12 @@ interface DashboardStats {
 }
 
 const DashboardHome = () => {
-  const { user, logout, getOrderStats, getProducts } = useAuth();
+  const { user, logout, getOrderStats, getMyOrders } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [stats, setStats] = useState<DashboardStats>({
     totalOrders: 0,
-    pendingOrders: 0,
-    completedOrders: 0,
+    draftOrders: 0,
+    approvedOrders: 0,
     totalSales: 0,
     targetAchievement: 0,
     monthlyTarget: 0,
@@ -44,6 +44,7 @@ const DashboardHome = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
   const fetchDashboardData = async () => {
     if (!user?.defaultCompany) {
@@ -54,14 +55,17 @@ const DashboardHome = () => {
     try {
       setLoading(true);
       
-      // Fetch real order statistics
-      const [orderStatsResult, productsResult] = await Promise.all([
+      // Fetch order statistics, draft orders count, approved orders count, and recent orders
+      const [orderStatsResult, draftOrdersResult, approvedOrdersResult, recentOrdersResult] = await Promise.all([
         getOrderStats(),
-        getProducts({ page: 1, limit: 1 }) // Just to get count
+        getMyOrders({ status: 'draft', page: 1, limit: 1 }), // Fetch draft orders to get count
+        getMyOrders({ status: 'approved', page: 1, limit: 1 }), // Fetch approved orders to get count
+        getMyOrders({ page: 1, limit: 5 }) // Fetch recent orders for activity feed
       ]);
 
       console.log('Dashboard - Order stats result:', orderStatsResult);
-      console.log('Dashboard - Products result:', productsResult);
+      console.log('Dashboard - Draft orders result:', draftOrdersResult);
+      console.log('Dashboard - Approved orders result:', approvedOrdersResult);
 
       const orderStats = orderStatsResult?.success ? orderStatsResult.stats : {
         totalOrders: 0,
@@ -73,26 +77,44 @@ const DashboardHome = () => {
         totalAmount: 0
       };
 
-      const productCount = productsResult?.success ? productsResult.pagination?.totalProducts || 0 : 0;
+      // Get draft orders count from pagination
+      const draftOrdersCount = draftOrdersResult?.success 
+        ? (draftOrdersResult.pagination?.totalOrders || 0) 
+        : 0;
+
+      // Get approved orders count from pagination (more accurate than confirmedOrders from stats)
+      const approvedOrdersCount = approvedOrdersResult?.success 
+        ? (approvedOrdersResult.pagination?.totalOrders || 0) 
+        : (orderStats.confirmedOrders || 0); // Fallback to stats if pagination not available
 
       setStats({
         totalOrders: orderStats.totalOrders || 0,
-        pendingOrders: orderStats.pendingOrders || 0,
-        completedOrders: (orderStats.deliveredOrders || 0) + (orderStats.shippedOrders || 0),
+        draftOrders: draftOrdersCount,
+        approvedOrders: approvedOrdersCount,
         totalSales: orderStats.totalAmount || 0,
-        targetAchievement: 88, // Keep mock for now
-        monthlyTarget: 100000, // Keep mock for now
-        availableProducts: productCount,
-        newOrders: orderStats.pendingOrders || 0,
+        targetAchievement: 0,
+        monthlyTarget: 0,
+        availableProducts: 0,
+        newOrders: draftOrdersCount,
       });
+
+      // Set recent orders for activity feed
+      const orders = recentOrdersResult?.success ? recentOrdersResult.orders || [] : [];
+      // Sort by createdAt descending (most recent first)
+      const sortedOrders = orders.sort((a: any, b: any) => {
+        const dateA = new Date(a.createdAt || a.updatedAt || 0).getTime();
+        const dateB = new Date(b.createdAt || b.updatedAt || 0).getTime();
+        return dateB - dateA;
+      });
+      setRecentOrders(sortedOrders.slice(0, 5)); // Limit to 5 most recent
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
       // Set default values on error
       setStats({
         totalOrders: 0,
-        pendingOrders: 0,
-        completedOrders: 0,
+        draftOrders: 0,
+        approvedOrders: 0,
         totalSales: 0,
         targetAchievement: 0,
         monthlyTarget: 0,
@@ -112,6 +134,97 @@ const DashboardHome = () => {
     setRefreshing(true);
     await fetchDashboardData();
     setRefreshing(false);
+  };
+
+  // Helper function to format time ago
+  const formatTimeAgo = (dateString?: string) => {
+    if (!dateString) return 'Unknown time';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) {
+      return 'Just now';
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    } else if (diffInSeconds < 604800) {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    } else {
+      const weeks = Math.floor(diffInSeconds / 604800);
+      return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+    }
+  };
+
+  // Helper function to get order status icon
+  const getOrderStatusIcon = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'draft':
+        return 'document-text-outline';
+      case 'pending_approval':
+        return 'time-outline';
+      case 'approved':
+        return 'checkmark-circle-outline';
+      case 'sent_to_tally':
+        return 'sync-outline';
+      case 'dispatched':
+        return 'car-outline';
+      case 'delivered':
+        return 'checkmark-done-outline';
+      case 'cancelled':
+        return 'close-circle-outline';
+      default:
+        return 'document-outline';
+    }
+  };
+
+  // Helper function to get order status color
+  const getOrderStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'draft':
+        return '#6B7280';
+      case 'pending_approval':
+        return '#F59E0B';
+      case 'approved':
+        return '#10B981';
+      case 'sent_to_tally':
+        return '#3B82F6';
+      case 'dispatched':
+        return '#8B5CF6';
+      case 'delivered':
+        return '#10B981';
+      case 'cancelled':
+        return '#EF4444';
+      default:
+        return '#6B7280';
+    }
+  };
+
+  // Helper function to get order status title
+  const getOrderStatusTitle = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'draft':
+        return 'Draft Order Created';
+      case 'pending_approval':
+        return 'Order Pending Approval';
+      case 'approved':
+        return 'Order Approved';
+      case 'sent_to_tally':
+        return 'Order Sent to Tally';
+      case 'dispatched':
+        return 'Order Dispatched';
+      case 'delivered':
+        return 'Order Delivered';
+      case 'cancelled':
+        return 'Order Cancelled';
+      default:
+        return 'Order Updated';
+    }
   };
 
   const handleLogout = () => {
@@ -206,7 +319,6 @@ const DashboardHome = () => {
 
         {/* Stats Overview */}
         <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Business Overview</Text>
           <View style={styles.statsGrid}>
             <StatCard
               title="Total Orders"
@@ -215,34 +327,18 @@ const DashboardHome = () => {
               color="#8B5CF6"
             />
             <StatCard
-              title="Pending Orders"
-              value={stats.pendingOrders}
-              icon="time"
+              title="Draft Orders"
+              value={stats.draftOrders}
+              icon="document-outline"
               color="#F59E0B"
+              onPress={() => (navigation as any).navigate('DealerOrderList', { statusFilter: 'draft' })}
             />
             <StatCard
-              title="Completed Orders"
-              value={stats.completedOrders}
+              title="Approved Orders"
+              value={stats.approvedOrders}
               icon="checkmark-circle"
               color="#10B981"
-            />
-            <StatCard
-              title="Total Sales"
-              value={`₹${stats.totalSales.toLocaleString()}`}
-              icon="trending-up"
-              color="#059669"
-            />
-            <StatCard
-              title="Target Achievement"
-              value={`${stats.targetAchievement}%`}
-              icon="target"
-              color="#DC2626"
-            />
-            <StatCard
-              title="Available Products"
-              value={stats.availableProducts}
-              icon="cube"
-              color="#3B82F6"
+              onPress={() => (navigation as any).navigate('DealerOrderList', { statusFilter: 'approved' })}
             />
           </View>
         </View>
@@ -280,13 +376,6 @@ const DashboardHome = () => {
               onPress={() => navigation.navigate('SalesReportScreen')}
             />
             <QuickActionCard
-              title="Product Catalog"
-              description="Browse products"
-              icon="cube-outline"
-              color="#F59E0B"
-              onPress={() => navigation.navigate('ProductCatalog')}
-            />
-            <QuickActionCard
               title="Team Management"
               description="Manage sub-dealers"
               icon="people-outline"
@@ -300,38 +389,41 @@ const DashboardHome = () => {
         <View style={styles.activitySection}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityCard}>
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#8B5CF6' }]}>
-                <Ionicons name="checkmark" size={16} color="white" />
+            {recentOrders.length > 0 ? (
+              recentOrders.map((order, index) => (
+                <TouchableOpacity
+                  key={order._id || index}
+                  style={styles.activityItem}
+                  onPress={() => {
+                    // Navigate to order details or edit screen
+                    if (order.status === 'draft') {
+                      navigation.navigate('DealerEditOrder' as any, { order });
+                    } else {
+                      navigation.navigate('DealerOrderList' as any);
+                    }
+                  }}
+                >
+                  <View style={[styles.activityIcon, { backgroundColor: getOrderStatusColor(order.status) }]}>
+                    <Ionicons name={getOrderStatusIcon(order.status) as any} size={16} color="white" />
+                  </View>
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityTitle}>{getOrderStatusTitle(order.status)}</Text>
+                    <Text style={styles.activityDescription}>
+                      Order #{order.orderNumber} - ₹{order.finalAmount?.toLocaleString() || '0'}
+                    </Text>
+                    <Text style={styles.activityTime}>
+                      {formatTimeAgo(order.updatedAt || order.createdAt)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.emptyActivity}>
+                <Ionicons name="time-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.emptyActivityText}>No recent activity</Text>
+                <Text style={styles.emptyActivitySubtext}>Your recent orders will appear here</Text>
               </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Order Completed</Text>
-                <Text style={styles.activityDescription}>Order #12345 has been completed</Text>
-                <Text style={styles.activityTime}>2 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#3B82F6' }]}>
-                <Ionicons name="add" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>New Order Placed</Text>
-                <Text style={styles.activityDescription}>Order #12346 placed successfully</Text>
-                <Text style={styles.activityTime}>4 hours ago</Text>
-              </View>
-            </View>
-            
-            <View style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: '#10B981' }]}>
-                <Ionicons name="trending-up" size={16} color="white" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Sales Target Met</Text>
-                <Text style={styles.activityDescription}>Monthly target achieved</Text>
-                <Text style={styles.activityTime}>1 day ago</Text>
-              </View>
-            </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -590,6 +682,21 @@ const styles = StyleSheet.create({
   },
   activityTime: {
     fontSize: 10,
+    color: '#9CA3AF',
+  },
+  emptyActivity: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyActivityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyActivitySubtext: {
+    fontSize: 14,
     color: '#9CA3AF',
   },
   // Modal styles
