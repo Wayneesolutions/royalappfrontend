@@ -377,7 +377,10 @@ const Users = () => {
       setLoading(true);
       setError(null);
       
-      const params: any = {};
+      const params: any = {
+        limit: 1000, // Fetch all users (high limit to get all users in the company)
+        page: 1
+      };
       if (selectedRole) {
         params.role = selectedRole;
       }
@@ -386,6 +389,7 @@ const Users = () => {
       if (__DEV__) {
         console.log('fetchUsers - result:', JSON.stringify(result, null, 2));
         console.log('fetchUsers - first user hierarchy:', result?.users?.[0]?.hierarchy);
+        console.log('fetchUsers - total users received:', result?.users?.length || 0);
       }
       setUsers(result.users || []);
     } catch (err) {
@@ -976,6 +980,8 @@ const Users = () => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
       >
         {/* Header Section */}
         <View style={styles.headerSection}>
@@ -1300,6 +1306,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 100,
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -2242,8 +2249,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    maxHeight: 400,
     gap: 20,
+    // Removed maxHeight to allow all users to be displayed and scrollable
   },
   userCategorySection: {
     marginBottom: 20,
