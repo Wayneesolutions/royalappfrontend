@@ -97,6 +97,7 @@ interface AuthContextType {
   getSubDealerById: (subDealerId: string) => Promise<any>;
   updateSubDealer: (subDealerId: string, data: any) => Promise<any>;
   deactivateSubDealer: (subDealerId: string) => Promise<any>;
+  getSubDealersByDealer: (dealerId: string) => Promise<any>;
   // Super Admin methods
   superadminCreateCompany: (data: any) => Promise<any>;
   superadminListCompanies: (params?: any) => Promise<any>;
@@ -1020,6 +1021,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const getSubDealersByDealer = async (dealerId: string): Promise<any> => {
+    try {
+      const result = await apiService.getSubDealersByDealer(dealerId);
+      return result;
+    } catch (error) {
+      console.error('Failed to get sub dealers by dealer:', error);
+      throw error;
+    }
+  };
+
   // Super Admin methods
   const superadminCreateCompany = async (data: any): Promise<any> => {
     try {
@@ -1272,6 +1283,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getSubDealerById,
     updateSubDealer,
     deactivateSubDealer,
+    getSubDealersByDealer,
     // Super Admin methods
     superadminCreateCompany,
     superadminListCompanies,

@@ -313,7 +313,8 @@ const RSMEditOrder = () => {
   
   const { 
     user,
-    getUsersByRole, 
+    getUsersByRole,
+    getSubDealersByDealer,
     getProducts, 
     getProductById, 
     updateOrder 
@@ -662,21 +663,8 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         setDealers(dealersResponse.users);
       }
       
-      // Fetch sub dealers
-      const subDealersResponse = await getUsersByRole('subdealer');
-      let subDealersList = [];
-      if (Array.isArray(subDealersResponse)) {
-        subDealersList = subDealersResponse;
-        setSubDealers(subDealersResponse);
-      } else if (subDealersResponse?.success) {
-        // Response with success field - handle nested data.users structure
-        subDealersList = subDealersResponse.data?.users || subDealersResponse.data || subDealersResponse.subDealers || subDealersResponse.users || [];
-        setSubDealers(Array.isArray(subDealersList) ? subDealersList : []);
-      } else if (subDealersResponse?.users && Array.isArray(subDealersResponse.users)) {
-        // Response structure: {users: [...], role: 'subdealer', count: 3}
-        subDealersList = subDealersResponse.users;
-        setSubDealers(subDealersResponse.users);
-      }
+      // Don't fetch all subdealers initially - fetch them when dealer is selected or loaded
+      setSubDealers([]);
       
       // Fetch products
       const productsResponse = await getProducts();
@@ -797,6 +785,31 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
       Alert.alert('Error', 'Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDealerSelect = async (dealer: any) => {
+    console.log('🎯 Dealer selected:', dealer);
+    setSelectedDealer(dealer);
+    setSelectedSubDealer(null); // Reset sub dealer selection
+    
+    // Fetch subdealers for this specific dealer
+    try {
+      console.log('🔍 Fetching subdealers for dealer:', dealer._id);
+      const response = await getSubDealersByDealer(dealer._id);
+      console.log('📡 Subdealers response:', response);
+      
+      if (response?.success && response.data?.subdealers) {
+        const subdealers = response.data.subdealers || [];
+        setSubDealers(subdealers);
+        console.log('✅ Subdealers loaded for dealer:', subdealers.length);
+      } else {
+        console.log('ℹ️ No subdealers found for this dealer');
+        setSubDealers([]);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch subdealers:', error);
+      setSubDealers([]);
     }
   };
 
@@ -1401,8 +1414,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                     key={item._id}
                     style={styles.dropdownItem}
                     onPress={() => {
-                      setSelectedDealer(item);
-                      setSelectedSubDealer(null);
+                      handleDealerSelect(item);
                       setShowDealerDropdown(false);
                     }}
                   >

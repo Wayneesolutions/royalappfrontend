@@ -313,7 +313,8 @@ const SalesmanEditOrder = () => {
   
   const { 
     user,
-    getUsersByRole, 
+    getUsersByRole,
+    getSubDealersByDealer,
     getProducts, 
     getProductById, 
     updateOrder 
@@ -662,21 +663,8 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         setDealers(dealersResponse.users);
       }
       
-      // Fetch sub dealers
-      const subDealersResponse = await getUsersByRole('subdealer');
-      let subDealersList = [];
-      if (Array.isArray(subDealersResponse)) {
-        subDealersList = subDealersResponse;
-        setSubDealers(subDealersResponse);
-      } else if (subDealersResponse?.success) {
-        // Response with success field - handle nested data.users structure
-        subDealersList = subDealersResponse.data?.users || subDealersResponse.data || subDealersResponse.subDealers || subDealersResponse.users || [];
-        setSubDealers(Array.isArray(subDealersList) ? subDealersList : []);
-      } else if (subDealersResponse?.users && Array.isArray(subDealersResponse.users)) {
-        // Response structure: {users: [...], role: 'subdealer', count: 3}
-        subDealersList = subDealersResponse.users;
-        setSubDealers(subDealersResponse.users);
-      }
+      // Don't fetch all subdealers initially - fetch them when dealer is selected or loaded
+      setSubDealers([]);
       
       // Fetch products
       const productsResponse = await getProducts();
@@ -763,33 +751,52 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         if (currentDealer) {
           setSelectedDealer(currentDealer);
           console.log('✅ Dealer set:', currentDealer.name);
+          
+          // Fetch subdealers for this dealer
+          try {
+            console.log('🔍 Fetching subdealers for dealer:', dealerId);
+            const response = await getSubDealersByDealer(dealerId);
+            console.log('📡 Subdealers response:', response);
+            
+            if (response?.success && response.data?.subdealers) {
+              const subdealers = response.data.subdealers || [];
+              setSubDealers(subdealers);
+              console.log('✅ Subdealers loaded for dealer:', subdealers.length);
+              
+              // Set subdealer if it exists in order
+              let subDealerId: string | undefined = undefined;
+              if (typeof order.subDealerId === 'string') {
+                subDealerId = order.subDealerId;
+              } else if (typeof order.subDealerId === 'object' && order.subDealerId?._id) {
+                subDealerId = order.subDealerId._id;
+              }
+              
+              if (!subDealerId) {
+                subDealerId = order.shippingAddress?.subDealerId;
+              }
+              
+              if (subDealerId) {
+                const currentSubDealer = subdealers.find((s: any) => s._id === subDealerId);
+                if (currentSubDealer) {
+                  setSelectedSubDealer(currentSubDealer);
+                  console.log('✅ SubDealer set:', currentSubDealer.name);
+                } else {
+                  console.log('❌ SubDealer not found in list:', subDealerId);
+                }
+              } else {
+                console.log('ℹ️ No subdealer in order data');
+              }
+            } else {
+              console.log('ℹ️ No subdealers found for this dealer');
+              setSubDealers([]);
+            }
+          } catch (error) {
+            console.error('❌ Failed to fetch subdealers:', error);
+            setSubDealers([]);
+          }
         } else {
           console.log('❌ Dealer not found in list:', dealerId);
         }
-      }
-      
-      // Set subdealer - try subDealerId first, then shippingAddress.subDealerId as fallback
-      let subDealerId: string | undefined = undefined;
-      if (typeof order.subDealerId === 'string') {
-        subDealerId = order.subDealerId;
-      } else if (typeof order.subDealerId === 'object' && order.subDealerId?._id) {
-        subDealerId = order.subDealerId._id;
-      }
-      
-      if (!subDealerId) {
-        subDealerId = order.shippingAddress?.subDealerId;
-      }
-      
-      if (subDealerId) {
-        const currentSubDealer = subDealersList.find((s: any) => s._id === subDealerId);
-        if (currentSubDealer) {
-          setSelectedSubDealer(currentSubDealer);
-          console.log('✅ SubDealer set:', currentSubDealer.name);
-        } else {
-          console.log('❌ SubDealer not found in list:', subDealerId);
-        }
-      } else {
-        console.log('ℹ️ No subdealer in order data');
       }
       
     } catch (error) {
@@ -1401,7 +1408,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
                     key={item._id}
                     style={styles.dropdownItem}
                     onPress={() => {
-                      setSelectedDealer(item);
+                      handleDealerSelect(item);
                       setSelectedSubDealer(null);
                       setShowDealerDropdown(false);
                     }}

@@ -1535,6 +1535,16 @@ class ApiService {
     }
   }
 
+  // Get subdealers by dealer ID (for order creation/editing)
+  async getSubDealersByDealer(dealerId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/user/subdealers/by-dealer/${dealerId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   async updateTarget(targetId: string, data: { targetAmount?: number; targetQuantity?: number; notes?: string; status?: string }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/targets/${targetId}`, data);

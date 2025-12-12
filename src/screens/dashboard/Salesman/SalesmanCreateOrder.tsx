@@ -261,7 +261,7 @@ const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
 
 const SalesmanCreateOrder = () => {
   const navigation = useNavigation();
-  const { user, getUsersByRole, getSubDealers, getProducts, getProductById, createOrder } = useAuth();
+  const { user, getUsersByRole, getSubDealersByDealer, getProducts, getProductById, createOrder } = useAuth();
   
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
@@ -465,30 +465,8 @@ const SalesmanCreateOrder = () => {
         setDealers([]);
       }
       
-      // Fetch sub dealers using getUsersByRole instead of getSubDealers
-      console.log('🔍 Fetching sub dealers using getUsersByRole...');
-      const subDealersResponse = await getUsersByRole('subdealer');
-      console.log('📡 Sub dealers response:', subDealersResponse);
-      
-      // Handle different response formats for sub dealers
-      if (Array.isArray(subDealersResponse)) {
-        // Direct array response
-        setSubDealers(subDealersResponse);
-        console.log('✅ Sub dealers loaded (direct array):', subDealersResponse.length);
-      } else if (subDealersResponse?.success) {
-        // Response with success field - check for nested data.users structure
-        const subDealersData = subDealersResponse.data?.users || subDealersResponse.data || subDealersResponse.subDealers || subDealersResponse.users || [];
-        setSubDealers(Array.isArray(subDealersData) ? subDealersData : []);
-        console.log('✅ Sub dealers loaded (wrapped with success):', Array.isArray(subDealersData) ? subDealersData.length : 0);
-      } else if (subDealersResponse?.users && Array.isArray(subDealersResponse.users)) {
-        // Response structure: {users: [...], role: 'subdealer', count: 3}
-        setSubDealers(subDealersResponse.users);
-        console.log('✅ Sub dealers loaded (users field):', subDealersResponse.users.length);
-      } else {
-        console.log('❌ Failed to load sub dealers:', subDealersResponse?.message || 'Unknown error');
-        // Don't show error alert for sub dealers since it's optional
-        setSubDealers([]);
-      }
+      // Don't fetch all subdealers initially - fetch them when dealer is selected
+      setSubDealers([]);
       
       // Fetch products
       console.log('🔍 Fetching products...');
@@ -525,13 +503,30 @@ const SalesmanCreateOrder = () => {
     }
   };
 
-  const handleDealerSelect = (dealer: Dealer) => {
+  const handleDealerSelect = async (dealer: Dealer) => {
     console.log('🎯 Dealer selected:', dealer);
     setSelectedDealer(dealer);
     setSelectedSubDealer(null); // Reset sub dealer selection
     setShowDealerDropdown(false);
     
-    // No need to fetch sub dealers since we already have all of them
+    // Fetch subdealers for this specific dealer
+    try {
+      console.log('🔍 Fetching subdealers for dealer:', dealer._id);
+      const response = await getSubDealersByDealer(dealer._id);
+      console.log('📡 Subdealers response:', response);
+      
+      if (response?.success && response.data?.subdealers) {
+        const subdealers = response.data.subdealers || [];
+        setSubDealers(subdealers);
+        console.log('✅ Subdealers loaded for dealer:', subdealers.length);
+      } else {
+        console.log('ℹ️ No subdealers found for this dealer');
+        setSubDealers([]);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch subdealers:', error);
+      setSubDealers([]);
+    }
   };
 
   const handleSubDealerSelect = (subDealer: SubDealer) => {
