@@ -502,40 +502,8 @@ const AdminCreateOrder = () => {
         setDealers([]);
       }
       
-      // Fetch sub dealers from SubDealer table
-      console.log('🔍 Fetching sub dealers from SubDealer table...');
-      const subDealersResponse = await apiService.adminGetAllSubDealers({ includeInactive: false });
-      console.log('📡 Sub dealers response:', subDealersResponse);
-      
-      if (subDealersResponse?.success && subDealersResponse.data?.subdealers) {
-        // Map SubDealer fields to SubDealer interface
-        const mappedSubDealers = subDealersResponse.data.subdealers.map((subdealer: any) => ({
-          _id: subdealer._id,
-          SDName: subdealer.SDName,
-          name: subdealer.SDName, // For backward compatibility
-          SDMobileNo: subdealer.SDMobileNo,
-          mobile: subdealer.SDMobileNo, // For backward compatibility
-          SDEmail: subdealer.SDEmail,
-          email: subdealer.SDEmail, // For backward compatibility
-          SDAddress1: subdealer.SDAddress1,
-          SDAddress2: subdealer.SDAddress2,
-          SDAddress3: subdealer.SDAddress3,
-          SDState: subdealer.SDState,
-          address: {
-            street: subdealer.SDAddress1 || '',
-            city: subdealer.SDAddress2 || '',
-            state: subdealer.SDState || '',
-            pincode: subdealer.SDPincode || '',
-            country: subdealer.SDCountry || 'India',
-          },
-        }));
-        setSubDealers(mappedSubDealers);
-        console.log('✅ Sub dealers loaded from SubDealer table:', mappedSubDealers.length);
-      } else {
-        console.log('❌ Failed to load sub dealers:', subDealersResponse?.message || 'Unknown error');
-        // Don't show error alert for sub dealers since it's optional
-        setSubDealers([]);
-      }
+      // Don't fetch all sub dealers upfront - will fetch when dealer is selected
+      setSubDealers([]);
       
       // Fetch products
       console.log('🔍 Fetching products...');
@@ -572,13 +540,51 @@ const AdminCreateOrder = () => {
     }
   };
 
-  const handleDealerSelect = (dealer: Dealer) => {
+  const handleDealerSelect = async (dealer: Dealer) => {
     console.log('🎯 Dealer selected:', dealer);
     setSelectedDealer(dealer);
     setSelectedSubDealer(null); // Reset sub dealer selection
     setShowDealerDropdown(false);
     
-    // No need to fetch sub dealers since we already have all of them
+    // Fetch subdealers for this specific dealer
+    try {
+      console.log('🔍 Fetching subdealers for dealer:', dealer._id);
+      const response = await apiService.getSubDealersByDealer(dealer._id);
+      console.log('📡 Subdealers response:', response);
+      
+      if (response?.success && response.data?.subdealers) {
+        const subdealers = response.data.subdealers || [];
+        // Map SubDealer fields to SubDealer interface
+        const mappedSubDealers = subdealers.map((subdealer: any) => ({
+          _id: subdealer._id,
+          SDName: subdealer.SDName,
+          name: subdealer.SDName, // For backward compatibility
+          SDMobileNo: subdealer.SDMobileNo,
+          mobile: subdealer.SDMobileNo, // For backward compatibility
+          SDEmail: subdealer.SDEmail,
+          email: subdealer.SDEmail, // For backward compatibility
+          SDAddress1: subdealer.SDAddress1,
+          SDAddress2: subdealer.SDAddress2,
+          SDAddress3: subdealer.SDAddress3,
+          SDState: subdealer.SDState,
+          address: {
+            street: subdealer.SDAddress1 || '',
+            city: subdealer.SDAddress2 || '',
+            state: subdealer.SDState || '',
+            pincode: subdealer.SDPincode || '',
+            country: subdealer.SDCountry || 'India',
+          },
+        }));
+        setSubDealers(mappedSubDealers);
+        console.log('✅ Subdealers loaded for dealer:', mappedSubDealers.length);
+      } else {
+        console.log('ℹ️ No subdealers found for this dealer');
+        setSubDealers([]);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch subdealers:', error);
+      setSubDealers([]);
+    }
   };
 
   const handleSubDealerSelect = (subDealer: SubDealer) => {

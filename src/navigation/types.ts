@@ -220,6 +220,7 @@ type GroupUserStackParamList = {
   AdminCreateOrder: undefined;
   AdminOrderList: undefined;
   AdminEditOrder: { order: any };
+  DealersListScreen: undefined;
 } & CommonStackParamList;
 
 // ==================== DISTRIBUTOR SCREENS ====================

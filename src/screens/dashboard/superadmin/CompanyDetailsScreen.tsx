@@ -73,6 +73,13 @@ interface Company {
     phone: string;
     email: string;
   };
+  admins?: Array<{
+    _id: string;
+    name: string;
+    email: string;
+    mobile: string;
+    isDefault?: boolean;
+  }>;
   stats: {
     totalSales: string;
     totalOrders: number;
@@ -267,106 +274,6 @@ const CompaniesListScreen = ({
               </View>
             </View>
 
-            {/* Performance Indicator */}
-            <View style={styles.performanceIndicator}>
-              <View style={styles.performanceHeader}>
-                <Activity size={16} color="#6b7280" />
-                <Text style={styles.performanceLabel}>Performance Score</Text>
-              </View>
-              <View style={styles.performanceBar}>
-                <View style={[
-                  styles.performanceFill, 
-                  { 
-                    width: `${Math.min(100, Math.max(0, 
-                      ((company.stats?.activeUsers || 0) / Math.max(1, company.stats?.totalUsers || 1)) * 50 +
-                      ((company.stats?.totalOrders - (company.stats?.pendingOrders || 0)) / Math.max(1, company.stats?.totalOrders || 1)) * 50
-                    ))}%`,
-                    backgroundColor: company.stats?.totalOrders > 0 ? '#16a34a' : '#6b7280'
-                  }
-                ]} />
-              </View>
-              <Text style={styles.performanceScore}>
-                {Math.round(
-                  ((company.stats?.activeUsers || 0) / Math.max(1, company.stats?.totalUsers || 1)) * 50 +
-                  ((company.stats?.totalOrders - (company.stats?.pendingOrders || 0)) / Math.max(1, company.stats?.totalOrders || 1)) * 50
-                )}%
-              </Text>
-            </View>
-
-            {/* Enhanced Metrics */}
-            <View style={styles.metricsContainer}>
-              {/* Sales Performance */}
-              <View style={styles.metricItem}>
-                <View style={[styles.metricIcon, { backgroundColor: '#dcfce7' }]}>
-                  <TrendingUp size={16} color="#16a34a" />
-                </View>
-                <Text style={styles.metricValue}>
-                  {company.stats?.totalSales || '₹0'}
-                </Text>
-                <Text style={styles.metricLabel}>Total Sales</Text>
-              </View>
-
-              {/* Order Statistics */}
-              <View style={styles.metricItem}>
-                <View style={[styles.metricIcon, { backgroundColor: '#fef3c7' }]}>
-                  <Package size={16} color="#d97706" />
-                </View>
-                <Text style={styles.metricValue}>
-                  {company.stats?.totalOrders?.toLocaleString() || '0'}
-                </Text>
-                <Text style={styles.metricLabel}>Total Orders</Text>
-              </View>
-
-              {/* Pending Orders */}
-              <View style={styles.metricItem}>
-                <View style={[styles.metricIcon, { backgroundColor: '#fecaca' }]}>
-                  <AlertCircle size={16} color="#dc2626" />
-                </View>
-                <Text style={styles.metricValue}>
-                  {company.stats?.pendingOrders?.toLocaleString() || '0'}
-                </Text>
-                <Text style={styles.metricLabel}>Pending Orders</Text>
-              </View>
-
-              {/* User Activity */}
-              <View style={styles.metricItem}>
-                <View style={[styles.metricIcon, { backgroundColor: '#dbeafe' }]}>
-                  <Users size={16} color="#2563eb" />
-                </View>
-                <Text style={styles.metricValue}>
-                  {company.stats?.activeUsers || 0}/{company.stats?.totalUsers || 0}
-                </Text>
-                <Text style={styles.metricLabel}>Active Users</Text>
-              </View>
-
-              {/* Completion Rate */}
-              <View style={styles.metricItem}>
-                <View style={[styles.metricIcon, { backgroundColor: '#f0fdf4' }]}>
-                  <CheckCircle size={16} color="#16a34a" />
-                </View>
-                <Text style={styles.metricValue}>
-                  {company.stats?.totalOrders > 0 
-                    ? `${Math.round(((company.stats.totalOrders - (company.stats.pendingOrders || 0)) / company.stats.totalOrders) * 100)}%`
-                    : '0%'
-                  }
-                </Text>
-                <Text style={styles.metricLabel}>Completion Rate</Text>
-              </View>
-
-              {/* Average Order Value */}
-              <View style={styles.metricItem}>
-                <View style={[styles.metricIcon, { backgroundColor: '#fef7ff' }]}>
-                  <DollarSign size={16} color="#8b5cf6" />
-                </View>
-                <Text style={styles.metricValue}>
-                  {company.stats?.totalOrders > 0 
-                    ? `₹${Math.round((Number(company.stats?.totalSales?.replace('₹', '').replace(',', '')) || 0) / company.stats.totalOrders).toLocaleString()}`
-                    : '₹0'
-                  }
-                </Text>
-                <Text style={styles.metricLabel}>Avg Order Value</Text>
-              </View>
-            </View>
 
             {/* Enhanced Footer */}
             <View style={styles.cardFooter}>
@@ -378,7 +285,7 @@ const CompaniesListScreen = ({
                 <View style={styles.footerItem}>
                   <Activity size={14} color="#9ca3af" />
                   <Text style={styles.footerTextGray}>
-                    Last Activity: {company.stats?.totalOrders > 0 ? 'Active' : 'No Activity'}
+                    Status: {company.status}
                   </Text>
                 </View>
               </View>
@@ -420,85 +327,7 @@ const CompanyDetailsScreen = ({
   onEdit: (company: Company) => void;
   onDelete: (id: string) => void;
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'sales'>('overview');
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [showReportsModal, setShowReportsModal] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
-  const [companyUsers, setCompanyUsers] = useState<any[]>([]);
-  const [userSearchQuery, setUserSearchQuery] = useState('');
-  const [userFilterRole, setUserFilterRole] = useState<'all' | 'admin' | 'asm' | 'rsm' | 'zonal' | 'salesman' | 'dealers' | 'distibutors' | 'subdealer'>('all');
-  const [userFilterStatus, setUserFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [loadingUsers, setLoadingUsers] = useState(false);
-
-  // Load company users
-  const loadCompanyUsers = async () => {
-    try {
-      setLoadingUsers(true);
-      const res = await apiService.superadminGetCompanyDetails(company.id);
-      if (res.success && res.data && res.data.allUsers) {
-        setCompanyUsers(res.data.allUsers);
-      }
-    } catch (error) {
-      console.error('Failed to load company users:', error);
-      Alert.alert('Error', 'Failed to load company users');
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  // Filter users based on search and filters
-  const filteredUsers = companyUsers.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                         user.email.toLowerCase().includes(userSearchQuery.toLowerCase());
-    const matchesRole = userFilterRole === 'all' || user.role === userFilterRole;
-    const matchesStatus = userFilterStatus === 'all' || 
-                         (userFilterStatus === 'active' && user.isActive) ||
-                         (userFilterStatus === 'inactive' && !user.isActive);
-    return matchesSearch && matchesRole && matchesStatus;
-  });
-
-  // Get role display name
-  const getRoleDisplayName = (role: string) => {
-    const roleMap: { [key: string]: string } = {
-      'admin': 'Admin',
-      'asm': 'Area Sales Manager',
-      'rsm': 'Regional Sales Manager',
-      'zonal': 'Zonal Manager',
-      'salesman': 'Salesman',
-      'dealers': 'Dealer',
-      'distibutors': 'Distributor',
-      'subdealer': 'Sub Dealer'
-    };
-    return roleMap[role] || role;
-  };
-
-  // Get role color
-  const getRoleColor = (role: string) => {
-    const colorMap: { [key: string]: string } = {
-      'admin': '#3B82F6',
-      'asm': '#F59E0B',
-      'rsm': '#8B5CF6',
-      'zonal': '#06B6D4',
-      'salesman': '#EF4444',
-      'dealers': '#10B981',
-      'distibutors': '#F97316',
-      'subdealer': '#84CC16'
-    };
-    return colorMap[role] || '#6B7280';
-  };
-
-  // Format last login
-  const formatLastLogin = (lastLogin: string) => {
-    if (!lastLogin) return 'Never';
-    const date = new Date(lastLogin);
-    const now = new Date();
-    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffInDays === 0) return 'Today';
-    if (diffInDays === 1) return 'Yesterday';
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-    return date.toLocaleDateString();
-  };
 
   const handleDeactivate = () => {
     Alert.alert(
@@ -559,63 +388,9 @@ const CompanyDetailsScreen = ({
           </TouchableOpacity>
         </View>
 
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: '#dbeafe' }]}>
-              <TrendingUp size={24} color="#2563eb" />
-            </View>
-            <Text style={styles.statValue}>{company.stats.totalSales}</Text>
-            <Text style={styles.statLabel}>Total Sales</Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: '#fef3c7' }]}>
-              <Package size={24} color="#d97706" />
-            </View>
-            <Text style={styles.statValue}>{company.stats.totalOrders}</Text>
-            <Text style={styles.statLabel}>Total Orders</Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: '#fee2e2' }]}>
-              <AlertCircle size={24} color="#dc2626" />
-            </View>
-            <Text style={styles.statValue}>{company.stats.pendingOrders}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: '#dcfce7' }]}>
-              <Users size={24} color="#16a34a" />
-            </View>
-            <Text style={styles.statValue}>{company.stats.activeUsers}/{company.stats.totalUsers}</Text>
-            <Text style={styles.statLabel}>Active Users</Text>
-          </View>
-        </View>
-
-        {/* Tabs */}
-        <View style={styles.tabContainer}>
-          {(['overview', 'users', 'sales'] as const).map(tab => (
-            <TouchableOpacity
-              key={tab}
-              onPress={() => setActiveTab(tab)}
-              style={[
-                styles.tab,
-                activeTab === tab && styles.tabActive
-              ]}
-            >
-              <Text style={[
-                styles.tabText,
-                activeTab === tab && styles.tabTextActive
-              ]}>
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Tab Content */}
-        {activeTab === 'overview' && (
-          <View style={styles.tabContent}>
-            {/* Company Basic Information */}
+        {/* Content */}
+        <View style={styles.tabContent}>
+          {/* Company Basic Information */}
             <View style={styles.infoCard}>
               <View style={styles.cardHeader}>
                 <Building2 size={20} color="#2563eb" />
@@ -743,88 +518,84 @@ const CompanyDetailsScreen = ({
               </View>
             </View>
 
-            {/* Assigned Admin */}
-            {company.admin && (
+            {/* Assigned Admins */}
+            {(company.admins && company.admins.length > 0) || company.admin?.name ? (
               <View style={styles.infoCard}>
                 <View style={styles.cardHeader}>
                   <UserCheck size={20} color="#2563eb" />
-                  <Text style={styles.infoCardTitle}>Assigned Admin</Text>
+                  <Text style={styles.infoCardTitle}>
+                    Assigned Admins {company.admins && company.admins.length > 0 ? `(${company.admins.length})` : ''}
+                  </Text>
                 </View>
                 
-                <View style={styles.adminCard}>
-                  <View style={styles.adminAvatar}>
-                    <Text style={styles.adminAvatarText}>
-                      {company.admin.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.adminInfo}>
-                    <Text style={styles.adminName}>{company.admin.name}</Text>
-                    <Text style={styles.adminEmail}>{company.admin.email}</Text>
-                    {company.admin.phone && (
-                      <Text style={styles.adminPhone}>{company.admin.phone}</Text>
-                    )}
-                  </View>
-                  <View style={styles.adminStatus}>
-                    <CheckCircle size={16} color="#16a34a" />
-                    <Text style={styles.adminStatusText}>Active</Text>
-                  </View>
+                {company.admins && company.admins.length > 0 ? (
+                  // Display multiple admins
+                  company.admins.map((admin, index) => (
+                    <View key={admin._id || index} style={[styles.adminCard, index > 0 && styles.adminCardMargin]}>
+                      <View style={styles.adminAvatar}>
+                        <Text style={styles.adminAvatarText}>
+                          {admin.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.adminInfoContainer}>
+                        <View style={styles.adminInfo}>
+                          <View style={styles.adminNameRow}>
+                            <Text style={styles.adminName}>{admin.name}</Text>
+                            {index === 0 && (
+                              <View style={styles.defaultAdminBadge}>
+                                <Text style={styles.defaultAdminBadgeText}>Default</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.adminEmail} numberOfLines={1} ellipsizeMode="tail">{admin.email}</Text>
+                          {admin.mobile && (
+                            <Text style={styles.adminPhone}>{admin.mobile}</Text>
+                          )}
+                        </View>
+                        <View style={styles.adminStatus}>
+                          <CheckCircle size={16} color="#16a34a" />
+                          <Text style={styles.adminStatusText}>Active</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  // Fallback to single admin (backward compatibility)
+                  company.admin?.name && (
+                    <View style={styles.adminCard}>
+                      <View style={styles.adminAvatar}>
+                        <Text style={styles.adminAvatarText}>
+                          {company.admin.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.adminInfoContainer}>
+                        <View style={styles.adminInfo}>
+                          <Text style={styles.adminName}>{company.admin.name}</Text>
+                          <Text style={styles.adminEmail} numberOfLines={1} ellipsizeMode="tail">{company.admin.email}</Text>
+                          {company.admin.phone && (
+                            <Text style={styles.adminPhone}>{company.admin.phone}</Text>
+                          )}
+                        </View>
+                        <View style={styles.adminStatus}>
+                          <CheckCircle size={16} color="#16a34a" />
+                          <Text style={styles.adminStatusText}>Active</Text>
+                        </View>
+                      </View>
+                    </View>
+                  )
+                )}
+              </View>
+            ) : (
+              <View style={styles.infoCard}>
+                <View style={styles.cardHeader}>
+                  <UserCheck size={20} color="#9ca3af" />
+                  <Text style={styles.infoCardTitle}>Assigned Admins</Text>
+                </View>
+                <View style={styles.noAdminsContainer}>
+                  <Text style={styles.noAdminsText}>No admins assigned</Text>
                 </View>
               </View>
             )}
-
-            {/* Company Statistics Overview */}
-            <View style={styles.infoCard}>
-              <View style={styles.cardHeader}>
-                <BarChart3 size={20} color="#2563eb" />
-                <Text style={styles.infoCardTitle}>Statistics Overview</Text>
-              </View>
-              
-              <View style={styles.statsGrid}>
-                <View style={styles.statItem}>
-                  <View style={styles.statItemHeader}>
-                    <Users size={16} color="#6b7280" />
-                    <Text style={styles.statLabel}>Users</Text>
-                  </View>
-                  <Text style={styles.statValue}>{company.stats.totalUsers}</Text>
-                  <Text style={styles.statSubValue}>
-                    {company.stats.activeUsers} active
-                  </Text>
-                </View>
-                
-                <View style={styles.statItem}>
-                  <View style={styles.statItemHeader}>
-                    <Package size={16} color="#6b7280" />
-                    <Text style={styles.statLabel}>Orders</Text>
-                  </View>
-                  <Text style={styles.statValue}>{company.stats.totalOrders}</Text>
-                  <Text style={styles.statSubValue}>
-                    {company.stats.pendingOrders} pending
-                  </Text>
-                </View>
-                
-                <View style={styles.statItem}>
-                  <View style={styles.statItemHeader}>
-                    <DollarSign size={16} color="#6b7280" />
-                    <Text style={styles.statLabel}>Total Sales</Text>
-                  </View>
-                  <Text style={styles.statValue}>{company.stats.totalSales}</Text>
-                  <Text style={styles.statSubValue}>All time</Text>
-                </View>
-                
-                <View style={styles.statItem}>
-                  <View style={styles.statItemHeader}>
-                    <Activity size={16} color="#6b7280" />
-                    <Text style={styles.statLabel}>Activity</Text>
-                  </View>
-                  <Text style={styles.statValue}>
-                    {company.stats.activeUsers > 0 ? 'High' : 'Low'}
-                  </Text>
-                  <Text style={styles.statSubValue}>
-                    {company.stats.activeUsers} active users
-                  </Text>
-                </View>
-              </View>
-            </View>
 
             {/* Quick Actions */}
             <View style={styles.infoCard}>
@@ -847,27 +618,6 @@ const CompanyDetailsScreen = ({
                 <TouchableOpacity 
                   style={styles.quickActionButton}
                   onPress={() => {
-                    setShowUserModal(true);
-                    loadCompanyUsers();
-                  }}
-                >
-                  <Users size={20} color="#16a34a" />
-                  <Text style={styles.quickActionText}>Manage Users</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.quickActionButton}
-                  onPress={() => {
-                    setShowReportsModal(true);
-                  }}
-                >
-                  <BarChart3 size={20} color="#f59e0b" />
-                  <Text style={styles.quickActionText}>View Reports</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.quickActionButton}
-                  onPress={() => {
                     setShowActivityModal(true);
                   }}
                 >
@@ -877,363 +627,7 @@ const CompanyDetailsScreen = ({
               </View>
             </View>
           </View>
-        )}
-
-        {activeTab === 'users' && (
-          <View style={styles.tabContent}>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoCardTitle}>User Statistics</Text>
-              <View style={styles.userStats}>
-                <View style={styles.userStatItem}>
-                  <Text style={styles.userStatValue}>{company.stats.totalUsers}</Text>
-                  <Text style={styles.userStatLabel}>Total Users</Text>
-                </View>
-                <View style={styles.userStatItem}>
-                  <Text style={[styles.userStatValue, { color: '#16a34a' }]}>
-                    {company.stats.activeUsers}
-                  </Text>
-                  <Text style={styles.userStatLabel}>Active</Text>
-                </View>
-                <View style={styles.userStatItem}>
-                  <Text style={[styles.userStatValue, { color: '#dc2626' }]}>
-                    {company.stats.totalUsers - company.stats.activeUsers}
-                  </Text>
-                  <Text style={styles.userStatLabel}>Inactive</Text>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.viewAllButton}
-                onPress={() => {
-                  setShowUserModal(true);
-                  loadCompanyUsers();
-                }}
-              >
-                <Text style={styles.viewAllButtonText}>View All Users →</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {activeTab === 'sales' && (
-          <View style={styles.tabContent}>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoCardTitle}>Sales Overview</Text>
-              <View style={styles.salesRow}>
-                <Text style={styles.salesLabel}>Total Sales</Text>
-                <Text style={styles.salesValue}>{company.stats.totalSales}</Text>
-              </View>
-              <View style={styles.salesRow}>
-                <Text style={styles.salesLabel}>Total Orders</Text>
-                <Text style={styles.salesValue}>{company.stats.totalOrders}</Text>
-              </View>
-              <View style={styles.salesRow}>
-                <Text style={styles.salesLabel}>Pending Orders</Text>
-                <Text style={[styles.salesValue, { color: '#d97706' }]}>
-                  {company.stats.pendingOrders}
-                </Text>
-              </View>
-              <TouchableOpacity style={styles.viewAllButton}>
-                <Text style={styles.viewAllButtonText}>View Detailed Report →</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </ScrollView>
-
-      {/* User Management Modal */}
-      <Modal
-        visible={showUserModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowUserModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.userModalContainer}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderLeft}>
-                <Users size={24} color="#2563eb" />
-                <View>
-                  <Text style={styles.modalTitle}>Company Users</Text>
-                  <Text style={styles.modalSubtitle}>{company.name} - {filteredUsers.length} users</Text>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setShowUserModal(false)}
-              >
-                <View style={styles.closeButtonContent}>
-                  <X size={18} color="#6b7280" />
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            {/* Search and Filters */}
-            <View style={styles.searchFiltersContainer}>
-              <View style={styles.searchInputContainer}>
-                <Search size={20} color="#9ca3af" />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search users..."
-                  value={userSearchQuery}
-                  onChangeText={setUserSearchQuery}
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
-              
-              <View style={styles.filtersRow}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleFilters}>
-                  {(['all', 'admin', 'asm', 'rsm', 'zonal', 'salesman', 'dealers', 'distibutors', 'subdealer'] as const).map(role => (
-                    <TouchableOpacity
-                      key={role}
-                      style={[
-                        styles.filterChip,
-                        userFilterRole === role && styles.filterChipActive
-                      ]}
-                      onPress={() => setUserFilterRole(role)}
-                    >
-                      <Text style={[
-                        styles.filterChipText,
-                        userFilterRole === role && styles.filterChipTextActive
-                      ]}>
-                        {role === 'all' ? 'All Roles' : getRoleDisplayName(role)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                
-                <View style={styles.statusFilters}>
-                  {(['all', 'active', 'inactive'] as const).map(status => (
-                    <TouchableOpacity
-                      key={status}
-                      style={[
-                        styles.statusFilter,
-                        userFilterStatus === status && styles.statusFilterActive
-                      ]}
-                      onPress={() => setUserFilterStatus(status)}
-                    >
-                      <View style={[
-                        styles.statusDot,
-                        status === 'active' && styles.statusDotActive,
-                        status === 'inactive' && styles.statusDotInactive
-                      ]} />
-                      <Text style={[
-                        styles.statusFilterText,
-                        userFilterStatus === status && styles.statusFilterTextActive
-                      ]}>
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </View>
-
-            {/* Users List */}
-            <ScrollView style={styles.usersList} showsVerticalScrollIndicator={false}>
-              {loadingUsers ? (
-                <View style={styles.loadingContainer}>
-                  <Text style={styles.loadingText}>Loading users...</Text>
-                </View>
-              ) : filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => (
-                  <View key={user._id} style={styles.userCard}>
-                    <View style={styles.userCardHeader}>
-                      <View style={styles.userAvatar}>
-                        <Text style={styles.userAvatarText}>
-                          {user.name.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={styles.userInfo}>
-                        <Text style={styles.userName}>{user.name}</Text>
-                        <Text style={styles.userEmail}>{user.email}</Text>
-                        <View style={styles.userRoleContainer}>
-                          <View style={[styles.userRoleBadge, { backgroundColor: getRoleColor(user.role) }]}>
-                            <Text style={styles.userRoleText}>{getRoleDisplayName(user.role)}</Text>
-                          </View>
-                          <View style={[
-                            styles.userStatusBadge,
-                            user.isActive ? styles.userStatusActive : styles.userStatusInactive
-                          ]}>
-                            <View style={[
-                              styles.userStatusDot,
-                              user.isActive ? styles.userStatusDotActive : styles.userStatusDotInactive
-                            ]} />
-                            <Text style={[
-                              styles.userStatusText,
-                              user.isActive ? styles.userStatusTextActive : styles.userStatusTextInactive
-                            ]}>
-                              {user.isActive ? 'Active' : 'Inactive'}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                    
-                    <View style={styles.userCardFooter}>
-                      <View style={styles.userFooterItem}>
-                        <Calendar size={14} color="#9ca3af" />
-                        <Text style={styles.userFooterText}>
-                          Joined: {new Date(user.createdAt).toLocaleDateString()}
-                        </Text>
-                      </View>
-                      <View style={styles.userFooterItem}>
-                        <Users size={14} color="#9ca3af" />
-                        <Text style={styles.userFooterText}>
-                          Last login: {formatLastLogin(user.lastLogin)}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                ))
-              ) : (
-                <View style={styles.emptyState}>
-                  <Users size={48} color="#9ca3af" />
-                  <Text style={styles.emptyStateTitle}>No users found</Text>
-                  <Text style={styles.emptyStateSubtitle}>
-                    {userSearchQuery || userFilterRole !== 'all' || userFilterStatus !== 'all'
-                      ? 'Try adjusting your search or filters'
-                      : 'No users have been added to this company yet'
-                    }
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Reports Modal */}
-      <Modal
-        visible={showReportsModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowReportsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.userModalContainer}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderLeft}>
-                <BarChart3 size={24} color="#f59e0b" />
-                <View>
-                  <Text style={styles.modalTitle}>Company Reports</Text>
-                  <Text style={styles.modalSubtitle}>{company.name} - Analytics & Reports</Text>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setShowReportsModal(false)}
-              >
-                <View style={styles.closeButtonContent}>
-                  <X size={20} color="#6b7280" />
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            {/* Reports Content */}
-            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-              {/* Sales Overview */}
-              <View style={styles.reportSection}>
-                <Text style={styles.reportSectionTitle}>Sales Overview</Text>
-                <View style={styles.reportCard}>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Total Sales</Text>
-                    <Text style={styles.reportValue}>{company.stats?.totalSales || '₹0'}</Text>
-                  </View>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Total Orders</Text>
-                    <Text style={styles.reportValue}>{company.stats?.totalOrders?.toLocaleString() || '0'}</Text>
-                  </View>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Pending Orders</Text>
-                    <Text style={styles.reportValue}>{company.stats?.pendingOrders?.toLocaleString() || '0'}</Text>
-                  </View>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Average Order Value</Text>
-                    <Text style={styles.reportValue}>
-                      {company.stats?.totalOrders > 0 
-                        ? `₹${Math.round((Number(company.stats?.totalSales?.replace('₹', '').replace(',', '')) || 0) / company.stats.totalOrders).toLocaleString()}`
-                        : '₹0'
-                      }
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* User Analytics */}
-              <View style={styles.reportSection}>
-                <Text style={styles.reportSectionTitle}>User Analytics</Text>
-                <View style={styles.reportCard}>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Total Users</Text>
-                    <Text style={styles.reportValue}>{company.stats?.totalUsers || '0'}</Text>
-                  </View>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Active Users</Text>
-                    <Text style={styles.reportValue}>{company.stats?.activeUsers || '0'}</Text>
-                  </View>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>User Activity Rate</Text>
-                    <Text style={styles.reportValue}>
-                      {company.stats?.totalUsers > 0 
-                        ? `${Math.round((company.stats.activeUsers / company.stats.totalUsers) * 100)}%`
-                        : '0%'
-                      }
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Performance Metrics */}
-              <View style={styles.reportSection}>
-                <Text style={styles.reportSectionTitle}>Performance Metrics</Text>
-                <View style={styles.reportCard}>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Orders per User</Text>
-                    <Text style={styles.reportValue}>
-                      {company.stats?.totalUsers > 0 
-                        ? Math.round(company.stats.totalOrders / company.stats.totalUsers)
-                        : '0'
-                      }
-                    </Text>
-                  </View>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Sales per User</Text>
-                    <Text style={styles.reportValue}>
-                      {company.stats?.totalUsers > 0 
-                        ? `₹${Math.round((Number(company.stats?.totalSales?.replace('₹', '').replace(',', '')) || 0) / company.stats.totalUsers).toLocaleString()}`
-                        : '₹0'
-                      }
-                    </Text>
-                  </View>
-                  <View style={styles.reportItem}>
-                    <Text style={styles.reportLabel}>Order Completion Rate</Text>
-                    <Text style={styles.reportValue}>
-                      {company.stats?.totalOrders > 0 
-                        ? `${Math.round(((company.stats.totalOrders - company.stats.pendingOrders) / company.stats.totalOrders) * 100)}%`
-                        : '0%'
-                      }
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Coming Soon Features */}
-              <View style={styles.reportSection}>
-                <Text style={styles.reportSectionTitle}>Advanced Reports</Text>
-                <View style={styles.comingSoonCard}>
-                  <BarChart3 size={32} color="#9ca3af" />
-                  <Text style={styles.comingSoonTitle}>Advanced Analytics Coming Soon</Text>
-                  <Text style={styles.comingSoonText}>
-                    Detailed charts, trend analysis, and comprehensive reporting features will be available in the next update.
-                  </Text>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       {/* Activity Log Modal */}
       <Modal
@@ -1294,44 +688,6 @@ const CompanyDetailsScreen = ({
                       <Text style={styles.activityTime}>Recently</Text>
                     </View>
                   </View>
-
-                  <View style={styles.activityItem}>
-                    <View style={styles.activityIcon}>
-                      <Package size={16} color="#f59e0b" />
-                    </View>
-                    <View style={styles.activityContent}>
-                      <Text style={styles.activityTitle}>Orders Processed</Text>
-                      <Text style={styles.activityDescription}>
-                        {company.stats?.totalOrders || 0} orders have been processed
-                      </Text>
-                      <Text style={styles.activityTime}>Ongoing</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.activityItem}>
-                    <View style={styles.activityIcon}>
-                      <TrendingUp size={16} color="#16a34a" />
-                    </View>
-                    <View style={styles.activityContent}>
-                      <Text style={styles.activityTitle}>Sales Generated</Text>
-                      <Text style={styles.activityDescription}>
-                        Total sales of {company.stats?.totalSales || '₹0'} recorded
-                      </Text>
-                      <Text style={styles.activityTime}>Ongoing</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Coming Soon Features */}
-              <View style={styles.reportSection}>
-                <Text style={styles.reportSectionTitle}>Detailed Activity Tracking</Text>
-                <View style={styles.comingSoonCard}>
-                  <Activity size={32} color="#9ca3af" />
-                  <Text style={styles.comingSoonTitle}>Advanced Activity Log Coming Soon</Text>
-                  <Text style={styles.comingSoonText}>
-                    Detailed user actions, system events, and comprehensive activity tracking will be available in the next update.
-                  </Text>
                 </View>
               </View>
             </ScrollView>
@@ -1361,7 +717,7 @@ const CompanyFormScreen = ({
   const [guid, setGuid] = useState<string>(company?.guid ? String(company.guid) : '');
   const [tallySerialId, setTallySerialId] = useState<string>(company?.tallySerialId || '');
   const [adminOptions, setAdminOptions] = useState<AdminOption[]>([]);
-  const [selectedAdminId, setSelectedAdminId] = useState<string>('');
+  const [selectedAdminIds, setSelectedAdminIds] = useState<string[]>([]);
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
   const [street, setStreet] = useState<string>('');
@@ -1391,7 +747,7 @@ const CompanyFormScreen = ({
       await onSave({
         ...formData,
         maxUsers,
-        selectedAdminId,
+        selectedAdminIds,
         street,
         country,
         pincode,
@@ -1459,7 +815,12 @@ const CompanyFormScreen = ({
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
         <View style={styles.formContainer}>
           {/* Basic Information */}
           <View style={styles.formSection}>
@@ -1587,22 +948,61 @@ const CompanyFormScreen = ({
               autoCapitalize="characters"
               placeholderTextColor="#9ca3af"
             />
-            <Text style={styles.formLabel}>Assign Admin (optional)</Text>
+            <Text style={styles.formLabel}>Assign Admins (optional)</Text>
+            
+            {/* Selected Admins Display */}
+            {selectedAdminIds.length > 0 && (
+              <View style={styles.selectedAdminsContainer}>
+                <Text style={styles.selectedAdminsHeader}>
+                  Selected Admins ({selectedAdminIds.length})
+                </Text>
+                {selectedAdminIds.map((adminId) => {
+                  const admin = adminOptions.find(a => a.value === adminId);
+                  if (!admin) return null;
+                  return (
+                    <View key={adminId} style={styles.selectedAdminItem}>
+                      <View style={styles.selectedAdminInfo}>
+                        <Users size={18} color="#2563eb" />
+                        <View style={styles.selectedAdminDetails}>
+                          <Text style={styles.selectedAdminName} numberOfLines={1} ellipsizeMode="tail">
+                            {admin.label}
+                          </Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.removeAdminButton}
+                        onPress={() => {
+                          setSelectedAdminIds(selectedAdminIds.filter(id => id !== adminId));
+                        }}
+                      >
+                        <Text style={styles.removeAdminButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Admin Selector */}
             <View style={styles.dropdownWrapper}>
               <TouchableOpacity 
                 style={styles.dropdownContainer}
-                onPress={() => setShowAdminDropdown(!showAdminDropdown)}
+                onPress={() => {
+                  if (!showAdminDropdown) {
+                    setShowAdminDropdown(true);
+                  }
+                }}
                 activeOpacity={0.9}
               >
                 <View style={styles.dropdownButton}>
                   <Users size={20} color="#9ca3af" />
                   <Text style={[
                     styles.dropdownText,
-                    !selectedAdminId && styles.dropdownPlaceholder
+                    selectedAdminIds.length === 0 && styles.dropdownPlaceholder
                   ]}>
-                    {selectedAdminId 
-                      ? adminOptions.find(a => a.value === selectedAdminId)?.label 
-                      : 'Select an admin'
+                    {selectedAdminIds.length > 0 
+                      ? `Select Admins (${selectedAdminIds.length} selected)`
+                      : 'Select admins'
                     }
                   </Text>
                   <ChevronDown 
@@ -1617,77 +1017,82 @@ const CompanyFormScreen = ({
               </TouchableOpacity>
 
               {showAdminDropdown && (
-                <TouchableOpacity 
-                  activeOpacity={1}
-                  style={styles.dropdownBackdrop}
-                  onPress={() => {
-                    setShowAdminDropdown(false);
-                    setAdminSearchQuery('');
-                  }}
-                />
-              )}
+                <>
+                  <TouchableOpacity 
+                    activeOpacity={1}
+                    style={styles.dropdownBackdrop}
+                    onPress={() => {
+                      setShowAdminDropdown(false);
+                      setAdminSearchQuery('');
+                    }}
+                  />
+                  <View style={styles.dropdownPopover}>
+                    <View style={styles.dropdownSearchContainer}>
+                      <Search size={16} color="#9ca3af" />
+                      <TextInput
+                        style={styles.dropdownSearchInput}
+                        placeholder="Search admins..."
+                        value={adminSearchQuery}
+                        onChangeText={setAdminSearchQuery}
+                        placeholderTextColor="#9ca3af"
+                      />
+                    </View>
 
-              {showAdminDropdown && (
-                <View style={styles.dropdownPopover}>
-                  <View style={styles.dropdownSearchContainer}>
-                    <Search size={16} color="#9ca3af" />
-                    <TextInput
-                      style={styles.dropdownSearchInput}
-                      placeholder="Search admins..."
-                      value={adminSearchQuery}
-                      onChangeText={setAdminSearchQuery}
-                      placeholderTextColor="#9ca3af"
-                    />
-                  </View>
-
-                  <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator>
-                    {filteredAdmins.length > 0 ? (
-                      filteredAdmins.map((admin) => (
-                        <TouchableOpacity
-                          key={admin.value}
-                          style={[
-                            styles.dropdownItem,
-                            selectedAdminId === admin.value && styles.dropdownItemSelected,
-                          ]}
-                          onPress={() => {
-                            setSelectedAdminId(admin.value);
-                            setShowAdminDropdown(false);
-                            setAdminSearchQuery('');
-                          }}
-                        >
-                          <View style={styles.dropdownItemContent}>
-                            <Text
+                    <ScrollView 
+                      style={styles.dropdownScroll} 
+                      showsVerticalScrollIndicator={true}
+                      nestedScrollEnabled={true}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {filteredAdmins.length > 0 ? (
+                        filteredAdmins.map((admin) => {
+                          const isSelected = selectedAdminIds.includes(admin.value);
+                          return (
+                            <TouchableOpacity
+                              key={admin.value}
                               style={[
-                                styles.dropdownItemText,
-                                selectedAdminId === admin.value && styles.dropdownItemTextSelected,
+                                styles.dropdownItem,
+                                isSelected && styles.dropdownItemSelected,
                               ]}
+                              onPress={() => {
+                                if (isSelected) {
+                                  // Remove admin from selection
+                                  setSelectedAdminIds(selectedAdminIds.filter(id => id !== admin.value));
+                                } else {
+                                  // Add admin to selection
+                                  setSelectedAdminIds([...selectedAdminIds, admin.value]);
+                                }
+                                // Don't close selector - allow multiple selections
+                              }}
                             >
-                              {admin.label}
-                            </Text>
-                            {selectedAdminId === admin.value && (
-                              <Check size={16} color="#2563eb" />
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      ))
-                    ) : (
-                      <View style={styles.dropdownEmptyState}>
-                        <Text style={styles.dropdownEmptyText}>No admins found</Text>
-                      </View>
-                    )}
-                  </ScrollView>
-                </View>
+                              <View style={styles.dropdownItemContent}>
+                                <Users size={18} color={isSelected ? "#2563eb" : "#9ca3af"} />
+                                <Text
+                                  style={[
+                                    styles.dropdownItemText,
+                                    isSelected && styles.dropdownItemTextSelected,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {admin.label}
+                                </Text>
+                                {isSelected && (
+                                  <Check size={18} color="#2563eb" />
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })
+                      ) : (
+                        <View style={styles.dropdownEmptyState}>
+                          <Text style={styles.dropdownEmptyText}>No admins found</Text>
+                        </View>
+                      )}
+                    </ScrollView>
+                  </View>
+                </>
               )}
             </View>
-            
-            {selectedAdminId && (
-              <View style={styles.selectedAdminInfo}>
-                <Check size={16} color="#16a34a" />
-                <Text style={styles.selectedAdminText}>
-                  Selected: {adminOptions.find(a => a.value === selectedAdminId)?.label}
-                </Text>
-              </View>
-            )}
           </View>
 
           {/* Status */}
@@ -1758,9 +1163,66 @@ const CompanyManagementSystem = () => {
   const [currentView, setCurrentView] = useState<'list' | 'details' | 'create' | 'edit'>('list');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
 
-  const handleViewDetails = (company: Company) => {
-    setSelectedCompany(company);
-    setCurrentView('details');
+  const handleViewDetails = async (company: Company) => {
+    try {
+      setLoading(true);
+      // Fetch full company details to get latest assigned admins
+      const res = await apiService.superadminGetCompanyDetails(company.id);
+      if (res.success && res.data) {
+        const c = res.data;
+        // Map the detailed company data
+        const detailedCompany: Company = {
+          id: c._id || company.id,
+          name: c.companyName || company.name,
+          code: c.companyCode || company.code,
+          guid: c.guid ? String(c.guid) : company.guid || '',
+          tallySerialId: c.tallySerialId || company.tallySerialId || '',
+          address: c.contactDetails?.address?.street || company.address || '',
+          city: c.contactDetails?.address?.city || company.city || '',
+          state: c.contactDetails?.address?.state || company.state || '',
+          pincode: c.contactDetails?.address?.pincode || company.pincode || '',
+          phone: c.companyMobile || company.phone || '',
+          email: c.companyEmail || company.email || '',
+          gstNumber: company.gstNumber || '',
+          status: c.isActive ? 'active' : 'inactive',
+          createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : company.createdAt,
+          admin: c.assignedAdmin ? {
+            name: c.assignedAdmin.name || '',
+            phone: c.assignedAdmin.mobile || '',
+            email: c.assignedAdmin.email || ''
+          } : company.admin,
+          admins: c.assignedAdmins && Array.isArray(c.assignedAdmins) && c.assignedAdmins.length > 0
+            ? c.assignedAdmins.map((a: any) => ({
+                _id: a._id || a.toString(),
+                name: a.name || '',
+                email: a.email || '',
+                mobile: a.mobile || '',
+                isDefault: false
+              }))
+            : company.admins || [],
+          stats: {
+            totalSales: c.stats?.totalSales ? `₹${Number(c.stats.totalSales).toLocaleString()}` : company.stats.totalSales,
+            totalOrders: c.stats?.totalOrders || company.stats.totalOrders,
+            pendingOrders: c.stats?.pendingOrders || company.stats.pendingOrders,
+            totalUsers: c.stats?.totalUsers || company.stats.totalUsers,
+            activeUsers: c.stats?.activeUsers || company.stats.activeUsers
+          }
+        };
+        setSelectedCompany(detailedCompany);
+        setCurrentView('details');
+      } else {
+        // Fallback to the company from list if details fetch fails
+        setSelectedCompany(company);
+        setCurrentView('details');
+      }
+    } catch (error) {
+      console.error('Failed to load company details:', error);
+      // Fallback to the company from list if details fetch fails
+      setSelectedCompany(company);
+      setCurrentView('details');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadCompanies = async () => {
@@ -1769,34 +1231,72 @@ const CompanyManagementSystem = () => {
       const res = await apiService.superadminListCompanies({ page: 1, limit: 50, search: '' });
       if (res.success && res.data) {
         console.log('Raw company data:', res.data.companies[0]); // Debug log
-        const mapped: Company[] = res.data.companies.map((c:any) => ({
-          id: c._id,
-          name: c.companyName,
-          code: c.companyCode,
-          guid: c.guid ? String(c.guid) : '',
-          tallySerialId: c.tallySerialId || '',
-          address: c.contactDetails?.address?.street || '',
-          city: c.contactDetails?.address?.city || '',
-          state: c.contactDetails?.address?.state || '',
-          pincode: c.contactDetails?.address?.pincode || '',
-          phone: c.companyMobile || '',
-          email: c.companyEmail || '',
-          gstNumber: '',
-          status: c.isActive ? 'active' : 'inactive',
-          createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
-          admin: { 
-            name: c.assignedAdmin?.name || '', 
-            phone: c.assignedAdmin?.mobile || '', 
-            email: c.assignedAdmin?.email || '' 
-          },
-          stats: { 
-            totalSales: c.stats?.totalSales ? `₹${Number(c.stats.totalSales).toLocaleString()}` : '₹0', 
-            totalOrders: c.stats?.totalOrders || 0, 
-            pendingOrders: c.stats?.pendingOrders || 0, 
-            totalUsers: c.stats?.totalUsers || 0, 
-            activeUsers: c.stats?.activeUsers || 0 
+        const mapped: Company[] = res.data.companies.map((c:any) => {
+          // Get all assigned admins
+          const assignedAdmins: Array<{
+            _id: string;
+            name: string;
+            email: string;
+            mobile: string;
+            isDefault?: boolean;
+          }> = [];
+          
+          if (c.assignedAdmins && Array.isArray(c.assignedAdmins)) {
+            assignedAdmins.push(...c.assignedAdmins
+              .filter((a: any) => a.isActive)
+              .map((a: any) => {
+                const admin = a.adminId;
+                if (typeof admin === 'object' && admin) {
+                  return {
+                    _id: admin._id || admin.toString(),
+                    name: admin.name || '',
+                    email: admin.email || '',
+                    mobile: admin.mobile || '',
+                    isDefault: false // We'll determine this based on defaultCompany
+                  };
+                }
+                return null;
+              })
+              .filter(Boolean));
           }
-        }));
+          
+          // Get default admin (for backward compatibility)
+          const defaultAdmin = c.assignedAdmin || (assignedAdmins.length > 0 ? {
+            name: assignedAdmins[0].name,
+            email: assignedAdmins[0].email,
+            phone: assignedAdmins[0].mobile
+          } : { name: '', phone: '', email: '' });
+          
+          return {
+            id: c._id,
+            name: c.companyName,
+            code: c.companyCode,
+            guid: c.guid ? String(c.guid) : '',
+            tallySerialId: c.tallySerialId || '',
+            address: c.contactDetails?.address?.street || '',
+            city: c.contactDetails?.address?.city || '',
+            state: c.contactDetails?.address?.state || '',
+            pincode: c.contactDetails?.address?.pincode || '',
+            phone: c.companyMobile || '',
+            email: c.companyEmail || '',
+            gstNumber: '',
+            status: c.isActive ? 'active' : 'inactive',
+            createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+            admin: { 
+              name: defaultAdmin?.name || '', 
+              phone: defaultAdmin?.mobile || defaultAdmin?.phone || '', 
+              email: defaultAdmin?.email || '' 
+            },
+            admins: assignedAdmins,
+            stats: { 
+              totalSales: c.stats?.totalSales ? `₹${Number(c.stats.totalSales).toLocaleString()}` : '₹0', 
+              totalOrders: c.stats?.totalOrders || 0, 
+              pendingOrders: c.stats?.pendingOrders || 0, 
+              totalUsers: c.stats?.totalUsers || 0, 
+              activeUsers: c.stats?.activeUsers || 0 
+            }
+          };
+        });
         setCompanies(mapped);
       }
     } catch (e) {
@@ -1861,11 +1361,19 @@ const CompanyManagementSystem = () => {
           Alert.alert('Success', 'Company created successfully!');
           await loadCompanies();
 
-          // Assign admin if provided
-          if (data.selectedAdminId) {
+          // Assign admins if provided
+          if (data.selectedAdminIds && Array.isArray(data.selectedAdminIds) && data.selectedAdminIds.length > 0) {
             try {
-              await apiService.superadminAssignCompanyToAdmin(data.selectedAdminId, { companyId: res.data._id, setAsDefault: true });
+              // Assign each admin to the company
+              for (let i = 0; i < data.selectedAdminIds.length; i++) {
+                const adminId = data.selectedAdminIds[i];
+                await apiService.superadminAssignCompanyToAdmin(adminId, { 
+                  companyId: res.data._id, 
+                  setAsDefault: i === 0 // Set first admin as default
+                });
+              }
             } catch (e) {
+              console.error('Error assigning admins:', e);
               // assignment failure is non-blocking
             }
           }
@@ -1903,14 +1411,44 @@ const CompanyManagementSystem = () => {
 
         const res = await apiService.superadminUpdateCompany(selectedCompany.id, payload);
         if (res.success && res.data) {
-          if (data.selectedAdminId) {
+          // Handle admin assignments
+          if (data.selectedAdminIds && Array.isArray(data.selectedAdminIds)) {
             try {
-              await apiService.superadminAssignCompanyToAdmin(data.selectedAdminId, {
-                companyId: selectedCompany.id,
-                setAsDefault: true,
-              });
-            } catch (assignError) {
-              console.warn('Failed to assign admin during update:', assignError);
+              // Get current assigned admins
+              const companyRes = await apiService.superadminListCompanies({ page: 1, limit: 100 });
+              if (companyRes.success && companyRes.data) {
+                const companyData = companyRes.data.companies.find((c: any) => c._id === selectedCompany.id);
+                const currentAdminIds: string[] = [];
+                if (companyData && companyData.assignedAdmins && Array.isArray(companyData.assignedAdmins)) {
+                  currentAdminIds.push(...companyData.assignedAdmins
+                    .filter((a: any) => a.isActive)
+                    .map((a: any) => a.adminId?._id || a.adminId || '')
+                    .filter(Boolean));
+                }
+
+                // Remove admins that are no longer selected
+                const adminsToRemove = currentAdminIds.filter(id => !data.selectedAdminIds.includes(id));
+                // Add new admins
+                const adminsToAdd = data.selectedAdminIds.filter(id => !currentAdminIds.includes(id));
+
+                // Remove admins
+                for (const adminId of adminsToRemove) {
+                  // Note: There's no remove endpoint, so we might need to handle this differently
+                  // For now, we'll just add the new ones
+                }
+
+                // Add new admins
+                for (let i = 0; i < adminsToAdd.length; i++) {
+                  const adminId = adminsToAdd[i];
+                  await apiService.superadminAssignCompanyToAdmin(adminId, {
+                    companyId: selectedCompany.id,
+                    setAsDefault: false
+                  });
+                }
+              }
+            } catch (e) {
+              console.error('Error updating admin assignments:', e);
+              // assignment failure is non-blocking
             }
           }
 
@@ -2153,6 +1691,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollViewContent: {
+    paddingBottom: 120, // Extra padding for dropdown and buttons
+  },
   companyCard: {
     backgroundColor: '#fff',
     marginHorizontal: 16,
@@ -2232,11 +1773,9 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
   },
   adminInfo: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    gap: 8,
+    flex: 1,
+    minWidth: 0, // Allow flex to shrink
+    marginRight: 12,
   },
   // Performance Indicator styles
   performanceIndicator: {
@@ -2650,13 +2189,17 @@ const styles = StyleSheet.create({
   },
   dropdownWrapper: {
     position: 'relative',
+    zIndex: 1000,
+    marginBottom: 4,
   },
   dropdownBackdrop: {
     position: 'absolute',
-    top: -8,
-    left: -16,
-    right: -16,
-    bottom: -16,
+    top: -1000,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    zIndex: 998,
   },
   dropdownButton: {
     flexDirection: 'row',
@@ -2698,8 +2241,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
-    maxHeight: 240,
+    maxHeight: 180,
     zIndex: 1000,
+    overflow: 'hidden',
   },
   dropdownSearchContainer: {
     flexDirection: 'row',
@@ -2718,7 +2262,70 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   dropdownScroll: {
-    maxHeight: 220,
+    maxHeight: 160,
+    flexGrow: 0,
+  },
+  selectedAdminsContainer: {
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  selectedAdminsHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  selectedAdminItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    minHeight: 44,
+    maxWidth: '100%',
+  },
+  selectedAdminInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+    minWidth: 0,
+  },
+  selectedAdminDetails: {
+    flex: 1,
+    marginLeft: 8,
+    minWidth: 0,
+  },
+  selectedAdminName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1F2937',
+    flexShrink: 1,
+  },
+  removeAdminButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    flexShrink: 0,
+    minWidth: 60,
+    maxWidth: 80,
+  },
+  removeAdminButtonText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#DC2626',
   },
   dropdownItem: {
     paddingHorizontal: 16,
@@ -2733,11 +2340,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
+    flex: 1,
   },
   dropdownItemText: {
     fontSize: 14,
     color: '#111827',
     flex: 1,
+    marginLeft: 8,
   },
   dropdownItemTextSelected: {
     color: '#2563eb',
@@ -2751,12 +2361,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9ca3af',
     fontStyle: 'italic',
-  },
-  selectedAdminInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingHorizontal: 4,
   },
   selectedAdminText: {
     fontSize: 12,
@@ -2852,6 +2456,45 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
+  adminInfoContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginLeft: 12,
+    minWidth: 0, // Allow flex to shrink
+  },
+  adminCardMargin: {
+    marginTop: 12,
+  },
+  adminNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  defaultAdminBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  defaultAdminBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+  noAdminsContainer: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+  },
+  noAdminsText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
   adminAvatar: {
     width: 48,
     height: 48,
@@ -2876,6 +2519,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     marginBottom: 2,
+    flexShrink: 1,
   },
   adminPhone: {
     fontSize: 12,
@@ -2888,6 +2532,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    flexShrink: 0, // Prevent status from shrinking
   },
   adminStatusText: {
     fontSize: 12,

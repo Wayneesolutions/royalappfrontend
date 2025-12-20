@@ -17,14 +17,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
 import apiService from '../../../services/api';
 
-interface GroupUser {
-  _id: string;
-  name: string;
-  email: string;
-  mobile?: string;
-  role: string;
-}
-
 interface Dealer {
   _id: string;
   LedgerName: string;
@@ -36,60 +28,21 @@ interface Dealer {
   };
 }
 
-interface SubDealer {
-  _id: string;
-  SDName: string;
-  SDMobileNo?: string;
-  SDEmail?: string;
-  SDState?: string;
-  group?: {
-    GroupName?: string;
-  };
-}
 
 const DashboardHome = () => {
-  const { user, logout, getUsersByCompany } = useAuth();
+  const { user, logout } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [groupUsers, setGroupUsers] = useState<GroupUser[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [subDealers, setSubDealers] = useState<SubDealer[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingDealers, setLoadingDealers] = useState(false);
-  const [loadingSubDealers, setLoadingSubDealers] = useState(false);
 
   useEffect(() => {
     fetchAllData();
   }, [user?.defaultCompany?._id]);
 
   const fetchAllData = async () => {
-    await Promise.all([
-      fetchGroupUsers(),
-      fetchDealers(),
-      fetchSubDealers(),
-    ]);
-  };
-
-  const fetchGroupUsers = async () => {
-    if (!user?.defaultCompany?._id) return;
-    
-    try {
-      setLoadingUsers(true);
-      const result = await getUsersByCompany({
-        companyId: user.defaultCompany._id,
-        role: 'groupuser',
-        limit: 1000,
-      });
-      
-      if (result?.users) {
-        setGroupUsers(result.users);
-      }
-    } catch (error) {
-      console.error('Error fetching group users:', error);
-    } finally {
-      setLoadingUsers(false);
-    }
+    await fetchDealers();
   };
 
   const fetchDealers = async () => {
@@ -105,22 +58,6 @@ const DashboardHome = () => {
       console.error('Error fetching dealers:', error);
     } finally {
       setLoadingDealers(false);
-    }
-  };
-
-  const fetchSubDealers = async () => {
-    if (!user?.defaultCompany?._id) return;
-    
-    try {
-      setLoadingSubDealers(true);
-      const result = await apiService.adminGetAllSubDealers();
-      if (result?.success && result?.data?.subdealers) {
-        setSubDealers(result.data.subdealers);
-      }
-    } catch (error) {
-      console.error('Error fetching subdealers:', error);
-    } finally {
-      setLoadingSubDealers(false);
     }
   };
 
@@ -141,21 +78,6 @@ const DashboardHome = () => {
     );
   };
 
-  const renderGroupUser = ({ item }: { item: GroupUser }) => (
-    <View style={styles.listItem}>
-      <View style={styles.listItemIcon}>
-        <Ionicons name="person" size={20} color="#3B82F6" />
-      </View>
-      <View style={styles.listItemContent}>
-        <Text style={styles.listItemName}>{item.name}</Text>
-        <Text style={styles.listItemEmail}>{item.email}</Text>
-        {item.mobile && (
-          <Text style={styles.listItemMobile}>{item.mobile}</Text>
-        )}
-      </View>
-    </View>
-  );
-
   const renderDealer = ({ item }: { item: Dealer }) => (
     <View style={styles.listItem}>
       <View style={styles.listItemIcon}>
@@ -171,29 +93,6 @@ const DashboardHome = () => {
         )}
         {item.LedgerState && (
           <Text style={styles.listItemState}>{item.LedgerState}</Text>
-        )}
-        {item.group?.GroupName && (
-          <Text style={styles.listItemGroup}>Group: {item.group.GroupName}</Text>
-        )}
-      </View>
-    </View>
-  );
-
-  const renderSubDealer = ({ item }: { item: SubDealer }) => (
-    <View style={styles.listItem}>
-      <View style={styles.listItemIcon}>
-        <Ionicons name="business" size={20} color="#8B5CF6" />
-      </View>
-      <View style={styles.listItemContent}>
-        <Text style={styles.listItemName}>{item.SDName}</Text>
-        {item.SDEmail && (
-          <Text style={styles.listItemEmail}>{item.SDEmail}</Text>
-        )}
-        {item.SDMobileNo && (
-          <Text style={styles.listItemMobile}>{item.SDMobileNo}</Text>
-        )}
-        {item.SDState && (
-          <Text style={styles.listItemState}>{item.SDState}</Text>
         )}
         {item.group?.GroupName && (
           <Text style={styles.listItemGroup}>Group: {item.group.GroupName}</Text>
@@ -249,89 +148,68 @@ const DashboardHome = () => {
             <Ionicons name="list" size={32} color="#10B981" />
             <Text style={styles.actionText}>My Orders</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('DealersListScreen' as never)}
+          >
+            <Ionicons name="storefront" size={32} color="#F59E0B" />
+            <Text style={styles.actionText}>My Dealers</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Quick Stats */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Ionicons name="people-outline" size={32} color="#3B82F6" />
-            <Text style={styles.statValue}>{groupUsers.length}</Text>
-            <Text style={styles.statLabel}>Group Users</Text>
-          </View>
-          <View style={styles.statCard}>
             <Ionicons name="storefront-outline" size={32} color="#10B981" />
             <Text style={styles.statValue}>{dealers.length}</Text>
             <Text style={styles.statLabel}>Dealers</Text>
           </View>
-          <View style={styles.statCard}>
-            <Ionicons name="business-outline" size={32} color="#8B5CF6" />
-            <Text style={styles.statValue}>{subDealers.length}</Text>
-            <Text style={styles.statLabel}>SubDealers</Text>
-          </View>
-        </View>
-
-        {/* Group Users Section */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Group Users</Text>
-            {loadingUsers && <ActivityIndicator size="small" color="#3B82F6" />}
-          </View>
-          {groupUsers.length > 0 ? (
-            <FlatList
-              data={groupUsers}
-              renderItem={renderGroupUser}
-              keyExtractor={(item) => item._id}
-              scrollEnabled={false}
-            />
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyStateText}>No group users found</Text>
-            </View>
-          )}
         </View>
 
         {/* Dealers Section */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Dealers</Text>
-            {loadingDealers && <ActivityIndicator size="small" color="#10B981" />}
+            <Text style={styles.sectionTitle}>My Dealers</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('DealersListScreen' as never)}
+              style={styles.viewAllButton}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+              <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+            </TouchableOpacity>
           </View>
+          {loadingDealers && <ActivityIndicator size="small" color="#10B981" style={{ marginBottom: 12 }} />}
           {dealers.length > 0 ? (
-            <FlatList
-              data={dealers}
-              renderItem={renderDealer}
-              keyExtractor={(item) => item._id}
-              scrollEnabled={false}
-            />
+            <>
+              <FlatList
+                data={dealers.slice(0, 5)}
+                renderItem={renderDealer}
+                keyExtractor={(item) => item._id}
+                scrollEnabled={false}
+              />
+              {dealers.length > 5 && (
+                <TouchableOpacity
+                  style={styles.viewMoreButton}
+                  onPress={() => navigation.navigate('DealersListScreen' as never)}
+                >
+                  <Text style={styles.viewMoreText}>View {dealers.length - 5} more dealers</Text>
+                </TouchableOpacity>
+              )}
+            </>
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="storefront-outline" size={48} color="#9CA3AF" />
               <Text style={styles.emptyStateText}>No dealers found</Text>
+              <TouchableOpacity
+                style={styles.createDealerButton}
+                onPress={() => navigation.navigate('DealersListScreen' as never)}
+              >
+                <Text style={styles.createDealerButtonText}>Manage Dealers</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
 
-        {/* SubDealers Section */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>SubDealers</Text>
-            {loadingSubDealers && <ActivityIndicator size="small" color="#8B5CF6" />}
-          </View>
-          {subDealers.length > 0 ? (
-            <FlatList
-              data={subDealers}
-              renderItem={renderSubDealer}
-              keyExtractor={(item) => item._id}
-              scrollEnabled={false}
-            />
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="business-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyStateText}>No subdealers found</Text>
-            </View>
-          )}
-        </View>
       </ScrollView>
     </View>
   );
@@ -529,6 +407,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     marginTop: 12,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  viewMoreButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  viewMoreText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    fontWeight: '500',
+  },
+  createDealerButton: {
+    marginTop: 16,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  createDealerButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

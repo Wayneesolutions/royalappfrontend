@@ -106,7 +106,13 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
 
   useEffect(() => {
     if (visible) {
-      fetchGroups();
+      const isGroupUser = user?.role === 'groupuser' || !user?.role || user?.role === '';
+      
+      // For group users, don't fetch groups - they don't need to select
+      if (!isGroupUser) {
+        fetchGroups();
+      }
+      
       if (dealer) {
         // Populate form with dealer data for edit
         // Safely extract groupId, handling null/undefined cases
@@ -148,6 +154,22 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
         });
       } else {
         // Reset form for create
+        // For group users, auto-assign their first active group
+        let autoGroupId = '';
+        if (isGroupUser && user?.groups && Array.isArray(user.groups) && user.groups.length > 0) {
+          // Find first active group
+          const activeGroup = user.groups.find((g: any) => 
+            (g.isActive === true || g.isActive === undefined) && g.groupId
+          );
+          if (activeGroup) {
+            if (typeof activeGroup.groupId === 'object' && activeGroup.groupId !== null && activeGroup.groupId._id) {
+              autoGroupId = activeGroup.groupId._id;
+            } else if (typeof activeGroup.groupId === 'string') {
+              autoGroupId = activeGroup.groupId;
+            }
+          }
+        }
+        
         setFormData({
           LedgerGUID: '',
           LedgerName: '',
@@ -171,11 +193,11 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
           other6: '',
           other7: '',
           other8: '',
-          groupId: '',
+          groupId: autoGroupId, // Auto-assigned for group users, empty for admin
         });
       }
     }
-  }, [visible, dealer]);
+  }, [visible, dealer, user]);
 
   // Format date for display
   const formatDate = (dateString: string) => {
@@ -223,9 +245,10 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
       return;
     }
 
-    // Group is optional, but if provided it should be valid
-    // Allow empty groupId in edit mode (dealer might not have a group)
-    if (!isEditMode && !formData.groupId) {
+    // Group is optional for group users (backend will auto-assign to their first active group)
+    // For admin users, group is required in create mode
+    const isGroupUser = user?.role === 'groupuser' || !user?.role || user?.role === '';
+    if (!isEditMode && !isGroupUser && !formData.groupId) {
       Alert.alert('Validation Error', 'Please select a group');
       return;
     }
@@ -332,18 +355,52 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
               />
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Group *</Text>
-              <TouchableOpacity
-                style={styles.groupSelector}
-                onPress={() => setShowGroupSelector(true)}
-              >
-                <Text style={selectedGroup ? styles.groupSelectorText : styles.groupSelectorPlaceholder}>
-                  {selectedGroup ? selectedGroup.GroupName : 'Select a group'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
+            {/* Group Selection - Hidden for group users, shown for admin */}
+            {(() => {
+              const isGroupUser = user?.role === 'groupuser' || !user?.role || user?.role === '';
+              if (isGroupUser) {
+                // For group users, show auto-assigned group info (read-only)
+                const userGroup = user?.groups?.find((g: any) => 
+                  (g.isActive === true || g.isActive === undefined) && g.groupId
+                );
+                const groupName = userGroup 
+                  ? (typeof userGroup.groupId === 'object' && userGroup.groupId !== null 
+                      ? userGroup.groupId.GroupName 
+                      : userGroup.GroupName || 'Your Group')
+                  : 'Your Group';
+                
+                return (
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Group (Auto-assigned)</Text>
+                    <View style={styles.autoAssignedGroup}>
+                      <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                      <Text style={styles.autoAssignedGroupText}>
+                        {groupName}
+                      </Text>
+                    </View>
+                    <Text style={styles.helperText}>
+                      The dealer will be automatically assigned to your group.
+                    </Text>
+                  </View>
+                );
+              } else {
+                // For admin users, show group selector
+                return (
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Group *</Text>
+                    <TouchableOpacity
+                      style={styles.groupSelector}
+                      onPress={() => setShowGroupSelector(true)}
+                    >
+                      <Text style={selectedGroup ? styles.groupSelectorText : styles.groupSelectorPlaceholder}>
+                        {selectedGroup ? selectedGroup.GroupName : 'Select a group'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#6B7280" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+            })()}
           </View>
 
           {/* Contact Information */}
@@ -922,6 +979,22 @@ const styles = StyleSheet.create({
   groupSelectorPlaceholder: {
     fontSize: 14,
     color: '#9CA3AF',
+  },
+  autoAssignedGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  autoAssignedGroupText: {
+    fontSize: 14,
+    color: '#065F46',
+    fontWeight: '500',
+    flex: 1,
   },
   footer: {
     flexDirection: 'row',

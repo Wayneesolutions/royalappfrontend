@@ -119,6 +119,18 @@ interface Group {
   Remarks: string;
 }
 
+interface Dealer {
+  _id: string;
+  LedgerGUID: string;
+  LedgerName: string;
+  LedgerMobile?: string;
+  Email?: string;
+  LedgerAddress1?: string;
+  LedgerAddress2?: string;
+  LedgerState?: string;
+  isActive: boolean;
+}
+
 const Users = () => {
   const { user, getUsersByCompany, createUser, editUser, deleteUser } = useAuth();
   const screenWidth = Dimensions.get('window').width;
@@ -148,6 +160,7 @@ const Users = () => {
     role: "",
     parentUserId: "",
     groupId: "",
+    dealerIds: [] as string[], // Array for multiple dealers
     address: {
       street: "",
       city: "",
@@ -168,6 +181,23 @@ const Users = () => {
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [showGroupSelector, setShowGroupSelector] = useState(false);
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
+
+  // State for dealer selection
+  const [allDealers, setAllDealers] = useState<Dealer[]>([]);
+  const [loadingDealers, setLoadingDealers] = useState(false);
+  const [showDealerSelector, setShowDealerSelector] = useState(false);
+  const [dealerSearchQuery, setDealerSearchQuery] = useState('');
+
+  // State for company assignment
+  const [adminCompanies, setAdminCompanies] = useState<Array<{
+    _id: string;
+    companyName: string;
+    companyCode: string;
+  }>>([]);
+  const [showCompanyAssignModal, setShowCompanyAssignModal] = useState(false);
+  const [selectedUserForCompany, setSelectedUserForCompany] = useState<User | null>(null);
+  const [assigningToCompany, setAssigningToCompany] = useState(false);
+  const [companySearchQuery, setCompanySearchQuery] = useState('');
 
   // Note: Regular users created by admin don't need roles - they are group users
   // Only superadmin, admin, dealers, and subdealers have roles
@@ -266,6 +296,118 @@ const Users = () => {
     }
   };
 
+  // Fetch admin's companies for assignment
+  useEffect(() => {
+    if (user?.companies && Array.isArray(user.companies)) {
+      const companies = user.companies
+        .filter((c: any) => c.isActive !== false)
+        .map((c: any) => {
+          const companyId = c.companyId;
+          if (typeof companyId === 'object' && companyId !== null) {
+            return {
+              _id: companyId._id,
+              companyName: companyId.companyName || '',
+              companyCode: companyId.companyCode || ''
+            };
+          }
+          return null;
+        })
+        .filter((c: any) => c !== null);
+      setAdminCompanies(companies);
+    }
+  }, [user]);
+
+  // Handle assign user to company
+  const handleAssignToCompany = (userToAssign: User) => {
+    setSelectedUserForCompany(userToAssign);
+    setShowCompanyAssignModal(true);
+    setCompanySearchQuery('');
+  };
+
+  // Assign user to selected company
+  const handleConfirmCompanyAssignment = async (companyId: string) => {
+    if (!selectedUserForCompany) return;
+
+    // Check if user already has this company
+    const userCompanyIds = selectedUserForCompany.companies
+      .filter(c => c.isActive !== false)
+      .map(c => {
+        const compId = c.companyId;
+        return typeof compId === 'object' && compId !== null ? compId._id : compId;
+      });
+
+    if (userCompanyIds.includes(companyId)) {
+      Alert.alert(
+        'Already Assigned',
+        'This user is already assigned to the selected company.'
+      );
+      return;
+    }
+
+    setAssigningToCompany(true);
+    try {
+      const result = await apiService.adminAssignUserToCompany(
+        selectedUserForCompany._id,
+        companyId
+      );
+
+      if (result?.success) {
+        Alert.alert('Success', 'User assigned to company successfully!');
+        setShowCompanyAssignModal(false);
+        setSelectedUserForCompany(null);
+        fetchUsers(); // Refresh user list
+      } else {
+        Alert.alert('Error', result?.message || 'Failed to assign user to company.');
+      }
+    } catch (error: any) {
+      console.error('Error assigning user to company:', error);
+      Alert.alert(
+        'Error',
+        error?.response?.data?.message || 'Failed to assign user to company. Please try again.'
+      );
+    } finally {
+      setAssigningToCompany(false);
+    }
+  };
+
+  // Fetch all dealers for selection
+  const fetchAllDealers = async () => {
+    try {
+      setLoadingDealers(true);
+      const result = await apiService.adminGetAllDealers({ includeInactive: false });
+      
+      if (result && result.success && result.data) {
+        // Extract dealers from the response
+        const dealers: Dealer[] = [];
+        
+        if (result.data.dealers && Array.isArray(result.data.dealers)) {
+          result.data.dealers.forEach((d: any) => {
+            dealers.push({
+              _id: d._id,
+              LedgerGUID: d.LedgerGUID,
+              LedgerName: d.LedgerName,
+              LedgerMobile: d.LedgerMobile,
+              Email: d.Email,
+              LedgerAddress1: d.LedgerAddress1,
+              LedgerAddress2: d.LedgerAddress2,
+              LedgerState: d.LedgerState,
+              isActive: d.isActive !== false
+            });
+          });
+        }
+        
+        setAllDealers(dealers);
+      } else {
+        setAllDealers([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch dealers:', err);
+      setAllDealers([]);
+    } finally {
+      setLoadingDealers(false);
+    }
+  };
+
   // Filter parent users based on search
   const getFilteredParentUsers = () => {
     let filtered = allUsersForParent;
@@ -293,6 +435,23 @@ const Users = () => {
         g.GroupName.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
         g.GroupGUID.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
         (g.Remarks && g.Remarks.toLowerCase().includes(groupSearchQuery.toLowerCase()))
+      );
+    }
+    
+    return filtered;
+  };
+
+  // Filter dealers based on search
+  const getFilteredDealers = () => {
+    let filtered = allDealers;
+    
+    // Filter by search query if any
+    if (dealerSearchQuery) {
+      filtered = filtered.filter((d: Dealer) =>
+        d.LedgerName.toLowerCase().includes(dealerSearchQuery.toLowerCase()) ||
+        d.LedgerGUID.toLowerCase().includes(dealerSearchQuery.toLowerCase()) ||
+        (d.LedgerMobile && d.LedgerMobile.includes(dealerSearchQuery)) ||
+        (d.Email && d.Email.toLowerCase().includes(dealerSearchQuery.toLowerCase()))
       );
     }
     
@@ -429,6 +588,7 @@ const Users = () => {
         role: 'groupuser', // Default role for group users
         parentUserId: formData.parentUserId || undefined, // Make parent user optional
         groupId: formData.groupId || undefined, // Group assignment (optional)
+        dealerIds: (formData.dealerIds && formData.dealerIds.length > 0) ? formData.dealerIds : undefined, // Multiple dealer assignment (optional)
         userName: formData.email || undefined, // Use email as username if provided
         address: {
           street: formData.address.street || "",
@@ -467,6 +627,7 @@ const Users = () => {
         role: "",
         parentUserId: "",
         groupId: "",
+        dealerIds: [],
         address: {
           street: "",
           city: "",
@@ -476,7 +637,9 @@ const Users = () => {
         },
       });
       setShowGroupSelector(false);
+      setShowDealerSelector(false);
       setGroupSearchQuery('');
+      setDealerSearchQuery('');
       setModalVisible(false);
       fetchUsers(); // Refresh the list
     } catch (err) {
@@ -508,6 +671,18 @@ const Users = () => {
           : (userToEdit.groups[0].groupId as any)?._id || '')
       : "";
 
+    // Get assigned dealer IDs if available
+    const assignedDealerIds: string[] = [];
+    console.log('🔍 User assignedDealerIds:', (userToEdit as any).assignedDealerIds);
+    if ((userToEdit as any).assignedDealerIds && Array.isArray((userToEdit as any).assignedDealerIds)) {
+      assignedDealerIds.push(...(userToEdit as any).assignedDealerIds.map((id: any) => {
+        const dealerId = typeof id === 'object' && id !== null ? (id._id || id) : id;
+        console.log('🔍 Mapped dealer ID:', dealerId, 'from:', id);
+        return dealerId;
+      }));
+    }
+    console.log('🔍 Final assignedDealerIds array:', assignedDealerIds);
+
     setFormData({
       name: userToEdit.name,
       email: userToEdit.email || "",
@@ -516,6 +691,7 @@ const Users = () => {
       role: userToEdit.role,
       parentUserId: parentUserId,
       groupId: userGroupId,
+      dealerIds: assignedDealerIds, // Initialize dealerIds array
       address: {
         street: userToEdit.address?.street || "",
         city: userToEdit.address?.city || "",
@@ -525,8 +701,9 @@ const Users = () => {
       },
     });
     
-    // Fetch all groups for group selection when editing
+    // Fetch all groups and dealers for selection when editing
     fetchAllGroups();
+    fetchAllDealers(); // Fetch dealers to show existing assignments
     
     setModalVisible(true);
   };
@@ -557,6 +734,7 @@ const Users = () => {
         role: 'groupuser', // All users are group users (no role selection)
         parentUserId: formData.parentUserId || undefined, // Make parent user optional
         groupId: formData.groupId || undefined, // Group assignment (optional)
+        dealerIds: (formData.dealerIds && formData.dealerIds.length > 0) ? formData.dealerIds : undefined, // Multiple dealer assignment (optional)
         userName: formData.email || undefined,
         isActive: editingUser.isActive,
         address: {
@@ -674,12 +852,13 @@ const Users = () => {
           style={styles.input}
         />
         
-        {/* Select Group Section */}
-        <Text style={styles.sectionLabel}>Assign to Group (Optional)</Text>
+        {/* Group and Dealer Assignment Section */}
+        <Text style={styles.sectionLabel}>Group & Dealer Assignment (Optional)</Text>
         <Text style={styles.helperText}>
-          Optionally assign user to an existing group. If not selected, a group will be automatically created.
+          You can assign both a group and dealers to the user. If no group is selected, a group will be automatically created based on parent user.
         </Text>
         
+        {/* Group Selection */}
         {formData.groupId ? (
           <View style={styles.selectedGroupContainer}>
             <View style={styles.selectedGroupInfo}>
@@ -808,6 +987,159 @@ const Users = () => {
           </View>
         )}
 
+        {/* Dealer Selection - Multiple Dealers */}
+        {formData.dealerIds && formData.dealerIds.length > 0 && (
+          <View style={styles.selectedDealersContainer}>
+            <Text style={styles.selectedDealersHeader}>
+              Selected Dealers ({formData.dealerIds.length})
+            </Text>
+            {formData.dealerIds.map((dealerId) => {
+              const dealer = allDealers.find(d => d._id === dealerId);
+              if (!dealer) return null;
+              return (
+                <View key={dealerId} style={styles.selectedGroupContainer}>
+                  <View style={styles.selectedGroupInfo}>
+                    <Ionicons name="business" size={20} color="#0493D2" />
+                    <View style={styles.selectedGroupDetails}>
+                      <Text style={styles.selectedGroupName}>
+                        {dealer.LedgerName}
+                      </Text>
+                      <Text style={styles.selectedGroupGUID}>
+                        GUID: {dealer.LedgerGUID}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.removeGroupButton}
+                    onPress={() => {
+                      setFormData({ 
+                        ...formData, 
+                        dealerIds: (formData.dealerIds || []).filter(id => id !== dealerId) 
+                      });
+                    }}
+                  >
+                    <Ionicons name="close-circle" size={24} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        
+        <TouchableOpacity
+          style={styles.groupSelectorButton}
+          onPress={() => {
+            if (!showDealerSelector) {
+              fetchAllDealers();
+            }
+            setShowDealerSelector(!showDealerSelector);
+          }}
+        >
+          <View style={styles.groupSelectorContent}>
+            <Ionicons name="business-outline" size={20} color="#6B7280" />
+            <Text style={styles.groupSelectorText}>
+              {(formData.dealerIds && formData.dealerIds.length > 0) 
+                ? `Add More Dealers (${formData.dealerIds.length} selected)` 
+                : 'Select Dealers (Optional - Multiple)'}
+            </Text>
+            <Ionicons 
+              name={showDealerSelector ? "chevron-up" : "chevron-down"} 
+              size={20} 
+              color="#6B7280" 
+            />
+          </View>
+        </TouchableOpacity>
+
+        {showDealerSelector && (
+          <View style={styles.groupSelectorDropdown}>
+            <View style={styles.groupSearchContainer}>
+              <Ionicons name="search" size={16} color="#9CA3AF" />
+              <TextInput
+                style={styles.groupSearchInput}
+                placeholder="Search dealers..."
+                value={dealerSearchQuery}
+                onChangeText={setDealerSearchQuery}
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            
+            <ScrollView 
+              style={styles.groupListContainer} 
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {loadingDealers ? (
+                <View style={styles.groupLoadingContainer}>
+                  <ActivityIndicator size="small" color="#0493D2" />
+                  <Text style={styles.groupLoadingText}>Loading dealers...</Text>
+                </View>
+              ) : (() => {
+                const filteredDealers = getFilteredDealers();
+                
+                return filteredDealers.length > 0 ? (
+                  filteredDealers.map((dealer) => {
+                    const isSelected = (formData.dealerIds || []).includes(dealer._id);
+                    return (
+                      <TouchableOpacity
+                        key={dealer._id}
+                        style={[
+                          styles.groupItem,
+                          isSelected && styles.groupItemSelected
+                        ]}
+                        onPress={() => {
+                          if (isSelected) {
+                            // Remove dealer from selection
+                            setFormData({ 
+                              ...formData, 
+                              dealerIds: (formData.dealerIds || []).filter(id => id !== dealer._id) 
+                            });
+                          } else {
+                            // Add dealer to selection
+                            setFormData({ 
+                              ...formData, 
+                              dealerIds: [...(formData.dealerIds || []), dealer._id] 
+                            });
+                          }
+                          // Don't close selector - allow multiple selections
+                        }}
+                      >
+                        <View style={styles.groupItemInfo}>
+                          <Ionicons name="business" size={20} color={isSelected ? "#0493D2" : "#6B7280"} />
+                          <View style={styles.groupItemDetails}>
+                            <Text style={[
+                              styles.groupItemName,
+                              isSelected && styles.groupItemNameSelected
+                            ]}>
+                              {dealer.LedgerName}
+                            </Text>
+                            <Text style={styles.groupItemGUID}>GUID: {dealer.LedgerGUID}</Text>
+                            {dealer.LedgerMobile && (
+                              <Text style={styles.groupItemRemarks} numberOfLines={1}>
+                                Mobile: {dealer.LedgerMobile}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        {isSelected && (
+                          <Ionicons name="checkmark-circle" size={20} color="#0493D2" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
+                ) : (
+                  <View style={styles.groupEmptyState}>
+                    <Ionicons name="business-outline" size={32} color="#9CA3AF" />
+                    <Text style={styles.groupEmptyText}>No dealers found</Text>
+                    <Text style={styles.groupEmptySubtext}>
+                      {dealerSearchQuery ? 'Try adjusting your search' : 'No dealers available'}
+                    </Text>
+                  </View>
+                );
+              })()}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Address Section */}
         <Text style={styles.sectionLabel}>Address Information</Text>
         
@@ -908,6 +1240,14 @@ const Users = () => {
           </View>
           {canCreateUser && (
             <View style={styles.actions}>
+              {adminCompanies.length > 1 && (
+                <TouchableOpacity 
+                  onPress={() => handleAssignToCompany(item)} 
+                  style={styles.actionButton}
+                >
+                  <Ionicons name="business" size={18} color="#F59E0B" />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity onPress={() => handleEditUser(item)} style={styles.actionButton}>
                 <Ionicons name="pencil" size={18} color="#3B82F6" />
               </TouchableOpacity>
@@ -1101,8 +1441,7 @@ const Users = () => {
                 });
               }}
             >
-              <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-                <View style={[styles.webModalContainer, { maxWidth: Math.min(600, screenWidth - 40) }]}>
+              <View style={[styles.webModalContainer, { maxWidth: Math.min(600, screenWidth - 40) }]} onStartShouldSetResponder={() => true}>
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>
                       {isEditMode ? 'Edit User' : 'Add New User'}
@@ -1138,6 +1477,8 @@ const Users = () => {
                     contentContainerStyle={styles.modalContentContainer}
                     showsVerticalScrollIndicator={true}
                     keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled={true}
+                    scrollEnabled={true}
                   >
                     {renderModalFormContent()}
                   </ScrollView>
@@ -1185,7 +1526,6 @@ const Users = () => {
                     </TouchableOpacity>
                   </View>
                 </View>
-              </TouchableOpacity>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1217,8 +1557,7 @@ const Users = () => {
               });
             }}
           >
-            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.sidebarContainer}>
+            <View style={styles.sidebarContainer} onStartShouldSetResponder={() => true}>
                 {/* Drag Handle */}
                 <View style={styles.sidebarDragHandle} />
                 
@@ -1261,6 +1600,7 @@ const Users = () => {
               keyboardShouldPersistTaps="handled"
               bounces={true}
               alwaysBounceVertical={false}
+              scrollEnabled={true}
             >
               {renderModalFormContent()}
             </ScrollView>
@@ -1287,8 +1627,294 @@ const Users = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </TouchableOpacity>
           </TouchableOpacity>
+        )}
+      </Modal>
+
+      {/* Company Assignment Modal */}
+      <Modal
+        visible={showCompanyAssignModal}
+        transparent={true}
+        animationType={isWeb ? "fade" : "slide"}
+        onRequestClose={() => {
+          setShowCompanyAssignModal(false);
+          setSelectedUserForCompany(null);
+          setCompanySearchQuery('');
+        }}
+      >
+        {isWeb ? (
+          // Web Modal
+          <View style={styles.webModalOverlay}>
+            <View style={styles.companyAssignModalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  Assign User to Company
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowCompanyAssignModal(false);
+                    setSelectedUserForCompany(null);
+                    setCompanySearchQuery('');
+                  }}
+                >
+                  <Ionicons name="close" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView 
+                style={styles.companyAssignModalContent}
+                contentContainerStyle={styles.companyAssignModalContentContainer}
+                showsVerticalScrollIndicator={true}
+              >
+                {selectedUserForCompany && (
+                  <View style={styles.userInfoSection}>
+                    <Text style={styles.userInfoLabel}>User:</Text>
+                    <Text style={styles.userInfoText}>{selectedUserForCompany.name}</Text>
+                    <Text style={styles.userInfoSubtext}>{selectedUserForCompany.email || selectedUserForCompany.mobile}</Text>
+                    
+                    {/* Show user's current companies */}
+                    {selectedUserForCompany.companies && selectedUserForCompany.companies.length > 0 && (
+                      <View style={styles.currentCompaniesSection}>
+                        <Text style={styles.currentCompaniesLabel}>Current Companies:</Text>
+                        {selectedUserForCompany.companies
+                          .filter((c: any) => c.isActive !== false)
+                          .map((c: any, index: number) => {
+                            const compId = c.companyId;
+                            const companyName = typeof compId === 'object' && compId !== null 
+                              ? compId.companyName 
+                              : 'Unknown Company';
+                            return (
+                              <View key={index} style={styles.currentCompanyItem}>
+                                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                <Text style={styles.currentCompanyText}>{companyName}</Text>
+                              </View>
+                            );
+                          })}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                <View style={styles.companySearchContainer}>
+                  <Ionicons name="search" size={20} color="#9CA3AF" style={styles.companySearchIcon} />
+                  <TextInput
+                    style={styles.companySearchInput}
+                    placeholder="Search companies..."
+                    value={companySearchQuery}
+                    onChangeText={setCompanySearchQuery}
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+
+                {adminCompanies.filter((company) =>
+                  company.companyName.toLowerCase().includes(companySearchQuery.toLowerCase()) ||
+                  company.companyCode.toLowerCase().includes(companySearchQuery.toLowerCase())
+                ).length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="business-outline" size={48} color="#9CA3AF" />
+                    <Text style={styles.emptyStateText}>No companies available</Text>
+                  </View>
+                ) : (
+                  adminCompanies
+                    .filter((company) =>
+                      company.companyName.toLowerCase().includes(companySearchQuery.toLowerCase()) ||
+                      company.companyCode.toLowerCase().includes(companySearchQuery.toLowerCase())
+                    )
+                    .map((item) => {
+                      const userCompanyIds = selectedUserForCompany?.companies
+                        ?.filter((c: any) => c.isActive !== false)
+                        .map((c: any) => {
+                          const compId = c.companyId;
+                          return typeof compId === 'object' && compId !== null ? compId._id : compId;
+                        }) || [];
+                      
+                      const isAlreadyAssigned = userCompanyIds.includes(item._id);
+                      const isCurrentCompany = user?.defaultCompany?._id === item._id;
+
+                      return (
+                        <TouchableOpacity
+                          key={item._id}
+                          style={[
+                            styles.companyItem,
+                            isAlreadyAssigned && styles.companyItemDisabled,
+                            isCurrentCompany && styles.companyItemCurrent
+                          ]}
+                          onPress={() => {
+                            if (!isAlreadyAssigned) {
+                              handleConfirmCompanyAssignment(item._id);
+                            }
+                          }}
+                          disabled={isAlreadyAssigned || assigningToCompany}
+                        >
+                          <View style={styles.companyItemContent}>
+                            <Text style={styles.companyItemName}>{item.companyName}</Text>
+                            <Text style={styles.companyItemCode}>{item.companyCode}</Text>
+                          </View>
+                          {isAlreadyAssigned && (
+                            <View style={styles.assignedBadge}>
+                              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                              <Text style={styles.assignedText}>Assigned</Text>
+                            </View>
+                          )}
+                          {isCurrentCompany && !isAlreadyAssigned && (
+                            <View style={styles.currentBadge}>
+                              <Text style={styles.currentBadgeText}>Current</Text>
+                            </View>
+                          )}
+                          {!isAlreadyAssigned && !isCurrentCompany && (
+                            <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })
+                )}
+              </ScrollView>
+
+              {assigningToCompany && (
+                <View style={styles.loadingOverlay}>
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <Text style={styles.loadingText}>Assigning user...</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        ) : (
+          // Mobile Modal
+          <View style={styles.sidebarOverlay}>
+            <View style={styles.companyAssignSidebarContainer}>
+              <View style={styles.sidebarDragHandle} />
+              <View style={styles.sidebarHeader}>
+                <Text style={styles.sidebarTitle}>
+                  Assign User to Company
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowCompanyAssignModal(false);
+                    setSelectedUserForCompany(null);
+                    setCompanySearchQuery('');
+                  }}
+                >
+                  <Ionicons name="close" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView 
+                style={styles.sidebarContent}
+                contentContainerStyle={styles.sidebarContentContainer}
+                showsVerticalScrollIndicator={true}
+              >
+                {selectedUserForCompany && (
+                  <View style={styles.userInfoSection}>
+                    <Text style={styles.userInfoLabel}>User:</Text>
+                    <Text style={styles.userInfoText}>{selectedUserForCompany.name}</Text>
+                    <Text style={styles.userInfoSubtext}>{selectedUserForCompany.email || selectedUserForCompany.mobile}</Text>
+                    
+                    {/* Show user's current companies */}
+                    {selectedUserForCompany.companies && selectedUserForCompany.companies.length > 0 && (
+                      <View style={styles.currentCompaniesSection}>
+                        <Text style={styles.currentCompaniesLabel}>Current Companies:</Text>
+                        {selectedUserForCompany.companies
+                          .filter((c: any) => c.isActive !== false)
+                          .map((c: any, index: number) => {
+                            const compId = c.companyId;
+                            const companyName = typeof compId === 'object' && compId !== null 
+                              ? compId.companyName 
+                              : 'Unknown Company';
+                            return (
+                              <View key={index} style={styles.currentCompanyItem}>
+                                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                <Text style={styles.currentCompanyText}>{companyName}</Text>
+                              </View>
+                            );
+                          })}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                <View style={styles.companySearchContainer}>
+                  <Ionicons name="search" size={20} color="#9CA3AF" style={styles.companySearchIcon} />
+                  <TextInput
+                    style={styles.companySearchInput}
+                    placeholder="Search companies..."
+                    value={companySearchQuery}
+                    onChangeText={setCompanySearchQuery}
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+
+                {adminCompanies.filter((company) =>
+                  company.companyName.toLowerCase().includes(companySearchQuery.toLowerCase()) ||
+                  company.companyCode.toLowerCase().includes(companySearchQuery.toLowerCase())
+                ).length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="business-outline" size={48} color="#9CA3AF" />
+                    <Text style={styles.emptyStateText}>No companies available</Text>
+                  </View>
+                ) : (
+                  adminCompanies
+                    .filter((company) =>
+                      company.companyName.toLowerCase().includes(companySearchQuery.toLowerCase()) ||
+                      company.companyCode.toLowerCase().includes(companySearchQuery.toLowerCase())
+                    )
+                    .map((item) => {
+                      const userCompanyIds = selectedUserForCompany?.companies
+                        ?.filter((c: any) => c.isActive !== false)
+                        .map((c: any) => {
+                          const compId = c.companyId;
+                          return typeof compId === 'object' && compId !== null ? compId._id : compId;
+                        }) || [];
+                      
+                      const isAlreadyAssigned = userCompanyIds.includes(item._id);
+                      const isCurrentCompany = user?.defaultCompany?._id === item._id;
+
+                      return (
+                        <TouchableOpacity
+                          key={item._id}
+                          style={[
+                            styles.companyItem,
+                            isAlreadyAssigned && styles.companyItemDisabled,
+                            isCurrentCompany && styles.companyItemCurrent
+                          ]}
+                          onPress={() => {
+                            if (!isAlreadyAssigned) {
+                              handleConfirmCompanyAssignment(item._id);
+                            }
+                          }}
+                          disabled={isAlreadyAssigned || assigningToCompany}
+                        >
+                          <View style={styles.companyItemContent}>
+                            <Text style={styles.companyItemName}>{item.companyName}</Text>
+                            <Text style={styles.companyItemCode}>{item.companyCode}</Text>
+                          </View>
+                          {isAlreadyAssigned && (
+                            <View style={styles.assignedBadge}>
+                              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                              <Text style={styles.assignedText}>Assigned</Text>
+                            </View>
+                          )}
+                          {isCurrentCompany && !isAlreadyAssigned && (
+                            <View style={styles.currentBadge}>
+                              <Text style={styles.currentBadgeText}>Current</Text>
+                            </View>
+                          )}
+                          {!isAlreadyAssigned && !isCurrentCompany && (
+                            <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })
+                )}
+              </ScrollView>
+
+              {assigningToCompany && (
+                <View style={styles.loadingOverlay}>
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <Text style={styles.loadingText}>Assigning user...</Text>
+                </View>
+              )}
+            </View>
+          </View>
         )}
       </Modal>
     </View>
@@ -1562,6 +2188,19 @@ const styles = StyleSheet.create({
   modalContent: {
     flex: 1,
     maxHeight: 500,
+  },
+  webModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: Platform.OS === 'web' ? 600 : undefined,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    flexDirection: 'column',
   },
   modalContentContainer: {
     padding: 24,
@@ -1940,6 +2579,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     textAlign: 'center',
+  },
+  // Selected dealers container styles
+  selectedDealersContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  selectedDealersHeader: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  // Assignment type styles
+  assignmentTypeContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  assignmentTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    gap: 8,
+  },
+  assignmentTypeButtonActive: {
+    backgroundColor: '#0493D2',
+    borderColor: '#0493D2',
+  },
+  assignmentTypeText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  assignmentTypeTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   // Group selector styles
   groupSelectorButton: {
@@ -2329,6 +3011,182 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: '#9CA3AF',
+  },
+  // Company Assignment Modal Styles
+  webModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  companyAssignModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: '80vh',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  companyAssignModalContent: {
+    flex: 1,
+  },
+  companyAssignModalContentContainer: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  companyAssignSidebarContainer: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '90%',
+    maxHeight: '95%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  userInfoSection: {
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    marginBottom: 16,
+  },
+  userInfoLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  userInfoText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  userInfoSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  currentCompaniesSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  currentCompaniesLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  currentCompanyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  currentCompanyText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  companyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  companyItemDisabled: {
+    opacity: 0.6,
+    backgroundColor: '#F9FAFB',
+  },
+  companyItemCurrent: {
+    backgroundColor: '#EFF6FF',
+  },
+  companyItemContent: {
+    flex: 1,
+  },
+  companyItemName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  companyItemCode: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  assignedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#D1FAE5',
+    borderRadius: 12,
+  },
+  assignedText: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '500',
+  },
+  currentBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 8,
+  },
+  currentBadgeText: {
+    fontSize: 11,
+    color: '#1E40AF',
+    fontWeight: '600',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  companySearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  companySearchIcon: {
+    marginRight: 12,
+  },
+  companySearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    padding: 0,
   },
 });
 

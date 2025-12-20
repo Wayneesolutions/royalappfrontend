@@ -66,7 +66,9 @@ export interface CreateAdminRequest {
   password: string;
   name: string;
   mobile: string;
-  companyId: string;
+  companyId?: string; // For backward compatibility
+  companyIds?: string[]; // New field for multiple companies
+  defaultCompanyId?: string; // Default company ID
 }
 
 export interface AdminListResponse {
@@ -320,7 +322,7 @@ class ApiService {
     }
   }
 
-  async superadminUpdateAdmin(adminId: string, data: { name: string; email: string; mobile: string; password?: string; companyId?: string }): Promise<ApiResponse<any>> {
+  async superadminUpdateAdmin(adminId: string, data: { name: string; email: string; mobile: string; password?: string; companyId?: string; companyIds?: string[]; defaultCompanyId?: string }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/superadmin/update-admin/${adminId}`, data);
       return response.data;
@@ -801,9 +803,31 @@ class ApiService {
     name?: string;
     email?: string;
     mobile?: string;
+    profileImage?: string;
   }): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put('/user/profile', userData);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async uploadImageToS3(formData: FormData): Promise<ApiResponse<{ url: string; key: string }>> {
+    try {
+      // For React Native, axios automatically sets Content-Type to multipart/form-data
+      // We should NOT set it manually as it needs to include the boundary
+      const response: AxiosResponse<ApiResponse<{ url: string; key: string }>> = await this.axiosInstance.post(
+        '/upload/s3',
+        formData,
+        {
+          headers: {
+            // Don't set Content-Type - let axios set it with boundary
+            // 'Content-Type': 'multipart/form-data',
+          },
+          timeout: 60000, // 60 seconds timeout for file uploads
+        }
+      );
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -904,6 +928,22 @@ class ApiService {
   async adminDeleteUser(userId: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.delete(`/admin/user/${userId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async adminAssignUserToCompany(userId: string, companyId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!this.token) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(
+        `/admin/assign-user-to-company/${userId}`,
+        { companyId }
+      );
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);

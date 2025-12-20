@@ -58,8 +58,6 @@ const SuperAdminDashboard = () => {
     const { roleSpecificData, superadminGetSystemStats } = useAuth();
     const [totalCompanies, setTotalCompanies] = React.useState<number | undefined>(roleSpecificData?.dashboard?.totalCompanies);
     const [totalAdmins, setTotalAdmins] = React.useState<number | undefined>(roleSpecificData?.dashboard?.totalAdmins);
-    const [totalSales, setTotalSales] = React.useState<number | undefined>(undefined);
-    const [totalOrders, setTotalOrders] = React.useState<number | undefined>(undefined);
 
     // Fetch live counts from backend to avoid stale values from login payload
     React.useEffect(() => {
@@ -69,8 +67,6 @@ const SuperAdminDashboard = () => {
                 if (systemStatsRes?.success && systemStatsRes.data) {
                     setTotalCompanies(systemStatsRes.data.totalCompanies);
                     setTotalAdmins(systemStatsRes.data.totalAdmins);
-                    setTotalSales(systemStatsRes.data.totalSales);
-                    setTotalOrders(systemStatsRes.data.totalOrders);
                 }
             } catch (error) {
                 console.error('Failed to fetch system stats:', error);
@@ -106,22 +102,6 @@ const SuperAdminDashboard = () => {
             icon: 'people',
             iconType: 'Ionicons',
             color: '#10B981',
-            change: '',
-        },
-        {
-            label: 'Total Sales',
-            value: typeof totalSales === 'number' ? `₹${totalSales.toLocaleString()}` : '--',
-            icon: 'trending-up',
-            iconType: 'Ionicons',
-            color: '#8B5CF6',
-            change: '',
-        },
-        {
-            label: 'Total Orders',
-            value: typeof totalOrders === 'number' ? String(totalOrders) : '--',
-            icon: 'cube-outline',
-            iconType: 'Ionicons',
-            color: '#F59E0B',
             change: '',
         },
     ];
@@ -163,36 +143,6 @@ const SuperAdminDashboard = () => {
     ];
 
     const menuItems: MenuItem[] = [
-        {
-            label: 'Ledger',
-            icon: 'book-outline',
-            iconType: 'Ionicons',
-            navigationScreen: 'LedgerScreen',
-        },
-        {
-            label: 'Outstanding',
-            icon: 'cash-outline',
-            iconType: 'Ionicons',
-            navigationScreen: 'OutstandingScreen',
-        },
-        {
-            label: 'Pending Orders',
-            icon: 'time-outline',
-            iconType: 'Ionicons',
-            navigationScreen: 'PendingOrdersScreen',
-        },
-        {
-            label: 'Target',
-            icon: 'bullseye-arrow',
-            iconType: 'MaterialCommunityIcons',
-            navigationScreen: 'TargetScreen',
-        },
-        {
-            label: 'Sales Report',
-            icon: 'chart-line',
-            iconType: 'MaterialCommunityIcons',
-            navigationScreen: 'SalesReportScreen',
-        },
         {
             label: 'Companies',
             icon: 'business-outline',

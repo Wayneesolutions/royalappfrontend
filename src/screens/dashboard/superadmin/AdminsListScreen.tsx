@@ -52,7 +52,8 @@ const AdminsListScreen = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [companiesOptions, setCompaniesOptions] = useState<{ label: string; value: string; code?: string }[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [defaultCompanyId, setDefaultCompanyId] = useState<string>('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [companySearchQuery, setCompanySearchQuery] = useState('');
 
@@ -74,17 +75,51 @@ const AdminsListScreen = () => {
       setLoading(true);
       const res = await apiService.superadminListAdmins({ page: 1, limit: 25, search: searchQuery });
       if (res.success && res.data) {
-        const mapped: Admin[] = res.data.admins.map((a:any) => ({
-          id: a._id,
-          name: a.name,
-          email: a.email,
-          phone: a.mobile || '',
-          company: a.defaultCompany?.companyName || '',
-          companyCode: a.defaultCompany?.companyCode || '',
-          status: a.isActive ? 'active' as const : 'inactive' as const,
-          lastLogin: a.lastLogin ? new Date(a.lastLogin).toLocaleString() : 'Never',
-          createdAt: a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
-        }));
+        const mapped: Admin[] = res.data.admins.map((a:any) => {
+          // Show all companies if available, otherwise just default
+          let companies = '';
+          let companyCode = '';
+          
+          if (a.companies && Array.isArray(a.companies) && a.companies.length > 0) {
+            const companyNames = a.companies.map((c: any) => {
+              const company = c.companyId;
+              if (typeof company === 'object' && company) {
+                return company.companyName || company.companyCode || '';
+              }
+              return '';
+            }).filter(Boolean);
+            
+            companies = companyNames.length > 0 
+              ? companyNames.join(', ') 
+              : (a.defaultCompany?.companyName || '');
+            
+            // Get default company code
+            if (a.defaultCompany) {
+              companyCode = typeof a.defaultCompany === 'object' 
+                ? a.defaultCompany.companyCode || ''
+                : '';
+            }
+          } else if (a.defaultCompany) {
+            companies = typeof a.defaultCompany === 'object' 
+              ? a.defaultCompany.companyName || ''
+              : '';
+            companyCode = typeof a.defaultCompany === 'object' 
+              ? a.defaultCompany.companyCode || ''
+              : '';
+          }
+          
+          return {
+            id: a._id,
+            name: a.name,
+            email: a.email,
+            phone: a.mobile || '',
+            company: companies || 'No company assigned',
+            companyCode: companyCode,
+            status: a.isActive ? 'active' as const : 'inactive' as const,
+            lastLogin: a.lastLogin ? new Date(a.lastLogin).toLocaleString() : 'Never',
+            createdAt: a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+          };
+        });
         setAdmins(mapped);
       }
     } catch (e) {
@@ -109,8 +144,8 @@ const AdminsListScreen = () => {
 
   const handleCreateAdmin = async () => {
     try {
-      if (!formData.name || !formData.email || !formData.phone || !formData.password || !selectedCompanyId) {
-        Alert.alert('Validation', 'Please fill all required fields: Name, Email, Phone, Password and select a Company');
+      if (!formData.name || !formData.email || !formData.phone || !formData.password || selectedCompanyIds.length === 0) {
+        Alert.alert('Validation', 'Please fill all required fields: Name, Email, Phone, Password and select at least one Company');
         return;
       }
 
@@ -125,15 +160,18 @@ const AdminsListScreen = () => {
         password: formData.password,
         name: formData.name,
         mobile: formData.phone,
-        companyId: selectedCompanyId,
+        companyIds: selectedCompanyIds,
+        defaultCompanyId: defaultCompanyId || selectedCompanyIds[0], // Use selected default or first company
       });
 
       if (res.success) {
         Alert.alert('Success', 'Admin created successfully');
         setModalVisible(false);
         setFormData({ name: '', email: '', phone: '', password: '' });
-        setSelectedCompanyId('');
+        setSelectedCompanyIds([]);
+        setDefaultCompanyId('');
         setShowCompanyDropdown(false);
+        setCompanySearchQuery('');
         loadAdmins(); // Refresh the list
       } else {
         Alert.alert('Failed', res.message || 'Failed to create admin');
@@ -146,12 +184,13 @@ const AdminsListScreen = () => {
   const closeModal = () => {
     setModalVisible(false);
     setFormData({ name: '', email: '', phone: '', password: '' });
-    setSelectedCompanyId('');
+    setSelectedCompanyIds([]);
+    setDefaultCompanyId('');
     setShowCompanyDropdown(false);
     setCompanySearchQuery('');
   };
 
-  const handleEditAdmin = (admin: Admin) => {
+  const handleEditAdmin = async (admin: Admin) => {
     setEditingAdmin(admin);
     setFormData({
       name: admin.name,
@@ -159,11 +198,45 @@ const AdminsListScreen = () => {
       phone: admin.phone,
       password: '', // Don't pre-fill password
     });
-    // Find and set the company ID
-    const company = companiesOptions.find(c => c.label.includes(admin.company));
-    if (company) {
-      setSelectedCompanyId(company.value);
+    
+    // Fetch full admin data to get all companies
+    try {
+      const res = await apiService.superadminListAdmins({ page: 1, limit: 100 });
+      if (res.success && res.data) {
+        const fullAdmin = res.data.admins.find((a: any) => a._id === admin.id);
+        if (fullAdmin) {
+          // Extract company IDs from companies array
+          const companyIds: string[] = [];
+          if (fullAdmin.companies && Array.isArray(fullAdmin.companies)) {
+            companyIds.push(...fullAdmin.companies.map((c: any) => 
+              typeof c.companyId === 'object' && c.companyId?._id 
+                ? c.companyId._id 
+                : c.companyId
+            ));
+          }
+          setSelectedCompanyIds(companyIds);
+          
+          // Set default company
+          if (fullAdmin.defaultCompany) {
+            const defaultId = typeof fullAdmin.defaultCompany === 'object' && fullAdmin.defaultCompany._id
+              ? fullAdmin.defaultCompany._id
+              : fullAdmin.defaultCompany;
+            setDefaultCompanyId(defaultId);
+          } else if (companyIds.length > 0) {
+            setDefaultCompanyId(companyIds[0]);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching admin details:', e);
+      // Fallback to single company from admin object
+      const company = companiesOptions.find(c => c.label.includes(admin.company));
+      if (company) {
+        setSelectedCompanyIds([company.value]);
+        setDefaultCompanyId(company.value);
+      }
     }
+    
     setEditModalVisible(true);
   };
 
@@ -195,9 +268,10 @@ const AdminsListScreen = () => {
         updateData.password = formData.password;
       }
 
-      // Only include companyId if changed
-      if (selectedCompanyId) {
-        updateData.companyId = selectedCompanyId;
+      // Include companyIds if changed
+      if (selectedCompanyIds.length > 0) {
+        updateData.companyIds = selectedCompanyIds;
+        updateData.defaultCompanyId = defaultCompanyId || selectedCompanyIds[0];
       }
 
       const res = await superadminUpdateAdmin(editingAdmin.id, updateData);
@@ -207,7 +281,8 @@ const AdminsListScreen = () => {
         setEditModalVisible(false);
         setEditingAdmin(null);
         setFormData({ name: '', email: '', phone: '', password: '' });
-        setSelectedCompanyId('');
+        setSelectedCompanyIds([]);
+        setDefaultCompanyId('');
         setShowCompanyDropdown(false);
         setCompanySearchQuery('');
         loadAdmins(); // Refresh the list
@@ -225,7 +300,8 @@ const AdminsListScreen = () => {
     setEditModalVisible(false);
     setEditingAdmin(null);
     setFormData({ name: '', email: '', phone: '', password: '' });
-    setSelectedCompanyId('');
+    setSelectedCompanyIds([]);
+    setDefaultCompanyId('');
     setShowCompanyDropdown(false);
     setCompanySearchQuery('');
   };
@@ -292,9 +368,13 @@ const AdminsListScreen = () => {
             <View style={styles.companySection}>
               <View style={styles.companyBadge}>
                 <Ionicons name="business" size={14} color="#8B5CF6" />
-                <Text style={styles.companyText}>{admin.company}</Text>
+                <Text style={styles.companyText} numberOfLines={2}>
+                  {admin.company}
+                </Text>
               </View>
-              <Text style={styles.companyCode}>{admin.companyCode}</Text>
+              {admin.companyCode && (
+                <Text style={styles.companyCode}>Code: {admin.companyCode}</Text>
+              )}
             </View>
 
             {/* Contact Info */}
@@ -428,20 +508,88 @@ const AdminsListScreen = () => {
               </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Assign to Company *</Text>
+              <Text style={styles.label}>Assign to Companies *</Text>
+              
+              {/* Selected Companies Display */}
+              {selectedCompanyIds.length > 0 && (
+                <View style={styles.selectedCompaniesContainer}>
+                  <Text style={styles.selectedCompaniesHeader}>
+                    Selected Companies ({selectedCompanyIds.length})
+                  </Text>
+                  {selectedCompanyIds.map((companyId) => {
+                    const company = companiesOptions.find(c => c.value === companyId);
+                    if (!company) return null;
+                    const isDefault = defaultCompanyId === companyId;
+                    return (
+                      <View key={companyId} style={styles.selectedCompanyItem}>
+                        <View style={styles.selectedCompanyInfo}>
+                          <Ionicons name="business" size={20} color="#3B82F6" />
+                          <View style={styles.selectedCompanyDetails}>
+                            <Text style={styles.selectedCompanyName} numberOfLines={1} ellipsizeMode="tail">
+                              {company.label}
+                              {isDefault && (
+                                <Text style={styles.defaultBadge}> (Default)</Text>
+                              )}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.selectedCompanyActions}>
+                          {!isDefault && selectedCompanyIds.length > 1 && (
+                            <TouchableOpacity
+                              style={styles.setDefaultButton}
+                              onPress={() => {
+                                setDefaultCompanyId(companyId);
+                                Alert.alert('Success', 'Default company updated');
+                              }}
+                            >
+                              <Text style={styles.setDefaultButtonText}>Set Default</Text>
+                            </TouchableOpacity>
+                          )}
+                          {selectedCompanyIds.length > 1 && (
+                            <TouchableOpacity
+                              style={styles.removeCompanyButton}
+                              onPress={() => {
+                                const newIds = selectedCompanyIds.filter(id => id !== companyId);
+                                setSelectedCompanyIds(newIds);
+                                // If removing default, set first remaining as default
+                                if (defaultCompanyId === companyId && newIds.length > 0) {
+                                  setDefaultCompanyId(newIds[0]);
+                                } else if (newIds.length === 0) {
+                                  setDefaultCompanyId('');
+                                }
+                              }}
+                            >
+                              <Ionicons name="close-circle" size={24} color="#EF4444" />
+                            </TouchableOpacity>
+                          )}
+                          {selectedCompanyIds.length === 1 && (
+                            <Text style={styles.cannotRemoveText}>Required</Text>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Company Selector Button */}
               <TouchableOpacity 
                 style={styles.dropdownContainer}
-                onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
+                onPress={() => {
+                  if (!showCompanyDropdown) {
+                    setShowCompanyDropdown(true);
+                  }
+                }}
               >
                 <View style={styles.dropdownButton}>
                   <Ionicons name="business-outline" size={20} color="#9CA3AF" />
                   <Text style={[
                     styles.dropdownText,
-                    !selectedCompanyId && styles.dropdownPlaceholder
+                    selectedCompanyIds.length === 0 && styles.dropdownPlaceholder
                   ]}>
-                    {selectedCompanyId 
-                      ? companiesOptions.find(c => c.value === selectedCompanyId)?.label 
-                      : 'Select a company'
+                    {selectedCompanyIds.length > 0 
+                      ? `Select Companies (${selectedCompanyIds.length} selected)`
+                      : 'Select companies'
                     }
                   </Text>
                   <Ionicons 
@@ -453,7 +601,7 @@ const AdminsListScreen = () => {
               </TouchableOpacity>
               
               {showCompanyDropdown && (
-                <View style={styles.dropdownWrapper}>
+                <>
                   <TouchableOpacity
                     style={styles.dropdownBackdrop}
                     activeOpacity={1}
@@ -462,7 +610,8 @@ const AdminsListScreen = () => {
                       setCompanySearchQuery('');
                     }}
                   />
-                  <View style={styles.dropdownPanel}>
+                  <View style={styles.dropdownWrapper}>
+                    <View style={styles.dropdownPanel}>
                     <View style={styles.dropdownSearchContainer}>
                       <Ionicons name="search" size={16} color="#9CA3AF" />
                       <TextInput
@@ -476,50 +625,61 @@ const AdminsListScreen = () => {
                     
                     <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator>
                       {filteredCompanies.length > 0 ? (
-                        filteredCompanies.map((company) => (
-                          <TouchableOpacity
-                            key={company.value}
-                            style={[
-                              styles.dropdownItem,
-                              selectedCompanyId === company.value && styles.dropdownItemSelected
-                            ]}
-                            onPress={() => {
-                              setSelectedCompanyId(company.value);
-                              setShowCompanyDropdown(false);
-                              setCompanySearchQuery('');
-                            }}
-                          >
-                            <View style={styles.dropdownItemContent}>
-                              <Text style={[
-                                styles.dropdownItemText,
-                                selectedCompanyId === company.value && styles.dropdownItemTextSelected
-                              ]}>
-                                {company.label}
-                              </Text>
-                              {selectedCompanyId === company.value && (
-                                <Ionicons name="checkmark" size={16} color="#3B82F6" />
-                              )}
-                            </View>
-                          </TouchableOpacity>
-                        ))
+                        filteredCompanies.map((company) => {
+                          const isSelected = selectedCompanyIds.includes(company.value);
+                          return (
+                            <TouchableOpacity
+                              key={company.value}
+                              style={[
+                                styles.dropdownItem,
+                                isSelected && styles.dropdownItemSelected
+                              ]}
+                              onPress={() => {
+                                if (isSelected) {
+                                  // Remove company from selection
+                                  setSelectedCompanyIds(selectedCompanyIds.filter(id => id !== company.value));
+                                  if (defaultCompanyId === company.value) {
+                                    const remaining = selectedCompanyIds.filter(id => id !== company.value);
+                                    setDefaultCompanyId(remaining.length > 0 ? remaining[0] : '');
+                                  }
+                                } else {
+                                  // Add company to selection
+                                  const newIds = [...selectedCompanyIds, company.value];
+                                  setSelectedCompanyIds(newIds);
+                                  // Set as default if it's the first one
+                                  if (newIds.length === 1) {
+                                    setDefaultCompanyId(company.value);
+                                  }
+                                }
+                                // Don't close selector - allow multiple selections
+                              }}
+                            >
+                              <View style={styles.dropdownItemContent}>
+                                <Ionicons name="business" size={20} color={isSelected ? "#3B82F6" : "#6B7280"} />
+                                <View style={styles.dropdownItemDetails}>
+                                  <Text style={[
+                                    styles.dropdownItemText,
+                                    isSelected && styles.dropdownItemTextSelected
+                                  ]}>
+                                    {company.label}
+                                  </Text>
+                                </View>
+                                {isSelected && (
+                                  <Ionicons name="checkmark-circle" size={20} color="#3B82F6" />
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })
                       ) : (
                         <View style={styles.dropdownEmptyState}>
                           <Text style={styles.dropdownEmptyText}>No companies found</Text>
                         </View>
                       )}
                     </ScrollView>
+                    </View>
                   </View>
-                </View>
-              )}
-              {showCompanyDropdown && <View style={styles.dropdownSpacer} />}
-              
-              {selectedCompanyId && (
-                <View style={styles.selectedCompanyInfo}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                  <Text style={styles.selectedCompanyText}>
-                    Selected: {companiesOptions.find(c => c.value === selectedCompanyId)?.label}
-                  </Text>
-                </View>
+                </>
               )}
             </View>
             <View style={styles.formBottomSpacer} />
@@ -641,21 +801,96 @@ const AdminsListScreen = () => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Company</Text>
-                <TouchableOpacity
-                  style={styles.dropdownButton}
-                  onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
-                >
-                  <Text style={[
-                    styles.dropdownText,
-                    !selectedCompanyId && styles.dropdownPlaceholder
-                  ]}>
-                    {selectedCompanyId
-                      ? companiesOptions.find(c => c.value === selectedCompanyId)?.label || 'Select Company'
-                      : 'Select Company'
+                <Text style={styles.label}>Companies</Text>
+                
+                {/* Selected Companies Display */}
+                {selectedCompanyIds.length > 0 && (
+                  <View style={styles.selectedCompaniesContainer}>
+                    <Text style={styles.selectedCompaniesHeader}>
+                      Selected Companies ({selectedCompanyIds.length})
+                    </Text>
+                    {selectedCompanyIds.map((companyId) => {
+                      const company = companiesOptions.find(c => c.value === companyId);
+                      if (!company) return null;
+                      const isDefault = defaultCompanyId === companyId;
+                      return (
+                        <View key={companyId} style={styles.selectedCompanyItem}>
+                          <View style={styles.selectedCompanyInfo}>
+                            <Ionicons name="business" size={20} color="#3B82F6" />
+                            <View style={styles.selectedCompanyDetails}>
+                              <Text style={styles.selectedCompanyName}>
+                                {company.label}
+                                {isDefault && (
+                                  <Text style={styles.defaultBadge}> (Default)</Text>
+                                )}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.selectedCompanyActions}>
+                            {!isDefault && selectedCompanyIds.length > 1 && (
+                              <TouchableOpacity
+                                style={styles.setDefaultButton}
+                                onPress={() => {
+                                  setDefaultCompanyId(companyId);
+                                  Alert.alert('Success', 'Default company updated');
+                                }}
+                              >
+                                <Text style={styles.setDefaultButtonText}>Set Default</Text>
+                              </TouchableOpacity>
+                            )}
+                            {selectedCompanyIds.length > 1 && (
+                              <TouchableOpacity
+                                style={styles.removeCompanyButton}
+                                onPress={() => {
+                                  const newIds = selectedCompanyIds.filter(id => id !== companyId);
+                                  setSelectedCompanyIds(newIds);
+                                  // If removing default, set first remaining as default
+                                  if (defaultCompanyId === companyId && newIds.length > 0) {
+                                    setDefaultCompanyId(newIds[0]);
+                                  } else if (newIds.length === 0) {
+                                    setDefaultCompanyId('');
+                                  }
+                                }}
+                              >
+                                <Ionicons name="close-circle" size={24} color="#EF4444" />
+                              </TouchableOpacity>
+                            )}
+                            {selectedCompanyIds.length === 1 && (
+                              <Text style={styles.cannotRemoveText}>Required</Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Company Selector Button */}
+                <TouchableOpacity 
+                  style={styles.dropdownContainer}
+                  onPress={() => {
+                    if (!showCompanyDropdown) {
+                      setShowCompanyDropdown(true);
                     }
-                  </Text>
-                  <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
+                  }}
+                >
+                  <View style={styles.dropdownButton}>
+                    <Ionicons name="business-outline" size={20} color="#9CA3AF" />
+                    <Text style={[
+                      styles.dropdownText,
+                      selectedCompanyIds.length === 0 && styles.dropdownPlaceholder
+                    ]}>
+                      {selectedCompanyIds.length > 0 
+                        ? `Select Companies (${selectedCompanyIds.length} selected)`
+                        : 'Select companies'
+                      }
+                    </Text>
+                    <Ionicons 
+                      name={showCompanyDropdown ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color="#9CA3AF" 
+                    />
+                  </View>
                 </TouchableOpacity>
 
                 {showCompanyDropdown && (
@@ -681,32 +916,52 @@ const AdminsListScreen = () => {
                       </View>
                       <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator>
                         {filteredCompanies.length > 0 ? (
-                          filteredCompanies.map((company) => (
-                            <TouchableOpacity
-                              key={company.value}
-                              style={[
-                                styles.dropdownItem,
-                                selectedCompanyId === company.value && styles.dropdownItemSelected
-                              ]}
-                              onPress={() => {
-                                setSelectedCompanyId(company.value);
-                                setShowCompanyDropdown(false);
-                                setCompanySearchQuery('');
-                              }}
-                            >
-                              <View style={styles.dropdownItemContent}>
-                                <Text style={[
-                                  styles.dropdownItemText,
-                                  selectedCompanyId === company.value && styles.dropdownItemTextSelected
-                                ]}>
-                                  {company.label}
-                                </Text>
-                                {selectedCompanyId === company.value && (
-                                  <Ionicons name="checkmark" size={16} color="#3B82F6" />
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          ))
+                          filteredCompanies.map((company) => {
+                            const isSelected = selectedCompanyIds.includes(company.value);
+                            return (
+                              <TouchableOpacity
+                                key={company.value}
+                                style={[
+                                  styles.dropdownItem,
+                                  isSelected && styles.dropdownItemSelected
+                                ]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    // Remove company from selection
+                                    setSelectedCompanyIds(selectedCompanyIds.filter(id => id !== company.value));
+                                    if (defaultCompanyId === company.value) {
+                                      const remaining = selectedCompanyIds.filter(id => id !== company.value);
+                                      setDefaultCompanyId(remaining.length > 0 ? remaining[0] : '');
+                                    }
+                                  } else {
+                                    // Add company to selection
+                                    const newIds = [...selectedCompanyIds, company.value];
+                                    setSelectedCompanyIds(newIds);
+                                    // Set as default if it's the first one
+                                    if (newIds.length === 1) {
+                                      setDefaultCompanyId(company.value);
+                                    }
+                                  }
+                                  // Don't close selector - allow multiple selections
+                                }}
+                              >
+                                <View style={styles.dropdownItemContent}>
+                                  <Ionicons name="business" size={20} color={isSelected ? "#3B82F6" : "#6B7280"} />
+                                  <View style={styles.dropdownItemDetails}>
+                                    <Text style={[
+                                      styles.dropdownItemText,
+                                      isSelected && styles.dropdownItemTextSelected
+                                    ]}>
+                                      {company.label}
+                                    </Text>
+                                  </View>
+                                  {isSelected && (
+                                    <Ionicons name="checkmark-circle" size={20} color="#3B82F6" />
+                                  )}
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })
                         ) : (
                           <View style={styles.dropdownEmptyState}>
                             <Text style={styles.dropdownEmptyText}>No companies found</Text>
@@ -878,9 +1133,7 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   companySection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     backgroundColor: '#F5F3FF',
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -889,8 +1142,9 @@ const styles = StyleSheet.create({
   },
   companyBadge: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flex: 1,
+    marginBottom: 4,
   },
   companyText: {
     fontSize: 13,
@@ -898,6 +1152,7 @@ const styles = StyleSheet.create({
     color: '#7C3AED',
     marginLeft: 6,
     flex: 1,
+    flexWrap: 'wrap',
   },
   companyCode: {
     fontSize: 11,
@@ -1001,7 +1256,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   formContent: {
-    paddingBottom: 40,
+    paddingBottom: 120, // Extra padding for dropdown and buttons
   },
   formBottomSpacer: {
     height: 24,
@@ -1097,18 +1352,18 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
   dropdownWrapper: {
-    position: 'absolute',
-    top: 48,
-    left: 0,
-    right: 0,
+    position: 'relative',
     zIndex: 1000,
+    marginBottom: 4,
   },
   dropdownBackdrop: {
     position: 'absolute',
-    top: -48,
-    left: -20,
-    right: -20,
-    bottom: -240,
+    top: -1000,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    zIndex: 998,
   },
   dropdownPanel: {
     backgroundColor: '#FFFFFF',
@@ -1116,18 +1371,21 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     borderRadius: 12,
     marginTop: 4,
-    maxHeight: 240,
+    maxHeight: 180,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
+    overflow: 'hidden',
+    zIndex: 1001,
   },
   dropdownScroll: {
-    maxHeight: 200,
+    maxHeight: 160,
+    flexGrow: 0,
   },
   dropdownSpacer: {
-    height: 240,
+    height: 0,
   },
   dropdownItem: {
     paddingHorizontal: 16,
@@ -1189,6 +1447,96 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     fontStyle: 'italic',
+  },
+  // Multi-select company styles
+  selectedCompaniesContainer: {
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  selectedCompaniesHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  selectedCompanyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    minHeight: 44,
+    maxWidth: '100%',
+  },
+  selectedCompanyInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+    minWidth: 0, // Allow flex shrinking
+  },
+  selectedCompanyDetails: {
+    flex: 1,
+    marginLeft: 8,
+    minWidth: 0, // Allow flex shrinking
+  },
+  selectedCompanyName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1F2937',
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  defaultBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  selectedCompanyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0, // Prevent actions from shrinking
+  },
+  setDefaultButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    minWidth: 70,
+    maxWidth: 90,
+  },
+  setDefaultButtonText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  removeCompanyButton: {
+    padding: 4,
+  },
+  cannotRemoveText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+    marginRight: 8,
+  },
+  dropdownItemDetails: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
 });
 

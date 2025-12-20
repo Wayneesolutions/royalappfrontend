@@ -276,7 +276,7 @@ const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
 
 const DealerCreateOrder = () => {
   const navigation = useNavigation();
-  const { user, getUsersByRole, getSubDealers, getProducts, getProductById, createOrder } = useAuth();
+  const { user, getUsersByRole, getSubDealers, getSubDealersByDealer, getProducts, getProductById, createOrder } = useAuth();
   
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
@@ -441,10 +441,12 @@ const DealerCreateOrder = () => {
   }, [gstType, applyGstToItems]);
 
   // Auto-set the current user as the dealer (dealers can't select other dealers)
+  // and fetch subdealers for this dealer
   useEffect(() => {
     if (user && !selectedDealer) {
+      const dealerId = (user as any)?._id || (user as any)?.userDetails?._id || (user as any)?.id;
       const dealerData: Dealer = {
-        _id: (user as any)?._id || (user as any)?.userDetails?._id || (user as any)?.id,
+        _id: dealerId,
         name: (user as any)?.name || (user as any)?.userDetails?.name || 'Current User',
         email: (user as any)?.email || (user as any)?.userDetails?.email,
         mobile: (user as any)?.mobile || (user as any)?.userDetails?.mobile || '',
@@ -452,8 +454,50 @@ const DealerCreateOrder = () => {
       };
       setSelectedDealer(dealerData);
       console.log('✅ Auto-selected current user as dealer:', dealerData);
+      
+      // Fetch subdealers for this dealer
+      if (dealerId && getSubDealersByDealer) {
+        getSubDealersByDealer(dealerId)
+          .then((response) => {
+            if (response?.success && response.data?.subdealers) {
+              const subdealers = response.data.subdealers || [];
+              // Map SubDealer model fields to interface
+              const mappedSubDealers = subdealers.map((subdealer: any) => ({
+                _id: subdealer._id,
+                SDName: subdealer.SDName,
+                name: subdealer.SDName || subdealer.name,
+                SDEmail: subdealer.SDEmail,
+                email: subdealer.SDEmail || subdealer.email,
+                SDMobileNo: subdealer.SDMobileNo,
+                mobile: subdealer.SDMobileNo || subdealer.mobile,
+                SDAddress1: subdealer.SDAddress1,
+                SDAddress2: subdealer.SDAddress2,
+                SDAddress3: subdealer.SDAddress3,
+                SDState: subdealer.SDState,
+                SDCountry: subdealer.SDCountry,
+                SDPincode: subdealer.SDPincode,
+                address: {
+                  street: subdealer.SDAddress1 || subdealer.address?.street || '',
+                  city: subdealer.SDAddress2 || subdealer.address?.city || '',
+                  state: subdealer.SDState || subdealer.address?.state || '',
+                  pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
+                  country: subdealer.SDCountry || subdealer.address?.country || 'India',
+                },
+              }));
+              setSubDealers(mappedSubDealers);
+              console.log('✅ Subdealers loaded for dealer:', mappedSubDealers.length);
+            } else {
+              console.log('ℹ️ No subdealers found for this dealer');
+              setSubDealers([]);
+            }
+          })
+          .catch((error) => {
+            console.error('❌ Failed to fetch subdealers:', error);
+            setSubDealers([]);
+          });
+      }
     }
-  }, [user, selectedDealer]);
+  }, [user, selectedDealer, getSubDealersByDealer]);
 
   const orderSummary = useMemo(
     () => calculateOrderSummary(orderItems),
@@ -478,100 +522,8 @@ const DealerCreateOrder = () => {
       // Set empty dealers array
       setDealers([]);
       
-      // Fetch sub dealers using getSubDealers (this filters by parent relationship)
-      console.log('🔍 Fetching sub dealers using getSubDealers...');
-      const subDealersResponse = await getSubDealers({ limit: 1000 }); // Get all subdealers
-      console.log('📡 Sub dealers response:', subDealersResponse);
-      
-      // Handle getSubDealers response format: {success: true, data: {subDealers: [...]}}
-      // This API already filters by dealer's groupId on the backend
-      if (subDealersResponse?.success && subDealersResponse?.data?.subDealers) {
-        const subDealersList = Array.isArray(subDealersResponse.data.subDealers) 
-          ? subDealersResponse.data.subDealers 
-          : [];
-        
-        // Map SubDealer model fields to interface (for backward compatibility)
-        const mappedSubDealers = subDealersList.map((subdealer: any) => ({
-          _id: subdealer._id,
-          SDName: subdealer.SDName,
-          name: subdealer.SDName || subdealer.name, // For backward compatibility
-          SDEmail: subdealer.SDEmail,
-          email: subdealer.SDEmail || subdealer.email, // For backward compatibility
-          SDMobileNo: subdealer.SDMobileNo,
-          mobile: subdealer.SDMobileNo || subdealer.mobile, // For backward compatibility
-          SDAddress1: subdealer.SDAddress1,
-          SDAddress2: subdealer.SDAddress2,
-          SDAddress3: subdealer.SDAddress3,
-          SDState: subdealer.SDState,
-          SDCountry: subdealer.SDCountry,
-          SDPincode: subdealer.SDPincode,
-          SDContactPerson: subdealer.SDContactPerson,
-          address: {
-            street: subdealer.SDAddress1 || subdealer.address?.street || '',
-            city: subdealer.SDAddress2 || subdealer.address?.city || '',
-            state: subdealer.SDState || subdealer.address?.state || '',
-            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
-            country: subdealer.SDCountry || subdealer.address?.country || 'India',
-          },
-          groupId: subdealer.groupId,
-        }));
-        
-        setSubDealers(mappedSubDealers);
-        console.log('✅ Sub dealers loaded (filtered by dealer group):', mappedSubDealers.length);
-      } else if (Array.isArray(subDealersResponse)) {
-        // Direct array response (fallback) - map fields
-        const mappedSubDealers = subDealersResponse.map((subdealer: any) => ({
-          _id: subdealer._id,
-          SDName: subdealer.SDName,
-          name: subdealer.SDName || subdealer.name,
-          SDEmail: subdealer.SDEmail,
-          email: subdealer.SDEmail || subdealer.email,
-          SDMobileNo: subdealer.SDMobileNo,
-          mobile: subdealer.SDMobileNo || subdealer.mobile,
-          SDAddress1: subdealer.SDAddress1,
-          SDAddress2: subdealer.SDAddress2,
-          SDState: subdealer.SDState,
-          SDCountry: subdealer.SDCountry,
-          SDPincode: subdealer.SDPincode,
-          address: {
-            street: subdealer.SDAddress1 || subdealer.address?.street || '',
-            city: subdealer.SDAddress2 || subdealer.address?.city || '',
-            state: subdealer.SDState || subdealer.address?.state || '',
-            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
-            country: subdealer.SDCountry || subdealer.address?.country || 'India',
-          },
-        }));
-        setSubDealers(mappedSubDealers);
-        console.log('✅ Sub dealers loaded (direct array):', mappedSubDealers.length);
-      } else if (subDealersResponse?.data && Array.isArray(subDealersResponse.data)) {
-        // Response with data array - map fields
-        const mappedSubDealers = subDealersResponse.data.map((subdealer: any) => ({
-          _id: subdealer._id,
-          SDName: subdealer.SDName,
-          name: subdealer.SDName || subdealer.name,
-          SDEmail: subdealer.SDEmail,
-          email: subdealer.SDEmail || subdealer.email,
-          SDMobileNo: subdealer.SDMobileNo,
-          mobile: subdealer.SDMobileNo || subdealer.mobile,
-          SDAddress1: subdealer.SDAddress1,
-          SDAddress2: subdealer.SDAddress2,
-          SDState: subdealer.SDState,
-          SDCountry: subdealer.SDCountry,
-          SDPincode: subdealer.SDPincode,
-          address: {
-            street: subdealer.SDAddress1 || subdealer.address?.street || '',
-            city: subdealer.SDAddress2 || subdealer.address?.city || '',
-            state: subdealer.SDState || subdealer.address?.state || '',
-            pincode: subdealer.SDPincode || subdealer.address?.pincode || '',
-            country: subdealer.SDCountry || subdealer.address?.country || 'India',
-          },
-        }));
-        setSubDealers(mappedSubDealers);
-        console.log('✅ Sub dealers loaded (data array):', mappedSubDealers.length);
-      } else {
-        console.log('⚠️ No sub dealers found or failed to load:', subDealersResponse?.message || 'Unknown error');
-        setSubDealers([]);
-      }
+      // Don't fetch sub dealers upfront - will fetch when dealer is auto-selected
+      setSubDealers([]);
       
       // Fetch products
       console.log('🔍 Fetching products...');

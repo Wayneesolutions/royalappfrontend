@@ -11,6 +11,9 @@ import AdminCreateOrder from '../../screens/dashboard/admin/AdminCreateOrder';
 import AdminOrderList from '../../screens/dashboard/admin/AdminOrderList';
 import AdminEditOrder from '../../screens/dashboard/admin/AdminEditOrder';
 
+// Dealer Management
+import DealersListScreen from '../../screens/dashboard/GroupUser/DealersListScreen';
+
 // Common Screens
 import ProfileScreen from '../../screens/common/ProfileScreen';
 import SettingsScreen from '../../screens/dashboard/admin/SettingsScreen';
@@ -30,6 +33,9 @@ export default function GroupUserNavigator() {
       <GroupUserStack.Screen name="AdminCreateOrder" component={AdminCreateOrder} />
       <GroupUserStack.Screen name="AdminOrderList" component={AdminOrderList} />
       <GroupUserStack.Screen name="AdminEditOrder" component={AdminEditOrder} />
+
+      {/* Dealer Management */}
+      <GroupUserStack.Screen name="DealersListScreen" component={DealersListScreen} />
 
       {/* Common Screens */}
       <GroupUserStack.Screen name="ProfileScreen" component={ProfileScreen} />

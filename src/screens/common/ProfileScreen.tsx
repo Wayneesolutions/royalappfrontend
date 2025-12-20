@@ -1,5 +1,5 @@
 // src/screens/common/ProfileScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,11 @@ import {
   SafeAreaView,
   Alert,
   StatusBar,
-  Image
+  Image,
+  ActivityIndicator,
+  Platform
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   User,
   Mail,
@@ -30,6 +33,8 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../navigation/types';
+import { apiService } from '../../services/api';
+import { uploadProfileImage, getLocalImagePath } from '../../services/s3Service';
 
 interface UserProfile {
   id: string;
@@ -97,26 +102,74 @@ const getRoleBasedStats = (role: UserRole) => {
 };
 
 const ProfileScreen = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [currentView, setCurrentView] = useState<'main' | 'edit' | 'settings' | 'security'>('main');
+  const [loading, setLoading] = useState(true);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Initialize profile from AuthContext user
   const [profile, setProfile] = useState<UserProfile>({
-    id: user?.id || '1',
+    id: user?.id || user?._id || '1',
     name: user?.name || 'User',
     email: user?.email || '',
-    phone: user?.phone || '+91 98765 43210',
-    role: ROLE_DISPLAY[user?.role || UserRole.ADMIN],
-    company: user?.company || 'Royal Paints Pvt Ltd',
-    address: user?.address || '123 Paint Street, Industrial Area',
-    city: user?.city || 'Ludhiana',
-    state: user?.state || 'Punjab',
-    pincode: user?.pincode || '141001',
-    avatar: user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&size=200&background=2563eb&color=fff`,
-    joinedDate: user?.joinedDate || '15 Jan 2024'
+    phone: user?.mobile || user?.phone || '',
+    role: ROLE_DISPLAY[user?.role as UserRole] || 'User',
+    company: user?.defaultCompany?.companyName || user?.company || '',
+    address: user?.address?.street || user?.address || '',
+    city: user?.address?.city || user?.city || '',
+    state: user?.address?.state || user?.state || '',
+    pincode: user?.address?.pincode || user?.pincode || '',
+    avatar: user?.profileImage || user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&size=200&background=2563eb&color=fff`,
+    joinedDate: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'
   });
 
-  const roleBasedStats = getRoleBasedStats(user?.role || UserRole.ADMIN);
+  // Fetch user profile data
+  useEffect(() => {
+    loadUserProfile();
+  }, []);
+
+  const loadUserProfile = async () => {
+    try {
+      setLoading(true);
+      const res = await apiService.getUserProfile();
+      if (res.success && res.data?.user) {
+        const userData = res.data.user;
+        
+        // Get profile image - check S3 URL first, then local storage, then fallback to avatar
+        let profileImage = userData.profileImage;
+        if (!profileImage && userData._id) {
+          const localPath = await getLocalImagePath(userData._id);
+          if (localPath) {
+            profileImage = localPath;
+          }
+        }
+        if (!profileImage) {
+          profileImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}&size=200&background=2563eb&color=fff`;
+        }
+        
+        setProfile({
+          id: userData._id || userData.id,
+          name: userData.name || 'User',
+          email: userData.email || '',
+          phone: userData.mobile || '',
+          role: ROLE_DISPLAY[userData.role as UserRole] || 'User',
+          company: userData.defaultCompany?.companyName || '',
+          address: userData.address?.street || '',
+          city: userData.address?.city || '',
+          state: userData.address?.state || '',
+          pincode: userData.address?.pincode || '',
+          avatar: profileImage,
+          joinedDate: userData.createdAt ? new Date(userData.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load user profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const roleBasedStats = getRoleBasedStats(user?.role as UserRole || UserRole.ADMIN);
 
   const handleLogout = () => {
     Alert.alert(
@@ -135,29 +188,143 @@ const ProfileScreen = () => {
     );
   };
 
+  const handleImagePick = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need camera roll permissions to upload images');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadAndUpdateImage(imageUri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const uploadAndUpdateImage = async (imageUri: string) => {
+    try {
+      setUploadingImage(true);
+      const userId = user?.id || user?._id || profile.id;
+      
+      // Upload image (to local storage in dev, S3 in production)
+      const imageUrl = await uploadProfileImage(imageUri, userId, 'profiles');
+      
+      // Always update backend with image URL/path
+      // In development, we store the local path; in production, we store the S3 URL
+      const updateRes = await apiService.updateUserProfile({
+        profileImage: imageUrl
+      });
+
+      if (updateRes.success) {
+        // Update local profile state
+        setProfile(prev => ({
+          ...prev,
+          avatar: imageUrl
+        }));
+
+        // Update auth context user
+        if (updateRes.data?.user) {
+          updateUser(updateRes.data.user);
+        }
+
+        Alert.alert('Success', 'Profile image updated successfully!');
+      } else {
+        Alert.alert('Error', updateRes.message || 'Failed to update profile image');
+      }
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      Alert.alert('Error', error.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleSaveProfile = async (updatedProfile: UserProfile) => {
+    try {
+      setLoading(true);
+      
+      const updateData: any = {
+        name: updatedProfile.name,
+        email: updatedProfile.email,
+        mobile: updatedProfile.phone,
+      };
+
+      // Only include profileImage if it changed
+      if (updatedProfile.avatar !== profile.avatar) {
+        updateData.profileImage = updatedProfile.avatar;
+      }
+
+      const res = await apiService.updateUserProfile(updateData);
+
+      if (res.success) {
+        setProfile(updatedProfile);
+        
+        // Update auth context
+        if (res.data?.user) {
+          updateUser(res.data.user);
+        }
+
+        setCurrentView('main');
+        Alert.alert('Success', 'Profile updated successfully!');
+        // Reload profile to get latest data
+        await loadUserProfile();
+      } else {
+        Alert.alert('Error', res.message || 'Failed to update profile');
+      }
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', error.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
-      {currentView === 'main' && (
-        <MainProfileView
-          profile={profile}
-          roleBasedStats={roleBasedStats}
-          onEdit={() => setCurrentView('edit')}
-          onLogout={handleLogout}
-        />
-      )}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563eb" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      ) : (
+        <>
+          {currentView === 'main' && (
+            <MainProfileView
+              profile={profile}
+              roleBasedStats={roleBasedStats}
+              onEdit={() => setCurrentView('edit')}
+              onLogout={handleLogout}
+              onImagePick={handleImagePick}
+              uploadingImage={uploadingImage}
+            />
+          )}
 
-      {currentView === 'edit' && (
-        <EditProfileView
-          profile={profile}
-          onBack={() => setCurrentView('main')}
-          onSave={(updatedProfile:any) => {
-            setProfile(updatedProfile);
-            setCurrentView('main');
-            Alert.alert('Success', 'Profile updated successfully!');
-          }}
-        />
+          {currentView === 'edit' && (
+            <EditProfileView
+              profile={profile}
+              onBack={() => setCurrentView('main')}
+              onSave={handleSaveProfile}
+              onImagePick={handleImagePick}
+              uploadingImage={uploadingImage}
+            />
+          )}
+        </>
       )}
     </SafeAreaView>
   );
@@ -168,12 +335,16 @@ const MainProfileView = ({
   profile,
   roleBasedStats,
   onEdit,
-  onLogout
+  onLogout,
+  onImagePick,
+  uploadingImage
 }: {
   profile: UserProfile;
   roleBasedStats: Array<{ label: string; value: string }>;
   onEdit: () => void;
   onLogout: () => void;
+  onImagePick: () => void;
+  uploadingImage: boolean;
 }) => {
   return (
     <View style={styles.mainContainer}>
@@ -187,9 +358,23 @@ const MainProfileView = ({
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
-            <Image source={{ uri: profile.avatar }} style={styles.avatar} />
-            <TouchableOpacity style={styles.cameraButton}>
-              <Camera size={16} color="#fff" />
+            {uploadingImage ? (
+              <View style={styles.avatarLoading}>
+                <ActivityIndicator size="large" color="#2563eb" />
+              </View>
+            ) : (
+              <Image source={{ uri: profile.avatar }} style={styles.avatar} />
+            )}
+            <TouchableOpacity 
+              style={styles.cameraButton}
+              onPress={onImagePick}
+              disabled={uploadingImage}
+            >
+              {uploadingImage ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Camera size={16} color="#fff" />
+              )}
             </TouchableOpacity>
           </View>
           <Text style={styles.profileName}>{profile.name}</Text>
@@ -265,7 +450,7 @@ const MainProfileView = ({
 // [Keep the same InfoRow, MenuButton, SettingToggle components]
 // [Keep the same styles]
 
-const EditProfileView = ({ profile, onBack, onSave }: any) => {
+const EditProfileView = ({ profile, onBack, onSave, onImagePick, uploadingImage }: any) => {
   const [formData, setFormData] = useState({
     name: profile.name,
     email: profile.email,
@@ -300,13 +485,9 @@ const EditProfileView = ({ profile, onBack, onSave }: any) => {
     setIsSubmitting(true);
     
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
       const updatedProfile = {
         ...profile,
-        ...formData,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&size=200&background=2563eb&color=fff`
+        ...formData
       };
       
       onSave(updatedProfile);
@@ -340,9 +521,23 @@ const EditProfileView = ({ profile, onBack, onSave }: any) => {
         {/* Profile Picture Section */}
         <View style={styles.editProfileCard}>
           <View style={styles.editAvatarContainer}>
-            <Image source={{ uri: profile.avatar }} style={styles.editAvatar} />
-            <TouchableOpacity style={styles.editCameraButton}>
-              <Camera size={16} color="#fff" />
+            {uploadingImage ? (
+              <View style={[styles.editAvatar, styles.avatarLoading]}>
+                <ActivityIndicator size="large" color="#2563eb" />
+              </View>
+            ) : (
+              <Image source={{ uri: profile.avatar }} style={styles.editAvatar} />
+            )}
+            <TouchableOpacity 
+              style={styles.editCameraButton}
+              onPress={onImagePick}
+              disabled={uploadingImage}
+            >
+              {uploadingImage ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Camera size={16} color="#fff" />
+              )}
             </TouchableOpacity>
           </View>
           <Text style={styles.editProfileName}>{profile.name}</Text>
@@ -731,6 +926,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111827',
     marginLeft: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  avatarLoading: {
+    backgroundColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
