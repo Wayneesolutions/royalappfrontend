@@ -477,29 +477,67 @@ const Users = () => {
   // Get group name from user.groups or primaryGroup
   const getGroupName = (user: User): string => {
     try {
-      // First check primaryGroup (most reliable)
-      if (user.primaryGroup && typeof user.primaryGroup === 'object') {
-        return user.primaryGroup.GroupName || 'Unknown Group';
+      // Debug logging for specific users
+      if (user.email === 'junior@gmail.com' || user.email === 'senior@gmail.com') {
+        console.log(`🔍 Frontend - User ${user.email} groups:`, user.groups);
+      }
+      
+      // Then check groups array - show ALL active groups
+      if (user.groups && Array.isArray(user.groups) && user.groups.length > 0) {
+        const groupNames: string[] = [];
+        
+        // Iterate through all groups
+        user.groups.forEach((group, index) => {
+          // Only include active groups
+          if (group.isActive === false) {
+            console.log(`⚠️ Skipping inactive group for ${user.email}:`, group.GroupName || group.groupName);
+            return;
+          }
+          
+          let extractedName = '';
+          
+          // Check if groupId is populated (object)
+          if (group.groupId && typeof group.groupId === 'object') {
+            extractedName = group.groupId.GroupName;
+          }
+          // Check for GroupName (uppercase)
+          else if (group.GroupName) {
+            extractedName = group.GroupName;
+          }
+          // Check for groupName (lowercase) - fallback
+          else if ((group as any).groupName) {
+            extractedName = (group as any).groupName;
+          }
+          
+          // Only add if name exists and not already in list (case-insensitive check)
+          if (extractedName && extractedName.trim()) {
+            const trimmedName = extractedName.trim();
+            const alreadyExists = groupNames.some(n => n.toLowerCase() === trimmedName.toLowerCase());
+            if (!alreadyExists) {
+              groupNames.push(trimmedName);
+              if (user.email === 'junior@gmail.com' || user.email === 'senior@gmail.com') {
+                console.log(`✅ Added group "${trimmedName}" for ${user.email}`);
+              }
+            } else {
+              if (user.email === 'junior@gmail.com' || user.email === 'senior@gmail.com') {
+                console.log(`⚠️ Skipping duplicate group "${trimmedName}" for ${user.email}`);
+              }
+            }
+          }
+        });
+        
+        if (groupNames.length > 0) {
+          const result = groupNames.join(', ');
+          if (user.email === 'junior@gmail.com' || user.email === 'senior@gmail.com') {
+            console.log(`✅ Final groups for ${user.email}: "${result}"`);
+          }
+          return result;
+        }
       }
 
-      // Then check groups array
-      if (user.groups && Array.isArray(user.groups) && user.groups.length > 0) {
-        const firstGroup = user.groups[0];
-        
-        // Check if groupId is populated (object)
-        if (firstGroup.groupId && typeof firstGroup.groupId === 'object') {
-          return firstGroup.groupId.GroupName || 'Unknown Group';
-        }
-        
-        // Check for GroupName (uppercase)
-        if (firstGroup.GroupName) {
-          return firstGroup.GroupName;
-        }
-        
-        // Check for groupName (lowercase) - fallback
-        if ((firstGroup as any).groupName) {
-          return (firstGroup as any).groupName;
-        }
+      // Fallback: check primaryGroup
+      if (user.primaryGroup && typeof user.primaryGroup === 'object') {
+        return user.primaryGroup.GroupName || 'Unknown Group';
       }
 
       // No group assigned

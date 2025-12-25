@@ -110,12 +110,14 @@ const CreateOrder = () => {
       console.log('Products result:', result);
       
       if (result?.success && result.products) {
-        setProducts(result.products || []);
+        // Filter out inactive products
+        const activeProducts = (result.products || []).filter((p: Product) => p.isActive !== false);
+        setProducts(activeProducts);
         // Extract unique categories
-        const categories = result.products?.map((p: Product) => p.category).filter(Boolean) || [];
+        const categories = activeProducts.map((p: Product) => p.category).filter(Boolean) || [];
         const uniqueCategories = [...new Set(categories as string[])];
         setCategories(['all', ...uniqueCategories]);
-        console.log('Products loaded:', result.products?.length || 0);
+        console.log('Products loaded:', activeProducts.length, '(filtered', (result.products?.length || 0) - activeProducts.length, 'inactive)');
       } else {
         console.log('No products data received');
         setProducts([]);

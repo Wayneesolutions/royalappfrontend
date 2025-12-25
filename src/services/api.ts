@@ -295,6 +295,24 @@ class ApiService {
     }
   }
 
+  async superadminDeleteCompany(companyId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.delete(`/superadmin/delete-company/${companyId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async superadminToggleCompanyStatus(companyId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/superadmin/toggle-company-status/${companyId}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   async superadminGetSystemStats(): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/superadmin/system-stats`);
@@ -784,6 +802,18 @@ class ApiService {
   async getUserUsersByRole(role: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/user/role/${role}`);
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getGroupHierarchy(): Promise<ApiResponse<any>> {
+    try {
+      // ✅ Increase timeout to 60 seconds for hierarchy processing (complex recursive queries)
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/user/group-hierarchy', {
+        timeout: 60000 // 60 seconds
+      });
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);

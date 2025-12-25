@@ -166,7 +166,20 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                     <View style={styles.companyDropdown}>
                         <Text style={styles.companyDropdownTitle}>Switch Company</Text>
                         <View style={styles.companyDivider} />
-                        {availableCompanies.map((companyData: any, index: number) => {
+                        {availableCompanies
+                            .filter((company: any) => {
+                                // Filter out inactive company assignments
+                                if (company.isActive === false) return false;
+                                
+                                // Filter out companies where companyId doesn't exist (deleted company)
+                                if (!company.companyId) return false;
+                                
+                                // Filter out companies where the company itself is inactive
+                                if (company.companyId?.isActive === false) return false;
+                                
+                                return true;
+                            })
+                            .map((companyData: any, index: number) => {
                             // Handle both populated objects and raw IDs
                             const company = companyData.companyId;
                             const companyId = company?._id || company?.id || company || companyData.companyId;

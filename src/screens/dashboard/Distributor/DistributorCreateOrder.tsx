@@ -27,6 +27,11 @@ interface Dealer {
     pincode?: string;
     country?: string;
   };
+  groupInfo?: {
+    groupGUID?: string;
+    groupName?: string;
+    groupParentUser?: string;
+  } | null;
 }
 
 interface SubDealer {
@@ -497,6 +502,11 @@ const DistributorCreateOrder = () => {
       onPress={() => handleDealerSelect(item)}
     >
       <Text style={styles.dropdownItemText}>{item.name}</Text>
+      {item.groupInfo?.groupName ? (
+        <Text style={[styles.dropdownItemMeta, { color: '#10B981', fontWeight: '600', marginTop: 2 }]}>
+          📁 Group: {item.groupInfo.groupName}
+        </Text>
+      ) : null}
       <Text style={styles.dropdownItemSubtext}>{item.mobile}</Text>
     </TouchableOpacity>
   );
@@ -1160,6 +1170,11 @@ const styles = StyleSheet.create({
   dropdownItemSubtext: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  dropdownItemMeta: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   productItemContainer: {
     flexDirection: 'row',

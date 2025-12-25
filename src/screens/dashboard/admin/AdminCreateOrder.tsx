@@ -529,9 +529,11 @@ const AdminCreateOrder = () => {
         }
       }
 
+      // Filter out inactive products
       const normalizedProducts = productList.map(normalizeProduct);
-      setProducts(normalizedProducts);
-      console.log('✅ Products loaded:', normalizedProducts.length);
+      const activeProducts = normalizedProducts.filter(product => product.isActive !== false);
+      setProducts(activeProducts);
+      console.log('✅ Products loaded:', activeProducts.length, '(filtered', normalizedProducts.length - activeProducts.length, 'inactive)');
     } catch (error) {
       console.error('❌ Error fetching initial data:', error);
       Alert.alert('Error', 'Failed to load data: ' + (error instanceof Error ? error.message : 'Unknown error'));

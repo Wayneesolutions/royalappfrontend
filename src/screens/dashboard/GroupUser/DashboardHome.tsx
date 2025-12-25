@@ -9,6 +9,7 @@ import {
   Alert,
   RefreshControl,
   FlatList,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
@@ -16,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../navigation/types';
 import apiService from '../../../services/api';
+import GroupHierarchy from '../../../components/GroupHierarchy';
 
 interface Dealer {
   _id: string;
@@ -30,12 +32,19 @@ interface Dealer {
 
 
 const DashboardHome = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, switchCompany } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [loadingDealers, setLoadingDealers] = useState(false);
+  const [showHierarchy, setShowHierarchy] = useState(false);
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [isSwitchingCompany, setIsSwitchingCompany] = useState(false);
+
+  // Get user details from auth context
+  const currentCompany = user?.defaultCompany;
+  const availableCompanies = user?.companies || [];
 
   useEffect(() => {
     fetchAllData();
@@ -45,17 +54,57 @@ const DashboardHome = () => {
     await fetchDealers();
   };
 
+  const handleCompanySwitch = async (companyId: string) => {
+    console.log('handleCompanySwitch called with companyId:', companyId);
+    console.log('Current company ID:', currentCompany?._id);
+    
+    if (!companyId) {
+      console.error('Company ID is missing!');
+      Alert.alert('Error', 'Company ID is missing. Please try again.');
+      return;
+    }
+
+    if (companyId === currentCompany?._id) {
+      setShowCompanyDropdown(false);
+      return;
+    }
+
+    setIsSwitchingCompany(true);
+    try {
+      console.log('Calling switchCompany with ID:', companyId);
+      await switchCompany(companyId);
+      setShowCompanyDropdown(false);
+      Alert.alert('Success', 'Company switched successfully!');
+      // Refresh data after switching
+      await fetchAllData();
+    } catch (error) {
+      console.error('Error switching company:', error);
+      Alert.alert('Error', 'Failed to switch company. Please try again.');
+    } finally {
+      setIsSwitchingCompany(false);
+    }
+  };
+
   const fetchDealers = async () => {
-    if (!user?.defaultCompany?._id) return;
+    if (!user?.defaultCompany?._id) {
+      console.log('⚠️ No default company, skipping dealer fetch');
+      return;
+    }
     
     try {
       setLoadingDealers(true);
+      console.log('🔄 Fetching dealers for company:', user.defaultCompany._id);
       const result = await apiService.adminGetAllDealers();
       if (result?.success && result?.data?.dealers) {
+        console.log('✅ Dealers fetched:', result.data.dealers.length);
         setDealers(result.data.dealers);
+      } else {
+        console.log('⚠️ No dealers found or fetch failed');
+        setDealers([]);
       }
     } catch (error) {
-      console.error('Error fetching dealers:', error);
+      console.error('❌ Error fetching dealers:', error);
+      setDealers([]);
     } finally {
       setLoadingDealers(false);
     }
@@ -105,16 +154,118 @@ const DashboardHome = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Dashboard</Text>
-          <Text style={styles.headerSubtitle}>
-            {user?.name || 'User'} • {user?.defaultCompany?.companyName || 'Company'}
-          </Text>
+          <TouchableOpacity 
+            style={styles.companyButton}
+            onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
+            disabled={availableCompanies.length <= 1}
+          >
+            <Text style={styles.companyButtonText}>
+              {user?.defaultCompany?.companyName || 'Company'}
+            </Text>
+            {availableCompanies.length > 1 && (
+              <Ionicons 
+                name={showCompanyDropdown ? "chevron-up" : "chevron-down"} 
+                size={16} 
+                color="#E0E7FF" 
+              />
+            )}
+          </TouchableOpacity>
+          <Text style={styles.headerSubtitle}>{user?.name || 'User'}</Text>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
           <Ionicons name="log-out-outline" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* Company Dropdown Modal */}
+      {showCompanyDropdown && availableCompanies.length > 1 && (
+        <Modal
+          visible={showCompanyDropdown}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowCompanyDropdown(false)}
+        >
+          <TouchableOpacity 
+            style={styles.companyModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowCompanyDropdown(false)}
+          >
+            <View style={styles.companyDropdownContainer}>
+              <View style={styles.companyDropdownHeader}>
+                <Text style={styles.companyDropdownTitle}>Switch Company</Text>
+                <TouchableOpacity onPress={() => setShowCompanyDropdown(false)}>
+                  <Ionicons name="close" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.companyList}>
+                {availableCompanies
+                  .filter((company: any) => {
+                    // Filter out inactive company assignments
+                    if (company.isActive === false) return false;
+                    
+                    // Filter out companies where companyId doesn't exist (deleted company)
+                    if (!company.companyId) return false;
+                    
+                    // Filter out companies where the company itself is inactive
+                    if (company.companyId?.isActive === false) return false;
+                    
+                    return true;
+                  })
+                  .map((company: any) => {
+                    const companyId = company.companyId?._id || company.companyId?.id || company.companyId;
+                    const companyName = company.companyId?.companyName || company.companyName || 'Unknown';
+                    const companyCode = company.companyId?.companyCode || company.companyCode || '';
+                    const isActive = companyId === currentCompany?._id;
+
+                    return (
+                      <TouchableOpacity
+                        key={companyId}
+                        style={[
+                          styles.companyItem,
+                          isActive && styles.companyItemActive
+                        ]}
+                        onPress={() => handleCompanySwitch(companyId)}
+                        disabled={isSwitchingCompany || isActive}
+                      >
+                        <View style={styles.companyItemLeft}>
+                          <View style={[
+                            styles.companyItemIcon,
+                            isActive && styles.companyItemIconActive
+                          ]}>
+                            <Ionicons 
+                              name="business" 
+                              size={20} 
+                              color={isActive ? '#3B82F6' : '#6B7280'} 
+                            />
+                          </View>
+                          <View style={styles.companyItemInfo}>
+                            <Text style={[
+                              styles.companyItemName,
+                              isActive && styles.companyItemNameActive
+                            ]}>
+                              {companyName}
+                            </Text>
+                            {companyCode && (
+                              <Text style={styles.companyItemCode}>{companyCode}</Text>
+                            )}
+                          </View>
+                        </View>
+                        {isActive && (
+                          <Ionicons name="checkmark-circle" size={24} color="#3B82F6" />
+                        )}
+                        {isSwitchingCompany && !isActive && (
+                          <ActivityIndicator size="small" color="#3B82F6" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
 
       <ScrollView
         style={styles.content}
@@ -154,6 +305,13 @@ const DashboardHome = () => {
           >
             <Ionicons name="storefront" size={32} color="#F59E0B" />
             <Text style={styles.actionText}>My Dealers</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => setShowHierarchy(true)}
+          >
+            <Ionicons name="git-network-outline" size={32} color="#8B5CF6" />
+            <Text style={styles.actionText}>Group Hierarchy</Text>
           </TouchableOpacity>
         </View>
 
@@ -211,6 +369,16 @@ const DashboardHome = () => {
         </View>
 
       </ScrollView>
+
+      {/* Group Hierarchy Modal */}
+      <Modal
+        visible={showHierarchy}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowHierarchy(false)}
+      >
+        <GroupHierarchy onClose={() => setShowHierarchy(false)} />
+      </Modal>
     </View>
   );
 };
@@ -282,11 +450,12 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     marginBottom: 16,
   },
   actionCard: {
-    flex: 1,
+    width: '48%',
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 20,
@@ -298,10 +467,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#1F2937',
     marginTop: 8,
+    textAlign: 'center',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -441,6 +611,135 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  hierarchyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  hierarchyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  hierarchyCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginLeft: 12,
+  },
+  hierarchyCardSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  hierarchyCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  hierarchyCardLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+    marginRight: 4,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  companyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 6,
+  },
+  companyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#E0E7FF',
+  },
+  companyModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    paddingTop: 120,
+  },
+  companyDropdownContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    borderRadius: 12,
+    maxHeight: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  companyDropdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  companyDropdownTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  companyList: {
+    maxHeight: 320,
+  },
+  companyItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  companyItemActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  companyItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  companyItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  companyItemIconActive: {
+    backgroundColor: '#DBEAFE',
+  },
+  companyItemInfo: {
+    flex: 1,
+  },
+  companyItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  companyItemNameActive: {
+    color: '#3B82F6',
+  },
+  companyItemCode: {
+    fontSize: 13,
+    color: '#6B7280',
   },
 });
 

@@ -32,6 +32,16 @@ interface SubDealer {
   SDEmail?: string;
   SDGSTNType?: string;
   SDGSTNNumber?: string;
+  dealerId?: string | {
+    _id: string;
+    LedgerGUID: string;
+    LedgerName: string;
+  };
+  dealer?: {
+    _id: string;
+    LedgerGUID: string;
+    LedgerName: string;
+  };
   groupId?: string | {
     _id: string;
     GroupGUID: string;
@@ -128,15 +138,12 @@ const SubDealersListScreen = () => {
   );
 
   const renderSubDealerCard = ({ item }: { item: SubDealer }) => {
-    // Safely get group name, handling null/undefined cases
-    let groupName = 'No Group';
-    if (item.group?.GroupName) {
-      groupName = item.group.GroupName;
-    } else if (item.groupId && typeof item.groupId === 'object' && item.groupId.GroupName) {
-      groupName = item.groupId.GroupName;
-    } else if (item.groupId && typeof item.groupId === 'string' && item.groupId.trim() !== '') {
-      // If groupId is a string but group is not populated, show "No Group"
-      groupName = 'No Group';
+    // Safely get dealer name, handling null/undefined cases
+    let dealerName = 'No Dealer';
+    if (item.dealer?.LedgerName) {
+      dealerName = item.dealer.LedgerName;
+    } else if (item.dealerId && typeof item.dealerId === 'object' && item.dealerId.LedgerName) {
+      dealerName = item.dealerId.LedgerName;
     }
     
     return (
@@ -183,10 +190,12 @@ const SubDealersListScreen = () => {
             </View>
           )}
 
-          <View style={styles.detailRow}>
-            <Ionicons name="folder-outline" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>Group: {groupName}</Text>
-          </View>
+          {(item.dealer || item.dealerId) && (
+            <View style={styles.detailRow}>
+              <Ionicons name="business-outline" size={16} color="#6B7280" />
+              <Text style={styles.detailText}>Dealer: {dealerName}</Text>
+            </View>
+          )}
 
           {item.SDState && (
             <View style={styles.detailRow}>

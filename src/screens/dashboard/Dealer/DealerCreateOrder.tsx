@@ -36,6 +36,11 @@ interface Dealer {
     pincode?: string;
     country?: string;
   };
+  groupInfo?: {
+    groupGUID?: string;
+    groupName?: string;
+    groupParentUser?: string;
+  } | null;
 }
 
 interface SubDealer {
@@ -1148,6 +1153,11 @@ const DealerCreateOrder = () => {
       onPress={() => handleDealerSelect(item)}
     >
       <Text style={styles.dropdownItemText}>{item.name}</Text>
+      {item.groupInfo?.groupName ? (
+        <Text style={[styles.dropdownItemMeta, { color: '#10B981', fontWeight: '600', marginTop: 2 }]}>
+          📁 Group: {item.groupInfo.groupName}
+        </Text>
+      ) : null}
       <Text style={styles.dropdownItemSubtext}>{item.mobile}</Text>
       {item.email ? (
         <Text style={styles.dropdownItemMeta}>{item.email}</Text>

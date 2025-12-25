@@ -57,6 +57,7 @@ const ProductCatalog = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'category' | 'createdAt'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [activeTab, setActiveTab] = useState<'active' | 'inactive'>('active'); // New: Tab for active/inactive
   
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -360,6 +361,43 @@ const ProductCatalog = () => {
     );
   };
 
+  // Toggle product active status
+  const toggleProductStatus = async (product: Product) => {
+    const newStatus = !product.isActive;
+    const statusText = newStatus ? 'activate' : 'deactivate';
+    
+    Alert.alert(
+      `${newStatus ? 'Activate' : 'Deactivate'} Product`,
+      `Are you sure you want to ${statusText} "${product.productName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: newStatus ? 'Activate' : 'Deactivate',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const result = await updateProduct(product._id, { 
+                isActive: newStatus 
+              });
+              
+              if (result?.success) {
+                Alert.alert('Success', `Product ${statusText}d successfully!`);
+                fetchProducts();
+              } else {
+                Alert.alert('Error', result?.message || `Failed to ${statusText} product`);
+              }
+            } catch (error) {
+              console.error(`Error ${statusText}ing product:`, error);
+              Alert.alert('Error', `Failed to ${statusText} product`);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // Reset form
   const resetForm = () => {
     setFormData({
@@ -448,6 +486,16 @@ const ProductCatalog = () => {
       </TouchableOpacity>
       
       <View style={styles.productActions}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => toggleProductStatus(item)}
+        >
+          <Ionicons 
+            name={item.isActive ? "eye-off-outline" : "eye-outline"} 
+            size={20} 
+            color={item.isActive ? "#F59E0B" : "#10B981"} 
+          />
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => openEditModal(item)}
@@ -596,6 +644,26 @@ const ProductCatalog = () => {
         </View>
       </View>
 
+      {/* Active/Inactive Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'active' && styles.activeTab]}
+          onPress={() => setActiveTab('active')}
+        >
+          <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>
+            Active ({products.filter(p => p.isActive).length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'inactive' && styles.activeTab]}
+          onPress={() => setActiveTab('inactive')}
+        >
+          <Text style={[styles.tabText, activeTab === 'inactive' && styles.activeTabText]}>
+            Inactive ({products.filter(p => !p.isActive).length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Products List */}
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -612,14 +680,14 @@ const ProductCatalog = () => {
         </View>
       ) : (
         <FlatList
-          data={products}
+          data={products.filter(p => activeTab === 'active' ? p.isActive : !p.isActive)}
           renderItem={renderProductItem}
           keyExtractor={(item) => item._id}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={products.length === 0 ? styles.emptyListContainer : styles.listContainer}
+          contentContainerStyle={products.filter(p => activeTab === 'active' ? p.isActive : !p.isActive).length === 0 ? styles.emptyListContainer : styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -628,7 +696,7 @@ const ProductCatalog = () => {
       {products.length > 0 && (
         <View style={styles.statsContainer}>
           <Text style={styles.statsText}>
-            {products.length} product{products.length !== 1 ? 's' : ''} found
+            {products.filter(p => activeTab === 'active' ? p.isActive : !p.isActive).length} {activeTab} product{products.filter(p => activeTab === 'active' ? p.isActive : !p.isActive).length !== 1 ? 's' : ''} found
           </Text>
         </View>
       )}
@@ -1106,6 +1174,32 @@ const styles = StyleSheet.create({
   sortOrderButton: {
     padding: 4,
     marginLeft: 'auto',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#8B5CF6',
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  activeTabText: {
+    color: '#8B5CF6',
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

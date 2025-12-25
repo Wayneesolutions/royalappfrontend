@@ -16,12 +16,18 @@ import { Ionicons } from '@expo/vector-icons';
 import apiService from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 
-interface Group {
+interface GroupUser {
   _id: string;
-  GroupGUID: string;
-  GroupName: string;
-  GroupParent: string | null;
-  cmpcode: string;
+  name: string;
+  email?: string;
+  mobile?: string;
+  role?: string;
+  groups?: Array<{
+    groupId?: string;
+    groupGUID?: string;
+    groupName?: string;
+    isActive?: boolean;
+  }>;
 }
 
 interface CreateDealerModalProps {
@@ -70,10 +76,10 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
   const isEditMode = !!dealer;
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [showGroupSelector, setShowGroupSelector] = useState(false);
-  const [groupSearchQuery, setGroupSearchQuery] = useState('');
+  const [loadingGroupUsers, setLoadingGroupUsers] = useState(false);
+  const [groupUsers, setGroupUsers] = useState<GroupUser[]>([]);
+  const [showGroupUserSelector, setShowGroupUserSelector] = useState(false);
+  const [groupUserSearchQuery, setGroupUserSearchQuery] = useState('');
   const [showOpeningDatePicker, setShowOpeningDatePicker] = useState(false);
   const [showJoinDatePicker, setShowJoinDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -101,32 +107,20 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
     other6: '',
     other7: '',
     other8: '',
-    groupId: '',
+    groupUserId: '',
   });
 
   useEffect(() => {
     if (visible) {
       const isGroupUser = user?.role === 'groupuser' || !user?.role || user?.role === '';
       
-      // For group users, don't fetch groups - they don't need to select
+      // For admin users, fetch group users to assign dealer to
       if (!isGroupUser) {
-        fetchGroups();
+        fetchGroupUsers();
       }
       
       if (dealer) {
         // Populate form with dealer data for edit
-        // Safely extract groupId, handling null/undefined cases
-        let groupId = '';
-        if (dealer.groupId) {
-          if (typeof dealer.groupId === 'object' && dealer.groupId !== null && dealer.groupId._id) {
-            groupId = dealer.groupId._id;
-          } else if (typeof dealer.groupId === 'string') {
-            groupId = dealer.groupId;
-          }
-        } else if (dealer.group && dealer.group._id) {
-          groupId = dealer.group._id;
-        }
-        
         setFormData({
           LedgerGUID: dealer.LedgerGUID || '',
           LedgerName: dealer.LedgerName || '',
@@ -150,26 +144,10 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
           other6: dealer.other6 || '',
           other7: dealer.other7 || '',
           other8: dealer.other8 || '',
-          groupId: groupId,
+          groupUserId: '', // Reset for admin - will be selected from group users
         });
       } else {
         // Reset form for create
-        // For group users, auto-assign their first active group
-        let autoGroupId = '';
-        if (isGroupUser && user?.groups && Array.isArray(user.groups) && user.groups.length > 0) {
-          // Find first active group
-          const activeGroup = user.groups.find((g: any) => 
-            (g.isActive === true || g.isActive === undefined) && g.groupId
-          );
-          if (activeGroup) {
-            if (typeof activeGroup.groupId === 'object' && activeGroup.groupId !== null && activeGroup.groupId._id) {
-              autoGroupId = activeGroup.groupId._id;
-            } else if (typeof activeGroup.groupId === 'string') {
-              autoGroupId = activeGroup.groupId;
-            }
-          }
-        }
-        
         setFormData({
           LedgerGUID: '',
           LedgerName: '',
@@ -193,7 +171,7 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
           other6: '',
           other7: '',
           other8: '',
-          groupId: autoGroupId, // Auto-assigned for group users, empty for admin
+          groupUserId: '', // Empty for both admin and group users
         });
       }
     }
@@ -218,26 +196,28 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
     }
   };
 
-  const fetchGroups = async () => {
+  const fetchGroupUsers = async () => {
     try {
-      setLoadingGroups(true);
-      const result = await apiService.adminGetAllGroups({ includeInactive: false });
-      if (result?.success && result.data?.groups) {
-        setGroups(result.data.groups);
+      setLoadingGroupUsers(true);
+      // Fetch users with role 'groupuser' or users without roles (which are group users)
+      const result = await apiService.adminGetUsersByRole('groupuser');
+      if (result?.success && result.data?.users) {
+        setGroupUsers(result.data.users);
       }
     } catch (error) {
-      console.error('Failed to fetch groups:', error);
+      console.error('Failed to fetch group users:', error);
     } finally {
-      setLoadingGroups(false);
+      setLoadingGroupUsers(false);
     }
   };
 
-  const filteredGroups = groups.filter(group =>
-    group.GroupName.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
-    group.GroupGUID.toLowerCase().includes(groupSearchQuery.toLowerCase())
+  const filteredGroupUsers = groupUsers.filter(user =>
+    user.name.toLowerCase().includes(groupUserSearchQuery.toLowerCase()) ||
+    user.email?.toLowerCase().includes(groupUserSearchQuery.toLowerCase()) ||
+    user.mobile?.toLowerCase().includes(groupUserSearchQuery.toLowerCase())
   );
 
-  const selectedGroup = groups.find(g => g._id === formData.groupId);
+  const selectedGroupUser = groupUsers.find(u => u._id === formData.groupUserId);
 
   const handleCreate = async () => {
     if (!formData.LedgerName.trim()) {
@@ -245,11 +225,11 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
       return;
     }
 
-    // Group is optional for group users (backend will auto-assign to their first active group)
-    // For admin users, group is required in create mode
+    // Group user selection is optional for group users (backend will auto-assign)
+    // For admin users, group user selection is required in create mode
     const isGroupUser = user?.role === 'groupuser' || !user?.role || user?.role === '';
-    if (!isEditMode && !isGroupUser && !formData.groupId) {
-      Alert.alert('Validation Error', 'Please select a group');
+    if (!isEditMode && !isGroupUser && !formData.groupUserId) {
+      Alert.alert('Validation Error', 'Please select a group user to assign this dealer to');
       return;
     }
 
@@ -279,7 +259,7 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
         other6: formData.other6 || undefined,
         other7: formData.other7 || undefined,
         other8: formData.other8 || undefined,
-        groupId: formData.groupId && formData.groupId.trim() !== '' ? formData.groupId : null,
+        groupUserId: formData.groupUserId && formData.groupUserId.trim() !== '' ? formData.groupUserId : null,
       };
 
       let result;
@@ -355,48 +335,51 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
               />
             </View>
 
-            {/* Group Selection - Hidden for group users, shown for admin */}
+            {/* Group User Selection - Hidden for group users, shown for admin */}
             {(() => {
               const isGroupUser = user?.role === 'groupuser' || !user?.role || user?.role === '';
               if (isGroupUser) {
-                // For group users, show auto-assigned group info (read-only)
-                const userGroup = user?.groups?.find((g: any) => 
-                  (g.isActive === true || g.isActive === undefined) && g.groupId
-                );
-                const groupName = userGroup 
-                  ? (typeof userGroup.groupId === 'object' && userGroup.groupId !== null 
-                      ? userGroup.groupId.GroupName 
-                      : userGroup.GroupName || 'Your Group')
-                  : 'Your Group';
-                
+                // For group users, show auto-assigned info (read-only)
                 return (
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Group (Auto-assigned)</Text>
+                    <Text style={styles.label}>Assignment (Auto-assigned)</Text>
                     <View style={styles.autoAssignedGroup}>
                       <Ionicons name="checkmark-circle" size={20} color="#10B981" />
                       <Text style={styles.autoAssignedGroupText}>
-                        {groupName}
+                        Assigned to you
                       </Text>
                     </View>
                     <Text style={styles.helperText}>
-                      The dealer will be automatically assigned to your group.
+                      The dealer will be automatically assigned to you and your group.
                     </Text>
                   </View>
                 );
               } else {
-                // For admin users, show group selector
+                // For admin users, show group user selector
                 return (
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Group *</Text>
+                    <Text style={styles.label}>Assign to Group User *</Text>
                     <TouchableOpacity
                       style={styles.groupSelector}
-                      onPress={() => setShowGroupSelector(true)}
+                      onPress={() => setShowGroupUserSelector(true)}
                     >
-                      <Text style={selectedGroup ? styles.groupSelectorText : styles.groupSelectorPlaceholder}>
-                        {selectedGroup ? selectedGroup.GroupName : 'Select a group'}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        {selectedGroupUser ? (
+                          <>
+                            <Text style={styles.groupSelectorText}>{selectedGroupUser.name}</Text>
+                            {selectedGroupUser.email && (
+                              <Text style={styles.groupUserSubtext}>{selectedGroupUser.email}</Text>
+                            )}
+                          </>
+                        ) : (
+                          <Text style={styles.groupSelectorPlaceholder}>Select a group user</Text>
+                        )}
+                      </View>
                       <Ionicons name="chevron-down" size={20} color="#6B7280" />
                     </TouchableOpacity>
+                    <Text style={styles.helperText}>
+                      The dealer will be assigned to the selected group user and their group.
+                    </Text>
                   </View>
                 );
               }
@@ -641,62 +624,82 @@ const CreateDealerModal: React.FC<CreateDealerModalProps> = ({ visible, onClose,
         </View>
       </View>
 
-      {/* Group Selector Modal */}
+      {/* Group User Selector Modal */}
       <Modal
-        visible={showGroupSelector}
+        visible={showGroupUserSelector}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowGroupSelector(false)}
+        onRequestClose={() => setShowGroupUserSelector(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Group</Text>
-              <TouchableOpacity onPress={() => setShowGroupSelector(false)}>
+              <Text style={styles.modalTitle}>Select Group User</Text>
+              <TouchableOpacity onPress={() => setShowGroupUserSelector(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
             <TextInput
               style={styles.searchInput}
-              placeholder="Search groups..."
-              value={groupSearchQuery}
-              onChangeText={setGroupSearchQuery}
+              placeholder="Search group users..."
+              value={groupUserSearchQuery}
+              onChangeText={setGroupUserSearchQuery}
               placeholderTextColor="#9CA3AF"
             />
 
-            {loadingGroups ? (
+            {loadingGroupUsers ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#0493D2" />
               </View>
             ) : (
               <FlatList
-                data={filteredGroups}
+                data={filteredGroupUsers}
                 keyExtractor={(item) => item._id}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[
                       styles.groupItem,
-                      formData.groupId === item._id && styles.selectedGroupItem
+                      formData.groupUserId === item._id && styles.selectedGroupItem
                     ]}
                     onPress={() => {
-                      setFormData({ ...formData, groupId: item._id });
-                      setShowGroupSelector(false);
-                      setGroupSearchQuery('');
+                      setFormData({ ...formData, groupUserId: item._id });
+                      setShowGroupUserSelector(false);
+                      setGroupUserSearchQuery('');
                     }}
                   >
                     <View style={styles.groupItemContent}>
-                      <Text style={styles.groupItemName}>{item.GroupName}</Text>
-                      <Text style={styles.groupItemGUID}>{item.GroupGUID}</Text>
+                      <Text style={styles.groupItemName}>{item.name}</Text>
+                      {item.email && (
+                        <Text style={styles.groupItemGUID}>{item.email}</Text>
+                      )}
+                      {item.mobile && (
+                        <Text style={styles.groupItemGUID}>📱 {item.mobile}</Text>
+                      )}
+                      {item.groups && item.groups.length > 0 && (
+                        <Text style={styles.groupItemGroup}>
+                          Groups: {item.groups
+                            .filter(g => g.isActive !== false) // Only show active groups
+                            .map(g => {
+                              // Check both populated groupId.GroupName and direct groupName field
+                              if (g.groupId && typeof g.groupId === 'object' && g.groupId.GroupName) {
+                                return g.groupId.GroupName;
+                              }
+                              return g.groupName;
+                            })
+                            .filter(Boolean)
+                            .join(', ') || 'N/A'}
+                        </Text>
+                      )}
                     </View>
-                    {formData.groupId === item._id && (
+                    {formData.groupUserId === item._id && (
                       <Ionicons name="checkmark-circle" size={24} color="#0493D2" />
                     )}
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No groups found</Text>
+                    <Text style={styles.emptyText}>No group users found</Text>
                   </View>
                 }
               />
@@ -1095,6 +1098,17 @@ const styles = StyleSheet.create({
   groupItemGUID: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  groupItemGroup: {
+    fontSize: 11,
+    color: '#3B82F6',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  groupUserSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
   },
   emptyContainer: {
     padding: 40,

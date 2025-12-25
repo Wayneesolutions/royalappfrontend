@@ -98,12 +98,16 @@ const CompaniesListScreen = ({
   companies, 
   onViewDetails, 
   onCreateNew,
-  onBack
+  onBack,
+  onDelete,
+  onToggleStatus
 }: { 
   companies: Company[]; 
   onViewDetails: (company: Company) => void;
   onCreateNew: () => void;
   onBack: () => void;
+  onDelete: (id: string) => void;
+  onToggleStatus: (id: string) => void;
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
@@ -199,67 +203,74 @@ const CompaniesListScreen = ({
           />
         </View>
         <View style={styles.filterContainer}>
-          {(['all', 'active', 'inactive'] as const).map(status => (
-            <TouchableOpacity
-              key={status}
-              onPress={() => setFilterStatus(status)}
-              style={[
-                styles.filterButton,
-                filterStatus === status && styles.filterButtonActive
-              ]}
-            >
-              <Text style={[
-                styles.filterButtonText,
-                filterStatus === status && styles.filterButtonTextActive
-              ]}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {(['all', 'inactive'] as const).map(status => {
+            const label = status === 'all' ? 'Active' : 'Deleted';
+            return (
+              <TouchableOpacity
+                key={status}
+                onPress={() => setFilterStatus(status)}
+                style={[
+                  styles.filterButton,
+                  filterStatus === status && styles.filterButtonActive
+                ]}
+              >
+                <Text style={[
+                  styles.filterButtonText,
+                  filterStatus === status && styles.filterButtonTextActive
+                ]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
       {/* Companies List */}
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         {filteredCompanies.map(company => (
-          <TouchableOpacity
+          <View
             key={company.id}
             style={styles.companyCard}
-            onPress={() => onViewDetails(company)}
           >
-            {/* Header */}
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <View style={styles.companyIcon}>
-                  <Building2 size={28} color="#2563eb" />
+            <TouchableOpacity
+              style={styles.companyCardContent}
+              onPress={() => onViewDetails(company)}
+              activeOpacity={0.7}
+            >
+              {/* Header */}
+              <View style={styles.cardHeader}>
+                <View style={styles.cardHeaderLeft}>
+                  <View style={styles.companyIcon}>
+                    <Building2 size={28} color="#2563eb" />
+                  </View>
+                  <View>
+                    <Text style={styles.companyName}>{company.name}</Text>
+                    <Text style={styles.companyCode}>Code: {company.code}</Text>
+                    <Text style={styles.companyGuid}>
+                      GUID: {company.guid ? company.guid : 'Not assigned'}
+                    </Text>
+                    <Text style={styles.companyGuid}>
+                      Tally Serial: {company.tallySerialId ? company.tallySerialId : 'Not assigned'}
+                    </Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.companyName}>{company.name}</Text>
-                  <Text style={styles.companyCode}>Code: {company.code}</Text>
-                  <Text style={styles.companyGuid}>
-                    GUID: {company.guid ? company.guid : 'Not assigned'}
-                  </Text>
-                  <Text style={styles.companyGuid}>
-                    Tally Serial: {company.tallySerialId ? company.tallySerialId : 'Not assigned'}
-                  </Text>
-                </View>
-              </View>
-              <View style={[
-                styles.statusBadge,
-                company.status === 'active' ? styles.statusActive : styles.statusInactive
-              ]}>
                 <View style={[
-                  styles.statusDot,
-                  company.status === 'active' ? styles.statusDotActive : styles.statusDotInactive
-                ]} />
-                <Text style={[
-                  styles.statusText,
-                  company.status === 'active' ? styles.statusTextActive : styles.statusTextInactive
+                  styles.statusBadge,
+                  company.status === 'active' ? styles.statusActive : styles.statusInactive
                 ]}>
-                  {company.status}
-                </Text>
+                  <View style={[
+                    styles.statusDot,
+                    company.status === 'active' ? styles.statusDotActive : styles.statusDotInactive
+                  ]} />
+                  <Text style={[
+                    styles.statusText,
+                    company.status === 'active' ? styles.statusTextActive : styles.statusTextInactive
+                  ]}>
+                    {company.status}
+                  </Text>
+                </View>
               </View>
-            </View>
 
             {/* Admin Info */}
             <View style={styles.adminInfo}>
@@ -275,32 +286,62 @@ const CompaniesListScreen = ({
             </View>
 
 
-            {/* Enhanced Footer */}
-            <View style={styles.cardFooter}>
-              <View style={styles.footerRow}>
-                <View style={styles.footerItem}>
-                  <Calendar size={14} color="#9ca3af" />
-                  <Text style={styles.footerTextGray}>Created: {company.createdAt}</Text>
+              {/* Enhanced Footer */}
+              <View style={styles.cardFooter}>
+                <View style={styles.footerRow}>
+                  <View style={styles.footerItem}>
+                    <Calendar size={14} color="#9ca3af" />
+                    <Text style={styles.footerTextGray}>Created: {company.createdAt}</Text>
+                  </View>
+                  <View style={styles.footerItem}>
+                    <Activity size={14} color="#9ca3af" />
+                    <Text style={styles.footerTextGray}>
+                      Status: {company.status}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.footerItem}>
-                  <Activity size={14} color="#9ca3af" />
-                  <Text style={styles.footerTextGray}>
-                    Status: {company.status}
-                  </Text>
+                <View style={styles.footerRow}>
+                  <View style={styles.footerItem}>
+                    <MapPin size={14} color="#9ca3af" />
+                    <Text style={styles.footerTextGray}>{company.city}, {company.state}</Text>
+                  </View>
+                  <View style={styles.footerItem}>
+                    <Building2 size={14} color="#9ca3af" />
+                    <Text style={styles.footerTextGray}>ID: {company.id}</Text>
+                  </View>
                 </View>
               </View>
-              <View style={styles.footerRow}>
-                <View style={styles.footerItem}>
-                  <MapPin size={14} color="#9ca3af" />
-                  <Text style={styles.footerTextGray}>{company.city}, {company.state}</Text>
-                </View>
-                <View style={styles.footerItem}>
-                  <Building2 size={14} color="#9ca3af" />
-                  <Text style={styles.footerTextGray}>ID: {company.id}</Text>
-                </View>
-              </View>
+            </TouchableOpacity>
+
+            {/* Action Buttons */}
+            <View style={styles.cardActionsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  company.status === 'active' ? styles.deactivateButton : styles.activateButton
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onToggleStatus(company.id);
+                }}
+              >
+                <Zap size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>
+                  {company.status === 'active' ? 'Deactivate' : 'Activate'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButtonList]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onDelete(company.id);
+                }}
+              >
+                <Trash2 size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Delete</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         ))}
 
         {filteredCompanies.length === 0 && (
@@ -1325,6 +1366,47 @@ const CompanyManagementSystem = () => {
     setSelectedCompany(null);
   };
 
+  const handleToggleStatus = async (id: string) => {
+    const company = companies.find(c => c.id === id);
+    if (!company) return;
+
+    const action = company.status === 'active' ? 'deactivate' : 'activate';
+    
+    Alert.alert(
+      `${action.charAt(0).toUpperCase() + action.slice(1)} Company`,
+      `Are you sure you want to ${action} ${company.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: action.charAt(0).toUpperCase() + action.slice(1), 
+          style: company.status === 'active' ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const result = await apiService.superadminToggleCompanyStatus(id);
+              
+              if (result?.success) {
+                // Reload companies to reflect changes
+                await loadCompanies();
+                const message = action === 'activate' 
+                  ? 'Company activated successfully!' 
+                  : 'Company deactivated successfully! It has been moved to "Deleted" view.';
+                Alert.alert('Success', message);
+              } else {
+                Alert.alert('Error', result?.message || `Failed to ${action} company`);
+              }
+            } catch (error: any) {
+              console.error(`Error ${action}ing company:`, error);
+              Alert.alert('Error', error?.message || `Failed to ${action} company`);
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleSave = async (data: any) => {
     try {
       if (currentView === 'create') {
@@ -1465,20 +1547,36 @@ const CompanyManagementSystem = () => {
     setSelectedCompany(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    const company = companies.find(c => c.id === id);
     Alert.alert(
       'Delete Company',
-      'Are you sure you want to delete this company? This action cannot be undone.',
+      `Are you sure you want to delete "${company?.name}"? The company will be deactivated and removed from the listing.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Delete', 
           style: 'destructive',
-          onPress: () => {
-            setCompanies(companies.filter(c => c.id !== id));
-            setCurrentView('list');
-            setSelectedCompany(null);
-            Alert.alert('Success', 'Company deleted successfully!');
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const result = await apiService.superadminDeleteCompany(id);
+              
+              if (result?.success) {
+                // Remove from local state and reload
+                await loadCompanies();
+                setCurrentView('list');
+                setSelectedCompany(null);
+                Alert.alert('Success', 'Company deleted successfully! To view deleted companies, use the "Deleted" filter.');
+              } else {
+                Alert.alert('Error', result?.message || 'Failed to delete company');
+              }
+            } catch (error: any) {
+              console.error('Error deleting company:', error);
+              Alert.alert('Error', error?.message || 'Failed to delete company');
+            } finally {
+              setLoading(false);
+            }
           }
         }
       ]
@@ -1493,6 +1591,8 @@ const CompanyManagementSystem = () => {
           onViewDetails={handleViewDetails}
           onCreateNew={handleCreateNew}
           onBack={() => navigation.goBack()}
+          onDelete={handleDelete}
+          onToggleStatus={handleToggleStatus}
         />
       )}
       
@@ -1699,9 +1799,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 12,
     borderRadius: 16,
-    padding: 16,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  companyCardContent: {
+    padding: 16,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -2923,6 +3026,38 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 12,
     color: '#9ca3af',
+  },
+  cardActionsContainer: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 6,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activateButton: {
+    backgroundColor: '#10b981',
+    borderRightWidth: 0.5,
+    borderRightColor: '#f9fafb',
+  },
+  deactivateButton: {
+    backgroundColor: '#f59e0b',
+    borderRightWidth: 0.5,
+    borderRightColor: '#f9fafb',
+  },
+  deleteButtonList: {
+    backgroundColor: '#ef4444',
   },
 });
 

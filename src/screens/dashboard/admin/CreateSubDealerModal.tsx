@@ -15,12 +15,16 @@ import { Ionicons } from '@expo/vector-icons';
 import apiService from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 
-interface Group {
+interface Dealer {
   _id: string;
-  GroupGUID: string;
-  GroupName: string;
-  GroupParent: string | null;
-  cmpcode: string;
+  LedgerGUID: string;
+  LedgerName: string;
+  LedgerMobile?: string;
+  Email?: string;
+  LedgerAddress1?: string;
+  LedgerAddress2?: string;
+  LedgerState?: string;
+  isActive: boolean;
 }
 
 interface CreateSubDealerModalProps {
@@ -45,6 +49,16 @@ interface SubDealer {
   SDEmail?: string;
   SDGSTNType?: string;
   SDGSTNNumber?: string;
+  dealerId?: string | {
+    _id: string;
+    LedgerGUID: string;
+    LedgerName: string;
+  };
+  dealer?: {
+    _id: string;
+    LedgerGUID: string;
+    LedgerName: string;
+  };
   groupId?: string | {
     _id: string;
     GroupGUID: string;
@@ -61,10 +75,10 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
   const { user } = useAuth();
   const isEditMode = !!subdealer;
   const [loading, setLoading] = useState(false);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [showGroupSelector, setShowGroupSelector] = useState(false);
-  const [groupSearchQuery, setGroupSearchQuery] = useState('');
+  const [loadingDealers, setLoadingDealers] = useState(false);
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [showDealerSelector, setShowDealerSelector] = useState(false);
+  const [dealerSearchQuery, setDealerSearchQuery] = useState('');
 
   const [formData, setFormData] = useState({
     SDName: '',
@@ -80,24 +94,24 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
     SDEmail: '',
     SDGSTNType: '',
     SDGSTNNumber: '',
-    groupId: '',
+    dealerId: '',
   });
 
   useEffect(() => {
     if (visible) {
-      fetchGroups();
+      fetchDealers();
       if (subdealer) {
         // Populate form with subdealer data for edit
-        // Safely extract groupId, handling null/undefined cases
-        let groupId = '';
-        if (subdealer.groupId) {
-          if (typeof subdealer.groupId === 'object' && subdealer.groupId !== null && subdealer.groupId._id) {
-            groupId = subdealer.groupId._id;
-          } else if (typeof subdealer.groupId === 'string') {
-            groupId = subdealer.groupId;
+        // Safely extract dealerId, handling null/undefined cases
+        let dealerId = '';
+        if (subdealer.dealerId) {
+          if (typeof subdealer.dealerId === 'object' && subdealer.dealerId !== null && subdealer.dealerId._id) {
+            dealerId = subdealer.dealerId._id;
+          } else if (typeof subdealer.dealerId === 'string') {
+            dealerId = subdealer.dealerId;
           }
-        } else if (subdealer.group && subdealer.group._id) {
-          groupId = subdealer.group._id;
+        } else if (subdealer.dealer && subdealer.dealer._id) {
+          dealerId = subdealer.dealer._id;
         }
         
         setFormData({
@@ -114,7 +128,7 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
           SDEmail: subdealer.SDEmail || '',
           SDGSTNType: subdealer.SDGSTNType || '',
           SDGSTNNumber: subdealer.SDGSTNNumber || '',
-          groupId: groupId,
+          dealerId: dealerId,
         });
       } else {
         // Reset form for create
@@ -132,32 +146,34 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
           SDEmail: '',
           SDGSTNType: '',
           SDGSTNNumber: '',
-          groupId: '',
+          dealerId: '',
         });
       }
     }
   }, [visible, subdealer]);
 
-  const fetchGroups = async () => {
+  const fetchDealers = async () => {
     try {
-      setLoadingGroups(true);
-      const result = await apiService.adminGetAllGroups({ includeInactive: false });
-      if (result?.success && result.data?.groups) {
-        setGroups(result.data.groups);
+      setLoadingDealers(true);
+      const result = await apiService.adminGetAllDealers({ includeInactive: false });
+      if (result?.success && result.data?.dealers) {
+        setDealers(result.data.dealers);
       }
     } catch (error) {
-      console.error('Failed to fetch groups:', error);
+      console.error('Failed to fetch dealers:', error);
     } finally {
-      setLoadingGroups(false);
+      setLoadingDealers(false);
     }
   };
 
-  const filteredGroups = groups.filter(group =>
-    group.GroupName.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
-    group.GroupGUID.toLowerCase().includes(groupSearchQuery.toLowerCase())
+  const filteredDealers = dealers.filter(dealer =>
+    dealer.LedgerName.toLowerCase().includes(dealerSearchQuery.toLowerCase()) ||
+    dealer.LedgerGUID.toLowerCase().includes(dealerSearchQuery.toLowerCase()) ||
+    (dealer.LedgerMobile && dealer.LedgerMobile.toLowerCase().includes(dealerSearchQuery.toLowerCase())) ||
+    (dealer.Email && dealer.Email.toLowerCase().includes(dealerSearchQuery.toLowerCase()))
   );
 
-  const selectedGroup = groups.find(g => g._id === formData.groupId);
+  const selectedDealer = dealers.find(d => d._id === formData.dealerId);
 
   const handleCreate = async () => {
     if (!formData.SDName.trim()) {
@@ -165,12 +181,8 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
       return;
     }
 
-    // Group is optional, but if provided it should be valid
-    // Allow empty groupId in edit mode (subdealer might not have a group)
-    if (!isEditMode && !formData.groupId) {
-      Alert.alert('Validation Error', 'Please select a group');
-      return;
-    }
+    // Dealer selection is optional
+    // If dealer is selected, it will be linked to the subdealer
 
     setLoading(true);
     try {
@@ -188,7 +200,7 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
         SDEmail: formData.SDEmail || undefined,
         SDGSTNType: formData.SDGSTNType || undefined,
         SDGSTNNumber: formData.SDGSTNNumber || undefined,
-        groupId: formData.groupId && formData.groupId.trim() !== '' ? formData.groupId : null,
+        dealerId: formData.dealerId && formData.dealerId.trim() !== '' ? formData.dealerId : undefined,
       };
 
       let result;
@@ -281,16 +293,19 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Group *</Text>
+              <Text style={styles.label}>Dealer (Optional)</Text>
               <TouchableOpacity
                 style={styles.groupSelector}
-                onPress={() => setShowGroupSelector(true)}
+                onPress={() => setShowDealerSelector(true)}
               >
-                <Text style={selectedGroup ? styles.groupSelectorText : styles.groupSelectorPlaceholder}>
-                  {selectedGroup ? selectedGroup.GroupName : 'Select a group'}
+                <Text style={selectedDealer ? styles.groupSelectorText : styles.groupSelectorPlaceholder}>
+                  {selectedDealer ? selectedDealer.LedgerName : 'Select a dealer (optional)'}
                 </Text>
                 <Ionicons name="chevron-down" size={20} color="#6B7280" />
               </TouchableOpacity>
+              <Text style={styles.helperText}>
+                Link this subdealer to a dealer from your company
+              </Text>
             </View>
           </View>
 
@@ -474,62 +489,65 @@ const CreateSubDealerModal: React.FC<CreateSubDealerModalProps> = ({ visible, on
         </View>
       </View>
 
-      {/* Group Selector Modal */}
+      {/* Dealer Selector Modal */}
       <Modal
-        visible={showGroupSelector}
+        visible={showDealerSelector}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowGroupSelector(false)}
+        onRequestClose={() => setShowDealerSelector(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Group</Text>
-              <TouchableOpacity onPress={() => setShowGroupSelector(false)}>
+              <Text style={styles.modalTitle}>Select Dealer</Text>
+              <TouchableOpacity onPress={() => setShowDealerSelector(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
             <TextInput
               style={styles.searchInput}
-              placeholder="Search groups..."
-              value={groupSearchQuery}
-              onChangeText={setGroupSearchQuery}
+              placeholder="Search dealers..."
+              value={dealerSearchQuery}
+              onChangeText={setDealerSearchQuery}
               placeholderTextColor="#9CA3AF"
             />
 
-            {loadingGroups ? (
+            {loadingDealers ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#0493D2" />
               </View>
             ) : (
               <FlatList
-                data={filteredGroups}
+                data={filteredDealers}
                 keyExtractor={(item) => item._id}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[
                       styles.groupItem,
-                      formData.groupId === item._id && styles.selectedGroupItem
+                      formData.dealerId === item._id && styles.selectedGroupItem
                     ]}
                     onPress={() => {
-                      setFormData({ ...formData, groupId: item._id });
-                      setShowGroupSelector(false);
-                      setGroupSearchQuery('');
+                      setFormData({ ...formData, dealerId: item._id });
+                      setShowDealerSelector(false);
+                      setDealerSearchQuery('');
                     }}
                   >
                     <View style={styles.groupItemContent}>
-                      <Text style={styles.groupItemName}>{item.GroupName}</Text>
-                      <Text style={styles.groupItemGUID}>{item.GroupGUID}</Text>
+                      <Text style={styles.groupItemName}>{item.LedgerName}</Text>
+                      <Text style={styles.groupItemGUID}>{item.LedgerGUID}</Text>
+                      {item.LedgerMobile && (
+                        <Text style={styles.dealerContact}>{item.LedgerMobile}</Text>
+                      )}
                     </View>
-                    {formData.groupId === item._id && (
+                    {formData.dealerId === item._id && (
                       <Ionicons name="checkmark-circle" size={24} color="#0493D2" />
                     )}
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No groups found</Text>
+                    <Text style={styles.emptyText}>No dealers found in your company</Text>
                   </View>
                 }
               />
@@ -750,6 +768,17 @@ const styles = StyleSheet.create({
   groupItemGUID: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  dealerContact: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   emptyContainer: {
     padding: 40,
