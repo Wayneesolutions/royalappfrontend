@@ -154,7 +154,12 @@ class ApiService {
         // Only log non-network errors in detail
         if (error.response) {
           // Server responded with error status
-          if (__DEV__) {
+          const url = error.config?.url || '';
+          const is404EntriesRequest = error.response.status === 404 && 
+            (url.includes('/ledger-entries/by-voucher/') || url.includes('/inventory-entries/by-voucher/'));
+          
+          // Don't log 404 errors for entries requests (expected when no entries exist)
+          if (__DEV__ && !is404EntriesRequest) {
             console.error('❌ API Error:', {
               status: error.response.status,
               statusText: error.response.statusText,
@@ -192,13 +197,20 @@ class ApiService {
     if (error.response) {
       // Server responded with error status
       const message = (error.response.data as any)?.message || error.message;
-      console.error('API Error Response:', {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        url: error.config?.url,
-        baseURL: error.config?.baseURL
-      });
+      const url = error.config?.url || '';
+      const is404EntriesRequest = error.response.status === 404 && 
+        (url.includes('/ledger-entries/by-voucher/') || url.includes('/inventory-entries/by-voucher/'));
+      
+      // Don't log 404 errors for entries requests
+      if (!is404EntriesRequest) {
+        console.error('API Error Response:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+          url: error.config?.url,
+          baseURL: error.config?.baseURL
+        });
+      }
       throw new Error(message);
     } else if (error.request) {
       // Request was made but no response received
@@ -2028,6 +2040,124 @@ class ApiService {
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== VOUCHER APIs ====================
+
+  /**
+   * Get vouchers by company with optional filters
+   * @param params - Query parameters for filtering vouchers
+   */
+  async getVouchers(params: {
+    cmpcode: string;
+    startDate?: string;
+    endDate?: string;
+    vchtype?: string;
+    ledgerguid?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/voucher/list', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  /**
+   * Get single voucher by GUID
+   * @param vchguid - Voucher GUID
+   * @param cmpcode - Company code
+   */
+  async getVoucherByGuid(vchguid: string, cmpcode: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/voucher/${vchguid}`, {
+        params: { cmpcode }
+      });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  /**
+   * Get voucher statistics
+   * @param params - Query parameters
+   */
+  async getVoucherStats(params: {
+    cmpcode: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/voucher/stats', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  // ==================== LEDGER ENTRIES APIs ====================
+
+  /**
+   * Get ledger entries by voucher GUID
+   * @param vchguid - Voucher GUID
+   * @param cmpcode - Company code
+   */
+  async getLedgerEntriesByVoucher(vchguid: string, cmpcode: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(
+        `/ledger-entries/by-voucher/${vchguid}`,
+        {
+          params: { cmpcode },
+          timeout: 30000
+        }
+      );
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      // Handle 404 (no entries found) gracefully
+      if (axiosError.response?.status === 404) {
+        return {
+          success: true,
+          message: 'No ledger entries found',
+          data: { entries: [], summary: {} }
+        };
+      }
+      this.handleApiError(axiosError);
+    }
+  }
+
+  // ==================== INVENTORY ENTRIES APIs ====================
+
+  /**
+   * Get inventory entries by voucher GUID
+   * @param vchguid - Voucher GUID
+   * @param cmpcode - Company code
+   */
+  async getInventoryEntriesByVoucher(vchguid: string, cmpcode: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(
+        `/inventory-entries/by-voucher/${vchguid}`,
+        {
+          params: { cmpcode },
+          timeout: 30000
+        }
+      );
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      // Handle 404 (no entries found) gracefully
+      if (axiosError.response?.status === 404) {
+        return {
+          success: true,
+          message: 'No inventory entries found',
+          data: { entries: [], summary: {} }
+        };
+      }
+      this.handleApiError(axiosError);
     }
   }
 }
