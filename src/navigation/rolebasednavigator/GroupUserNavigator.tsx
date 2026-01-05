@@ -14,6 +14,9 @@ import AdminEditOrder from '../../screens/dashboard/admin/AdminEditOrder';
 // Dealer Management
 import DealersListScreen from '../../screens/dashboard/GroupUser/DealersListScreen';
 import LedgerReportScreen from '../../screens/dashboard/GroupUser/LedgerReportScreen';
+import OutstandingReportScreen from '../../screens/dashboard/GroupUser/OutstandingReportScreen';
+import PendingOrdersScreen from '../../screens/dashboard/GroupUser/PendingOrdersScreen';
+import SalesStockScreen from '../../screens/dashboard/GroupUser/SalesStockScreen';
 
 // Common Screens
 import ProfileScreen from '../../screens/common/ProfileScreen';
@@ -38,6 +41,9 @@ export default function GroupUserNavigator() {
       {/* Dealer Management */}
       <GroupUserStack.Screen name="DealersListScreen" component={DealersListScreen} />
       <GroupUserStack.Screen name="LedgerReportScreen" component={LedgerReportScreen} />
+      <GroupUserStack.Screen name="OutstandingReportScreen" component={OutstandingReportScreen} />
+      <GroupUserStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
+      <GroupUserStack.Screen name="SalesStockScreen" component={SalesStockScreen} />
       {/* Common Screens */}
       <GroupUserStack.Screen name="ProfileScreen" component={ProfileScreen} />
       <GroupUserStack.Screen name="SettingsScreen" component={SettingsScreen} />

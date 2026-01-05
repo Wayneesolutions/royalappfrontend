@@ -1,19 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
   Modal,
-  FlatList,
+  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../../context/AuthContext';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 
 interface OrderItem {
   productId: string;
@@ -28,332 +23,205 @@ interface OrderItem {
 interface Order {
   _id: string;
   orderNumber: string;
-  customerId: string | {
-    _id: string;
-    email: string;
-    name: string;
-    mobile: string;
-    role: string;
-  };
   customerName: string;
-  customerEmail?: string;
-  customerMobile?: string;
-  dealerId?: string | {
-    _id: string;
-    email: string;
-    name: string;
-    mobile: string;
-    role: string;
-  };
-  dealerName?: string;
-  subDealerId?: string | {
-    _id: string;
-    email?: string;
-    name?: string;
-    mobile?: string;
-    role?: string;
-    address?: {
-      street?: string;
-      city?: string;
-      state?: string;
-      pincode?: string;
-      country?: string;
-    };
-    // SubDealer model fields
-    SDName?: string;
-    SDEmail?: string;
-    SDMobileNo?: string;
-    SDAddress1?: string;
-    SDAddress2?: string;
-    SDAddress3?: string;
-    SDState?: string;
-    SDCountry?: string;
-    SDPincode?: string;
-  };
-  subDealerName?: string;
-  shippingAddress: {
-    subDealerId?: string;
-    name: string;
-    address: string;
-    mobile: string;
-  };
-  customerAddress?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-    country?: string;
-  };
+  customerEmail: string;
+  customerMobile: string;
+  customerAddress: string;
+  shippingName: string;
+  shippingEmail: string;
+  shippingMobile: string;
+  shippingAddress: string;
   items: OrderItem[];
   totalQuantity: number;
   totalAmount: number;
-  notes?: string;
   status: 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  orderType: string;
   createdAt: string;
-  updatedAt: string;
-  createdBy: string | {
-    _id: string;
-    name: string;
-    email: string;
-    role: string;
-  };
+  createdBy: string;
+  createdByRole: string;
+  notes?: string;
 }
 
 const DealerReceivedOrders = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { user, getOrders, updateOrderStatus } = useAuth();
-  
-  // Helper function to format address object to string
-  const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
-    if (!address) return 'Address not specified';
-    
-    const parts = [];
-    if (address.street) parts.push(address.street);
-    if (address.city) parts.push(address.city);
-    if (address.state) parts.push(address.state);
-    if (address.pincode) parts.push(address.pincode);
-    if (address.country) parts.push(address.country);
-    
-    return parts.length > 0 ? parts.join(', ') : 'Address not specified';
-  };
-
-  // Helper function to get dealer name (customer)
-  const getDealerName = (order: Order) => {
-    if (order.dealerId && typeof order.dealerId === 'object' && order.dealerId !== null && order.dealerId.name) {
-      return order.dealerId.name;
-    }
-    return order.dealerName || order.customerName || 'Unknown Dealer';
-  };
-
-  // Helper function to get created by name
-  const getCreatedByName = (order: Order) => {
-    if (order.createdBy && typeof order.createdBy === 'object' && order.createdBy !== null && order.createdBy.name) {
-      return `${order.createdBy.name} (${order.createdBy.role || 'Unknown Role'})`;
-    }
-    return 'Unknown';
-  };
-
-  // Helper function to get subdealer name (shipping address)
-  const getSubDealerName = (order: Order) => {
-    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
-      // Check SubDealer model fields first
-      if (order.subDealerId.SDName) {
-        return order.subDealerId.SDName;
-      }
-      if (order.subDealerId.name) {
-        return order.subDealerId.name;
-      }
-    }
-    return order.subDealerName || order.shippingAddress?.name || 'No Sub Dealer';
-  };
-
-  // Helper function to get subdealer email
-  const getSubDealerEmail = (order: Order) => {
-    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
-      // Check SubDealer model fields first
-      if (order.subDealerId.SDEmail) {
-        return order.subDealerId.SDEmail;
-      }
-      if (order.subDealerId.email) {
-        return order.subDealerId.email;
-      }
-    }
-    return 'N/A';
-  };
-
-  // Helper function to get subdealer mobile
-  const getSubDealerMobile = (order: Order) => {
-    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
-      // Check SubDealer model fields first
-      if (order.subDealerId.SDMobileNo) {
-        return order.subDealerId.SDMobileNo;
-      }
-      if (order.subDealerId.mobile) {
-        return order.subDealerId.mobile;
-      }
-    }
-    return order.shippingAddress?.mobile || 'N/A';
-  };
-
-  // Helper function to get subdealer address
-  const getSubDealerAddress = (order: Order) => {
-    if (order.subDealerId && typeof order.subDealerId === 'object' && order.subDealerId !== null) {
-      // Check SubDealer model fields first (SDAddress1, SDAddress2, etc.)
-      if (order.subDealerId.SDAddress1 || order.subDealerId.SDAddress2 || order.subDealerId.SDState) {
-        const address = {
-          street: order.subDealerId.SDAddress1 || '',
-          city: order.subDealerId.SDAddress2 || '',
-          state: order.subDealerId.SDState || '',
-          pincode: order.subDealerId.SDPincode || '',
-          country: order.subDealerId.SDCountry || 'India',
-        };
-        return formatAddress(address);
-      }
-      // Fallback to address object
-      if (order.subDealerId.address) {
-        return formatAddress(order.subDealerId.address);
-      }
-    }
-    // Otherwise, use the shippingAddress field
-    if (order.shippingAddress?.address) {
-      if (typeof order.shippingAddress.address === 'string') {
-        return order.shippingAddress.address;
-      }
-      return formatAddress(order.shippingAddress.address);
-    }
-    return 'Address not specified';
-  };
-  
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered'>('all');
-  const isInitialMount = useRef(true);
 
-  useEffect(() => {
-    if (user?._id) {
-      fetchOrders();
-    }
-  }, [filter, user?._id]);
-
-  // Listen for navigation params to refresh orders
-  useEffect(() => {
-    const params = route.params as any;
-    if (params?.refreshOrders) {
-      console.log('🔄 Refreshing orders from navigation...');
-      fetchOrders();
-    }
-  }, [route.params]);
-
-  // Refresh orders when screen comes into focus (e.g., when navigating back from edit)
-  // Skip on initial mount to avoid double loading
-  useFocusEffect(
-    useCallback(() => {
-      if (isInitialMount.current) {
-        isInitialMount.current = false;
-        return;
-      }
-      console.log('🔄 Screen focused, refreshing orders...');
-      fetchOrders();
-    }, [])
-  );
-
-  const fetchOrders = async () => {
-    try {
-      if (!user?._id) {
-        console.log('⏳ User not loaded yet, skipping fetch');
-        return;
-      }
-
-      setLoading(true);
-      
-      // Filter orders created by OTHER users (admin/group users) FOR this dealer
-      // Orders where dealerId matches current dealer AND createdBy is not the current dealer
-      const params: any = { 
-        page: 1, 
-        limit: 50,
-        dealerId: user._id // Filter orders where this dealer is assigned (dealerId)
-      };
-      
-      if (filter !== 'all') {
-        params.status = filter;
-      }
-      
-      console.log('🔍 Fetching received orders with params:', params);
-      const response = await getOrders(params);
-      console.log('📡 Orders response:', response);
-      
-      if (response?.success) {
-        // Filter to show only orders created by OTHER users (admin/group users, not by this dealer)
-        let filteredOrders = response.orders || [];
-        filteredOrders = filteredOrders.filter((order: Order) => {
-          // Safely extract dealerId - handle null, object, or string
-          let dealerId: string | null = null;
-          if (order.dealerId) {
-            if (typeof order.dealerId === 'object' && order.dealerId !== null && order.dealerId._id) {
-              dealerId = order.dealerId._id;
-            } else if (typeof order.dealerId === 'string') {
-              dealerId = order.dealerId;
-            }
-          }
-          
-          // Safely extract customerId - handle null, object, or string
-          let customerId: string | null = null;
-          if (order.customerId) {
-            if (typeof order.customerId === 'object' && order.customerId !== null && order.customerId._id) {
-              customerId = order.customerId._id;
-            } else if (typeof order.customerId === 'string') {
-              customerId = order.customerId;
-            }
-          }
-          
-          // Safely extract createdBy - handle null, object, or string
-          let createdBy: string | null = null;
-          if (order.createdBy) {
-            if (typeof order.createdBy === 'object' && order.createdBy !== null && order.createdBy._id) {
-              createdBy = order.createdBy._id;
-            } else if (typeof order.createdBy === 'string') {
-              createdBy = order.createdBy;
-            }
-          }
-          
-          // Must be assigned to this dealer (dealerId OR customerId matches) AND created by someone else (admin/group user)
-          // Check both dealerId and customerId because dealerId may fallback to customerId when order is created
-          const isAssignedToThisDealer = (dealerId === user._id) || (customerId === user._id);
-          const isCreatedByOther = createdBy && createdBy !== user._id;
-          
-          return isAssignedToThisDealer && isCreatedByOther;
-        });
-        setOrders(filteredOrders);
-        console.log('✅ Loaded received orders for dealer:', filteredOrders.length);
-      }
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      Alert.alert('Error', 'Failed to load orders');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchOrders();
-    setRefreshing(false);
-  };
-
-  const handleOrderPress = (order: Order) => {
-    setSelectedOrder(order);
-    setShowDetailsModal(true);
-  };
-
-  const handleApproveOrder = async (orderId: string) => {
-    try {
-      const response = await updateOrderStatus(orderId, { 
-        status: 'approved',
-        notes: 'Order approved by admin'
-      });
-      
-      if (response?.success) {
-        Alert.alert('Success', 'Order approved successfully!');
-        fetchOrders(); // Refresh the list
-        setShowDetailsModal(false);
-      } else {
-        Alert.alert('Error', response?.message || 'Failed to approve order');
-      }
-    } catch (error) {
-      console.error('Error approving order:', error);
-      Alert.alert('Error', 'Failed to approve order');
-    }
-  };
-
-  const handleEditOrder = (order: Order) => {
-    // Received orders cannot be edited (they were created by other users)
-    Alert.alert('Info', 'Received orders cannot be edited. They were created by other users.');
-  };
+  // --- Static Received Orders Data ---
+  const RECEIVED_ORDERS: Order[] = [
+    {
+      _id: '1',
+      orderNumber: 'ORD-2026-001',
+      customerName: 'Tech Solutions Pvt Ltd',
+      customerEmail: 'contact@techsolutions.com',
+      customerMobile: '+91 98765 43210',
+      customerAddress: '123 MG Road, Bangalore, Karnataka, 560001',
+      shippingName: 'Delhi Warehouse',
+      shippingEmail: 'delhi@techsolutions.com',
+      shippingMobile: '+91 98765 11111',
+      shippingAddress: '456 Connaught Place, New Delhi, Delhi, 110001',
+      items: [
+        {
+          productId: 'p1',
+          productCode: 'SAM-LP-12',
+          productName: 'Samsung 12" Laptop',
+          unit: 'pcs',
+          unitPrice: 55000,
+          quantity: 5,
+          totalAmount: 275000,
+        },
+        {
+          productId: 'p2',
+          productCode: 'LEN-TB-10',
+          productName: 'Lenovo Tablet M10',
+          unit: 'pcs',
+          unitPrice: 18000,
+          quantity: 3,
+          totalAmount: 54000,
+        },
+      ],
+      totalQuantity: 8,
+      totalAmount: 329000,
+      status: 'approved',
+      createdAt: '2026-01-05T10:30:00Z',
+      createdBy: 'Rajesh Kumar',
+      createdByRole: 'Regional Manager',
+      notes: 'Urgent delivery required',
+    },
+    {
+      _id: '2',
+      orderNumber: 'ORD-2026-002',
+      customerName: 'Digital World Electronics',
+      customerEmail: 'info@digitalworld.com',
+      customerMobile: '+91 98765 22222',
+      customerAddress: '789 Park Street, Kolkata, West Bengal, 700016',
+      shippingName: 'Noida Store',
+      shippingEmail: 'noida@digitalworld.com',
+      shippingMobile: '+91 98765 33333',
+      shippingAddress: '321 Sector 18, Noida, Uttar Pradesh, 201301',
+      items: [
+        {
+          productId: 'p3',
+          productCode: 'HP-LJ-P1',
+          productName: 'HP LaserJet Pro',
+          unit: 'pcs',
+          unitPrice: 25000,
+          quantity: 8,
+          totalAmount: 200000,
+        },
+      ],
+      totalQuantity: 8,
+      totalAmount: 200000,
+      status: 'processing',
+      createdAt: '2026-01-04T14:20:00Z',
+      createdBy: 'Amit Sharma',
+      createdByRole: 'Sales Manager',
+    },
+    {
+      _id: '3',
+      orderNumber: 'ORD-2026-003',
+      customerName: 'Metro Computers',
+      customerEmail: 'sales@metrocomputers.com',
+      customerMobile: '+91 98765 44444',
+      customerAddress: '555 Brigade Road, Bangalore, Karnataka, 560025',
+      shippingName: 'Mumbai Branch',
+      shippingEmail: 'mumbai@metrocomputers.com',
+      shippingMobile: '+91 98765 55555',
+      shippingAddress: '777 Andheri East, Mumbai, Maharashtra, 400069',
+      items: [
+        {
+          productId: 'p4',
+          productCode: 'DELL-MON-24',
+          productName: 'Dell 24" Monitor',
+          unit: 'pcs',
+          unitPrice: 15000,
+          quantity: 12,
+          totalAmount: 180000,
+        },
+        {
+          productId: 'p5',
+          productCode: 'LOGI-WM-X2',
+          productName: 'Logitech Wireless Mouse',
+          unit: 'pcs',
+          unitPrice: 1500,
+          quantity: 50,
+          totalAmount: 75000,
+        },
+      ],
+      totalQuantity: 62,
+      totalAmount: 255000,
+      status: 'shipped',
+      createdAt: '2026-01-03T09:15:00Z',
+      createdBy: 'Suresh Patel',
+      createdByRole: 'Regional Manager',
+    },
+    {
+      _id: '4',
+      orderNumber: 'ORD-2026-004',
+      customerName: 'Tech Bazaar',
+      customerEmail: 'admin@techbazaar.com',
+      customerMobile: '+91 98765 66666',
+      customerAddress: '888 MG Road, Pune, Maharashtra, 411001',
+      shippingName: 'Pune Warehouse',
+      shippingEmail: 'pune@techbazaar.com',
+      shippingMobile: '+91 98765 77777',
+      shippingAddress: '999 Koregaon Park, Pune, Maharashtra, 411001',
+      items: [
+        {
+          productId: 'p1',
+          productCode: 'SAM-LP-12',
+          productName: 'Samsung 12" Laptop',
+          unit: 'pcs',
+          unitPrice: 55000,
+          quantity: 10,
+          totalAmount: 550000,
+        },
+      ],
+      totalQuantity: 10,
+      totalAmount: 550000,
+      status: 'delivered',
+      createdAt: '2026-01-02T11:00:00Z',
+      createdBy: 'Neha Gupta',
+      createdByRole: 'Sales Manager',
+    },
+    {
+      _id: '5',
+      orderNumber: 'ORD-2026-005',
+      customerName: 'Office Solutions',
+      customerEmail: 'contact@officesolutions.com',
+      customerMobile: '+91 98765 88888',
+      customerAddress: '111 Richmond Road, Bangalore, Karnataka, 560025',
+      shippingName: 'Chennai Office',
+      shippingEmail: 'chennai@officesolutions.com',
+      shippingMobile: '+91 98765 99999',
+      shippingAddress: '222 Anna Salai, Chennai, Tamil Nadu, 600002',
+      items: [
+        {
+          productId: 'p2',
+          productCode: 'LEN-TB-10',
+          productName: 'Lenovo Tablet M10',
+          unit: 'pcs',
+          unitPrice: 18000,
+          quantity: 15,
+          totalAmount: 270000,
+        },
+        {
+          productId: 'p3',
+          productCode: 'HP-LJ-P1',
+          productName: 'HP LaserJet Pro',
+          unit: 'pcs',
+          unitPrice: 25000,
+          quantity: 4,
+          totalAmount: 100000,
+        },
+      ],
+      totalQuantity: 19,
+      totalAmount: 370000,
+      status: 'draft',
+      createdAt: '2026-01-01T16:45:00Z',
+      createdBy: 'Vikram Mehta',
+      createdByRole: 'Sales Manager',
+      notes: 'Check stock availability before processing',
+    },
+  ];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -379,29 +247,49 @@ const DealerReceivedOrders = () => {
     }
   };
 
-  const renderOrderItem = ({ item }: { item: Order }) => (
+  const handleOrderPress = (order: Order) => {
+    setSelectedOrder(order);
+    setShowDetailsModal(true);
+  };
+
+  const renderOrderCard = (order: Order) => (
     <TouchableOpacity
+      key={order._id}
       style={styles.orderCard}
-      onPress={() => handleOrderPress(item)}
+      onPress={() => handleOrderPress(order)}
       activeOpacity={0.7}
     >
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>#{item.orderNumber}</Text>
-          <Text style={styles.customerName}>Customer: {getDealerName(item)}</Text>
-          <Text style={styles.shippingAddress}>Shipping: {getSubDealerName(item)}</Text>
-          <Text style={styles.shippingAddress}>Created By: {getCreatedByName(item)}</Text>
+          <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
+          <View style={styles.infoRow}>
+            <Ionicons name="person-outline" size={12} color="#6B7280" />
+            <Text style={styles.infoText}>{order.customerName}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="location-outline" size={12} color="#6B7280" />
+            <Text style={styles.infoText}>{order.shippingName}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="create-outline" size={12} color="#6B7280" />
+            <Text style={styles.infoText}>
+              {order.createdBy} ({order.createdByRole})
+            </Text>
+          </View>
         </View>
         
         <View style={styles.orderStatus}>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: getStatusColor(order.status) + '20' }
+          ]}>
             <Ionicons 
-              name={getStatusIcon(item.status) as any} 
+              name={getStatusIcon(order.status) as any} 
               size={16} 
-              color={getStatusColor(item.status)} 
+              color={getStatusColor(order.status)} 
             />
-            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-              {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+            <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
+              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
             </Text>
           </View>
         </View>
@@ -409,21 +297,21 @@ const DealerReceivedOrders = () => {
       
       <View style={styles.orderDetails}>
         <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Items:</Text>
-          <Text style={styles.orderDetailValue}>{item.items.length} products</Text>
+          <Text style={styles.orderDetailLabel}>Items</Text>
+          <Text style={styles.orderDetailValue}>{order.items.length}</Text>
         </View>
         <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Quantity:</Text>
-          <Text style={styles.orderDetailValue}>{item.totalQuantity}</Text>
+          <Text style={styles.orderDetailLabel}>Quantity</Text>
+          <Text style={styles.orderDetailValue}>{order.totalQuantity}</Text>
         </View>
         <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Total:</Text>
-          <Text style={styles.orderDetailValue}>₹{item.totalAmount}</Text>
+          <Text style={styles.orderDetailLabel}>Total</Text>
+          <Text style={styles.orderDetailValue}>₹{order.totalAmount.toLocaleString()}</Text>
         </View>
         <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Date:</Text>
+          <Text style={styles.orderDetailLabel}>Date</Text>
           <Text style={styles.orderDetailValue}>
-            {new Date(item.createdAt).toLocaleDateString()}
+            {new Date(order.createdAt).toLocaleDateString()}
           </Text>
         </View>
       </View>
@@ -437,132 +325,132 @@ const DealerReceivedOrders = () => {
       <Modal
         visible={showDetailsModal}
         animationType="slide"
-        presentationStyle="formSheet"
+        presentationStyle="fullScreen"
         onRequestClose={() => setShowDetailsModal(false)}
       >
-        <View style={styles.modalContainer}>
+        <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <TouchableOpacity
-              style={styles.modalCloseButton}
               onPress={() => setShowDetailsModal(false)}
+              style={styles.closeButton}
             >
-              <Ionicons name="close" size={24} color="#374151" />
+              <Ionicons name="close" size={26} color="#111827" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Order Details</Text>
-            <View style={styles.placeholder} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.modalTitle}>Order Details</Text>
+              <Text style={styles.modalSubtitle}>#{selectedOrder.orderNumber}</Text>
+            </View>
           </View>
 
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Order Header */}
+            {/* Order Information */}
             <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Order Information</Text>
+              <Text style={styles.sectionTitle}>Order Information</Text>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Order Number</Text>
-                <Text style={styles.detailsValue}>#{selectedOrder.orderNumber}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Order Number</Text>
+                <Text style={styles.detailValue}>#{selectedOrder.orderNumber}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Status</Text>
-                <View style={[styles.detailsBadge, { backgroundColor: getStatusColor(selectedOrder.status) + '20' }]}>
-                  <Text style={[styles.detailsBadgeText, { color: getStatusColor(selectedOrder.status) }]}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Status</Text>
+                <View style={[
+                  styles.detailStatusBadge,
+                  { backgroundColor: getStatusColor(selectedOrder.status) + '20' }
+                ]}>
+                  <Text style={[
+                    styles.detailStatusText,
+                    { color: getStatusColor(selectedOrder.status) }
+                  ]}>
                     {selectedOrder.status.charAt(0).toUpperCase() + selectedOrder.status.slice(1)}
                   </Text>
                 </View>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Created Date</Text>
-                <Text style={styles.detailsValue}>
-                  {new Date(selectedOrder.createdAt).toLocaleDateString()} {new Date(selectedOrder.createdAt).toLocaleTimeString()}
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Created Date</Text>
+                <Text style={styles.detailValue}>
+                  {new Date(selectedOrder.createdAt).toLocaleDateString()} {' '}
+                  {new Date(selectedOrder.createdAt).toLocaleTimeString()}
                 </Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Created By</Text>
-                <Text style={styles.detailsValue}>
-                  {selectedOrder.createdBy && typeof selectedOrder.createdBy === 'object' && selectedOrder.createdBy !== null
-                    ? `${selectedOrder.createdBy.name} (${selectedOrder.createdBy.role || 'Unknown Role'})`
-                    : 'Unknown'
-                  }
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Created By</Text>
+                <Text style={styles.detailValue}>
+                  {selectedOrder.createdBy} ({selectedOrder.createdByRole})
                 </Text>
               </View>
             </View>
 
             {/* Customer Information */}
             <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Customer Information (Dealer)</Text>
+              <Text style={styles.sectionTitle}>Customer (Dealer)</Text>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Name</Text>
-                <Text style={styles.detailsValue}>{getDealerName(selectedOrder)}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Name</Text>
+                <Text style={styles.detailValue}>{selectedOrder.customerName}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Email</Text>
-                <Text style={styles.detailsValue}>
-                  {selectedOrder.dealerId && typeof selectedOrder.dealerId === 'object' && selectedOrder.dealerId !== null 
-                    ? selectedOrder.dealerId.email 
-                    : selectedOrder.customerEmail || 'N/A'}
-                </Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Email</Text>
+                <Text style={styles.detailValue}>{selectedOrder.customerEmail}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>
-                  {selectedOrder.dealerId && typeof selectedOrder.dealerId === 'object' && selectedOrder.dealerId !== null 
-                    ? selectedOrder.dealerId.mobile 
-                    : selectedOrder.customerMobile || 'N/A'}
-                </Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Mobile</Text>
+                <Text style={styles.detailValue}>{selectedOrder.customerMobile}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Address</Text>
-                <Text style={styles.detailsValue}>
-                  {formatAddress(selectedOrder.customerAddress)}
-                </Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Address</Text>
+                <Text style={styles.detailValue}>{selectedOrder.customerAddress}</Text>
               </View>
             </View>
 
             {/* Shipping Information */}
             <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Shipping Information (Sub Dealer)</Text>
+              <Text style={styles.sectionTitle}>Shipping (Sub Dealer)</Text>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Sub Dealer Name</Text>
-                <Text style={styles.detailsValue}>{getSubDealerName(selectedOrder)}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Name</Text>
+                <Text style={styles.detailValue}>{selectedOrder.shippingName}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Sub Dealer Email</Text>
-                <Text style={styles.detailsValue}>{getSubDealerEmail(selectedOrder)}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Email</Text>
+                <Text style={styles.detailValue}>{selectedOrder.shippingEmail}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Sub Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>{getSubDealerMobile(selectedOrder)}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Mobile</Text>
+                <Text style={styles.detailValue}>{selectedOrder.shippingMobile}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Shipping Address</Text>
-                <Text style={styles.detailsValue}>{getSubDealerAddress(selectedOrder)}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Address</Text>
+                <Text style={styles.detailValue}>{selectedOrder.shippingAddress}</Text>
               </View>
             </View>
 
             {/* Order Items */}
             <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Order Items</Text>
+              <Text style={styles.sectionTitle}>Order Items</Text>
               
               {selectedOrder.items.map((item, index) => (
-                <View key={index} style={styles.itemRow}>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.productName}</Text>
-                    <Text style={styles.itemCode}>{item.productCode}</Text>
-                    <Text style={styles.itemPrice}>₹{item.unitPrice}/{item.unit}</Text>
-                  </View>
-                  <View style={styles.itemQuantity}>
-                    <Text style={styles.itemQuantityText}>Qty: {item.quantity}</Text>
-                    <Text style={styles.itemTotal}>₹{item.totalAmount}</Text>
+                <View key={index} style={styles.itemCard}>
+                  <View style={styles.itemHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemName}>{item.productName}</Text>
+                      <Text style={styles.itemCode}>{item.productCode}</Text>
+                      <Text style={styles.itemPrice}>
+                        ₹{item.unitPrice.toLocaleString()}/{item.unit}
+                      </Text>
+                    </View>
+                    <View style={styles.itemQuantity}>
+                      <Text style={styles.itemQuantityText}>Qty: {item.quantity}</Text>
+                      <Text style={styles.itemTotal}>₹{item.totalAmount.toLocaleString()}</Text>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -570,454 +458,338 @@ const DealerReceivedOrders = () => {
 
             {/* Order Summary */}
             <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Order Summary</Text>
+              <Text style={styles.sectionTitle}>Order Summary</Text>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Total Items</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.items.length}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Total Items</Text>
+                <Text style={styles.detailValue}>{selectedOrder.items.length}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Total Quantity</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.totalQuantity}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Total Quantity</Text>
+                <Text style={styles.detailValue}>{selectedOrder.totalQuantity}</Text>
               </View>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Total Amount</Text>
-                <Text style={[styles.detailsValue, styles.totalAmount]}>₹{selectedOrder.totalAmount}</Text>
+              <View style={[styles.detailRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Total Amount</Text>
+                <Text style={styles.totalValue}>
+                  ₹{selectedOrder.totalAmount.toLocaleString()}
+                </Text>
               </View>
               
               {selectedOrder.notes && (
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Notes</Text>
-                  <Text style={styles.detailsValue}>{selectedOrder.notes}</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Notes</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.notes}</Text>
                 </View>
               )}
             </View>
           </ScrollView>
-
-          {/* Action Buttons */}
-          <View style={styles.modalActions}>
-            {selectedOrder.status === 'draft' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.approveButton]}
-                onPress={() => handleApproveOrder(selectedOrder._id)}
-              >
-                <Ionicons name="checkmark-circle-outline" size={20} color="#10B981" />
-                <Text style={styles.actionButtonText}>Approve</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     );
   };
 
-  const filteredOrders = orders.filter(order => {
-    if (filter === 'all') return true;
-    return order.status === filter;
-  });
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading orders...</Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Order Details Modal */}
+      {renderOrderDetails()}
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#374151" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Received Orders</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.title}>Received Orders</Text>
+        <Text style={styles.subtitle}>Orders assigned to you by your manager</Text>
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {[
-            { key: 'all', label: 'All' },
-            { key: 'draft', label: 'Draft' },
-            { key: 'approved', label: 'Approved' },
-            { key: 'processing', label: 'Processing' },
-            { key: 'shipped', label: 'Shipped' },
-            { key: 'delivered', label: 'Delivered' },
-          ].map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.filterTab, filter === tab.key && styles.activeFilterTab]}
-              onPress={() => setFilter(tab.key as any)}
-            >
-              <Text style={[styles.filterTabText, filter === tab.key && styles.activeFilterTabText]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* Summary Strip */}
+      <View style={styles.summaryStrip}>
+        <View style={styles.summaryItem}>
+          <Ionicons name="document-text" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>{RECEIVED_ORDERS.length}</Text>
+          <Text style={styles.summaryLab}>Total Orders</Text>
+        </View>
+        <View style={[styles.summaryItem, styles.summaryDivider]}>
+          <Ionicons name="cube" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>
+            {RECEIVED_ORDERS.reduce((sum, o) => sum + o.totalQuantity, 0)}
+          </Text>
+          <Text style={styles.summaryLab}>Total Items</Text>
+        </View>
+        <View style={[styles.summaryItem, styles.summaryDivider]}>
+          <Ionicons name="cash" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>
+            ₹{(RECEIVED_ORDERS.reduce((sum, o) => sum + o.totalAmount, 0) / 100000).toFixed(1)}L
+          </Text>
+          <Text style={styles.summaryLab}>Total Value</Text>
+        </View>
       </View>
 
       {/* Orders List */}
-      <FlatList
-        data={filteredOrders}
-        renderItem={renderOrderItem}
-        keyExtractor={(item) => item._id}
-        style={styles.ordersList}
-        contentContainerStyle={styles.ordersListContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="document-outline" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyStateTitle}>No Orders Found</Text>
-            <Text style={styles.emptyStateSubtitle}>
-              {filter === 'all' 
-                ? 'You haven\'t received any orders yet'
-                : `No ${filter} received orders found`
-              }
-            </Text>
-          </View>
-        }
-      />
-
-      {renderOrderDetails()}
-    </View>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {RECEIVED_ORDERS.map((order) => renderOrderCard(order))}
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
+    padding: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
+  },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
+  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
+
+  summaryStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    justifyContent: 'space-around',
+    paddingVertical: 18,
+    backgroundColor: '#10B981',
+    marginHorizontal: 15,
+    borderRadius: 14,
+    marginTop: 12,
+    marginBottom: 12,
+    shadowColor: '#10B981',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4
   },
-  backButton: {
-    padding: 8,
+  summaryItem: { alignItems: 'center', flex: 1 },
+  summaryDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255, 255, 255, 0.3)'
   },
-  headerTitle: {
-    fontSize: 18,
+  summaryVal: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 4
+  },
+  summaryLab: {
+    color: '#D1FAE5',
+    fontSize: 10,
+    marginTop: 2,
     fontWeight: '600',
-    color: '#1F2937',
+    textTransform: 'uppercase'
   },
-  createButton: {
-    padding: 8,
-  },
-  filterContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  filterTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-  },
-  activeFilterTab: {
-    backgroundColor: '#3B82F6',
-  },
-  filterTabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  activeFilterTabText: {
-    color: '#FFFFFF',
-  },
-  ordersList: {
-    flex: 1,
-  },
-  ordersListContent: {
-    padding: 16,
-  },
+
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 15, paddingBottom: 40 },
+
   orderCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 12
   },
-  orderInfo: {
-    flex: 1,
-  },
+  orderInfo: { flex: 1 },
   orderNumber: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
+    gap: 6
   },
-  customerName: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 2,
-  },
-  shippingAddress: {
+  infoText: {
     fontSize: 12,
     color: '#6B7280',
+    flex: 1
   },
-  orderStatus: {
-    alignItems: 'flex-end',
-  },
+  orderStatus: { alignItems: 'flex-end' },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    gap: 4
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginLeft: 4,
+    fontSize: 11,
+    fontWeight: '600'
   },
+
   orderDetails: {
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
     paddingTop: 12,
+    gap: 6
   },
   orderDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    alignItems: 'center'
   },
   orderDetailLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
+    fontWeight: '500'
   },
   orderDetailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
-    marginTop: 16,
-    marginBottom: 8,
+    color: '#1F2937'
   },
-  emptyStateSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  emptyStateButton: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  emptyStateButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+
+  // Modal Styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8F9FA'
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    padding: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E5E7EB'
   },
-  modalCloseButton: {
-    padding: 8,
-  },
+  closeButton: { padding: 4 },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827'
   },
-  placeholder: {
-    width: 40,
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2
   },
   modalContent: {
     flex: 1,
-    padding: 16,
+    padding: 15
   },
+
   detailsSection: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E5E7EB'
   },
-  detailsSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 12,
     paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
   },
-  detailsRow: {
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#F3F4F6'
   },
-  detailsLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+  detailLabel: {
+    fontSize: 13,
     color: '#6B7280',
-    flex: 1,
+    fontWeight: '600',
+    flex: 1
   },
-  detailsValue: {
-    fontSize: 14,
-    fontWeight: '400',
+  detailValue: {
+    fontSize: 13,
     color: '#1F2937',
     flex: 2,
-    textAlign: 'right',
+    textAlign: 'right'
   },
-  detailsBadge: {
-    paddingHorizontal: 12,
+  detailStatusBadge: {
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-end',
+    borderRadius: 6
   },
-  detailsBadgeText: {
-    fontSize: 12,
-    fontWeight: '500',
+  detailStatusText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase'
   },
-  totalAmount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#059669',
+
+  itemCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB'
   },
-  itemRow: {
+  itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  itemInfo: {
-    flex: 1,
+    alignItems: 'center'
   },
   itemName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 2,
+    marginBottom: 2
   },
   itemCode: {
     fontSize: 12,
     color: '#6B7280',
-    marginBottom: 2,
+    marginBottom: 4
   },
   itemPrice: {
     fontSize: 12,
-    color: '#059669',
+    color: '#059669'
   },
   itemQuantity: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end'
   },
   itemQuantityText: {
     fontSize: 12,
     color: '#6B7280',
-    marginBottom: 2,
+    marginBottom: 2
   },
   itemTotal: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: 'bold',
+    color: '#10B981'
   },
-  modalActions: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 12,
+
+  totalRow: {
+    borderBottomWidth: 0,
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#E5E7EB'
   },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  editButton: {
-    backgroundColor: '#EBF4FF',
-    borderWidth: 1,
-    borderColor: '#3B82F6',
-  },
-  approveButton: {
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  actionButtonText: {
+  totalLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: '#111827'
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#10B981'
   },
 });
 

@@ -1,384 +1,310 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
   Modal,
-  FlatList,
+  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../../context/AuthContext';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { DEFAULT_GST_RATE, GstType } from '../../../utils/gst';
 
 interface OrderItem {
   productId: string;
   productCode: string;
   productName: string;
-  partNo?: string;
-  itemAlias?: string;
-  category?: string;
-  subCategory?: string;
-  brand?: string;
-  itemHsn?: string;
-  itemHsnDesc?: string;
   unit: string;
   unitPrice: number;
   quantity: number;
-  discount?: number;
-  gstRate?: number;
-  taxType?: GstType;
-  taxableValue?: number;
-  cgstRate?: number;
-  cgstAmount?: number;
-  sgstRate?: number;
-  sgstAmount?: number;
-  igstRate?: number;
-  igstAmount?: number;
-  totalTaxAmount?: number;
   totalAmount: number;
 }
 
 interface Order {
   _id: string;
   orderNumber: string;
-  customerId: string | {
-    _id: string;
-    email: string;
-    name: string;
-    mobile: string;
-    role: string;
-  };
   customerName: string;
-  customerEmail?: string;
-  customerMobile?: string;
-  dealerId?: string | {
-    _id: string;
-    email: string;
-    name: string;
-    mobile: string;
-    role: string;
-  };
-  dealerName?: string;
-  subDealerId?: string | {
-    _id: string;
-    email: string;
-    name: string;
-    mobile: string;
-    role: string;
-    address?: {
-      street?: string;
-      city?: string;
-      state?: string;
-      pincode?: string;
-      country?: string;
-    };
-  };
-  subDealerName?: string;
-  shippingAddress: {
-    subDealerId?: string;
-    name: string;
-    address: any;
-    mobile: string;
-  };
-  customerAddress?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-    country?: string;
-  };
+  shippingName: string;
   items: OrderItem[];
   totalQuantity: number;
   totalAmount: number;
-  taxableValueTotal?: number;
-  cgstTotal?: number;
-  sgstTotal?: number;
-  igstTotal?: number;
-  taxAmount?: number;
-  discountAmount?: number;
-  finalAmount?: number;
-  sellerState?: string;
-  buyerState?: string;
-  gstType?: GstType;
-  notes?: string;
   status: 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  orderType: string;
   createdAt: string;
-  updatedAt: string;
-  createdBy: string | {
-    _id: string;
-    name: string;
-    email: string;
-    role: string;
-  };
   paymentMethod?: string;
-  modeSelection?: string;
-  mode?: string;
-  termsOfPayment?: string;
-  otherReference?: string;
-  termsOfDelivery1?: string;
-  termsOfDelivery2?: string;
+}
+
+interface UserNode {
+  id: string;
+  name: string;
+  role: string;
+  groupName: string;
+  email: string;
+  mobile: string;
+  totalOrders: number;
+  totalValue: string;
+  orders: Order[];
+  children: UserNode[];
 }
 
 const AdminOrderList = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { user, getOrders, updateOrderStatus } = useAuth();
-  
-  // Helper function to format address object to string
-  const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
-    if (!address) return 'Address not specified';
-    
-    const parts = [];
-    if (address.street) parts.push(address.street);
-    if (address.city) parts.push(address.city);
-    if (address.state) parts.push(address.state);
-    if (address.pincode) parts.push(address.pincode);
-    if (address.country) parts.push(address.country);
-    
-    return parts.length > 0 ? parts.join(', ') : 'Address not specified';
-  };
-
-const formatCurrency = (value?: number | string | null) => {
-  const numericValue =
-    typeof value === 'number' && isFinite(value)
-      ? value
-      : typeof value === 'string' && value.trim() !== ''
-        ? Number(value)
-        : 0;
-
-  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
-  return `₹${safeValue.toFixed(2)}`;
-};
-
-  // Helper function to get dealer name (customer)
-  const getDealerName = (order: Order) => {
-    if (typeof order.dealerId === 'object' && order.dealerId?.name) {
-      return order.dealerId.name;
-    }
-    return order.dealerName || order.customerName || 'Unknown Dealer';
-  };
-
-const getDealerEmail = (order: Order) => {
-  if (typeof order.dealerId === 'object' && order.dealerId?.email) {
-    return order.dealerId.email || 'N/A';
-  }
-  if (typeof order.customerId === 'object' && order.customerId?.email) {
-    return order.customerId.email || 'N/A';
-  }
-  return order.customerEmail || 'N/A';
-};
-
-const getDealerMobile = (order: Order) => {
-  if (typeof order.dealerId === 'object' && order.dealerId?.mobile) {
-    return order.dealerId.mobile || 'N/A';
-  }
-  if (typeof order.customerId === 'object' && order.customerId?.mobile) {
-    return order.customerId.mobile || 'N/A';
-  }
-  return order.customerMobile || 'N/A';
-};
-
-  // Helper function to get subdealer name (shipping address)
-  const getSubDealerName = (order: Order) => {
-    if (typeof order.subDealerId === 'object' && order.subDealerId?.name) {
-      return order.subDealerId.name;
-    }
-    return order.subDealerName || order.shippingAddress?.name || 'No Sub Dealer';
-  };
-
-const getSubDealerEmail = (order: Order) => {
-  if (typeof order.subDealerId === 'object' && order.subDealerId?.email) {
-    return order.subDealerId.email || 'N/A';
-  }
-  const shippingEmail =
-    typeof order.shippingAddress === 'object'
-      ? (order.shippingAddress as any)?.email
-      : undefined;
-  return shippingEmail || 'N/A';
-};
-
-const getSubDealerMobile = (order: Order) => {
-  if (typeof order.subDealerId === 'object' && order.subDealerId?.mobile) {
-    return order.subDealerId.mobile || 'N/A';
-  }
-  return order.shippingAddress?.mobile || 'N/A';
-};
-
-  // Helper function to get subdealer address
-  const getSubDealerAddress = (order: Order) => {
-    // If subDealerId is populated as an object with address, use it
-    if (typeof order.subDealerId === 'object' && order.subDealerId?.address) {
-      return formatAddress(order.subDealerId.address);
-    }
-    // Otherwise, use the shippingAddress field
-  const shippingAddress = order.shippingAddress?.address;
-  if (!shippingAddress) {
-    return 'Address not specified';
-  }
-  if (typeof shippingAddress === 'string') {
-    return shippingAddress;
-  }
-  return formatAddress(shippingAddress);
-  };
-
-  const mapPaymentMethodToLabel = (value?: string) => {
-    if (!value) return 'Not specified';
-    const normalized = value.toString().toLowerCase();
-    switch (normalized) {
-      case 'cash':
-        return 'Cash';
-      case 'cheque':
-      case 'check':
-        return 'Cheque';
-      case 'bank_transfer':
-      case 'bank transfer':
-      case 'bank-transfer':
-      case 'neft':
-      case 'rtgs':
-        return 'Bank Transfer';
-      case 'upi':
-        return 'UPI';
-      case 'card':
-    case 'credit card':
-    case 'debit card':
-      return 'Credit Card';
-      case 'credit':
-        return 'Credit';
-      default:
-        return value;
-    }
-  };
-
-  const formatPaymentMode = (order: Order) => {
-    if (order.mode) {
-      return order.mode;
-    }
-    if (order.modeSelection) {
-      return order.modeSelection;
-    }
-    if (order.paymentMethod) {
-      return mapPaymentMethodToLabel(order.paymentMethod);
-    }
-    return 'Not specified';
-  };
-  
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [expandedUsers, setExpandedUsers] = useState<{ [key: string]: boolean }>({});
+  const [selectedUser, setSelectedUser] = useState<UserNode | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered'>('all');
-  const isInitialMount = useRef(true);
+  const [showOrderDetails, setShowOrderDetails] = useState(false);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [filter]);
+  // --- Hierarchical User Structure with Orders ---
+  const USER_HIERARCHY: UserNode[] = [
+    {
+      id: 'admin-1',
+      name: 'Rajesh Kumar',
+      role: 'Regional Manager',
+      groupName: 'North Region',
+      email: 'rajesh@example.com',
+      mobile: '+91 98765 43210',
+      totalOrders: 12,
+      totalValue: '₹ 15,45,000',
+      orders: [
+        {
+          _id: 'ord-001',
+          orderNumber: 'ORD-2026-001',
+          customerName: 'Tech Solutions',
+          shippingName: 'Delhi Warehouse',
+          items: [
+            {
+              productId: 'p1',
+              productCode: 'SAM-LP-12',
+              productName: 'Samsung Laptop',
+              unit: 'pcs',
+              unitPrice: 55000,
+              quantity: 5,
+              totalAmount: 275000,
+            },
+          ],
+          totalQuantity: 5,
+          totalAmount: 275000,
+          status: 'approved',
+          createdAt: '2026-01-05T10:30:00Z',
+          paymentMethod: 'Credit',
+        },
+        {
+          _id: 'ord-002',
+          orderNumber: 'ORD-2026-002',
+          customerName: 'Digital World',
+          shippingName: 'Noida Store',
+          items: [
+            {
+              productId: 'p2',
+              productCode: 'LEN-TB-10',
+              productName: 'Lenovo Tablet',
+              unit: 'pcs',
+              unitPrice: 18000,
+              quantity: 10,
+              totalAmount: 180000,
+            },
+          ],
+          totalQuantity: 10,
+          totalAmount: 180000,
+          status: 'processing',
+          createdAt: '2026-01-04T14:20:00Z',
+          paymentMethod: 'Bank Transfer',
+        },
+      ],
+      children: [
+        {
+          id: 'dealer-1',
+          name: 'Amit Sharma',
+          role: 'Sales Manager',
+          groupName: 'Delhi Zone',
+          email: 'amit@example.com',
+          mobile: '+91 98765 11111',
+          totalOrders: 8,
+          totalValue: '₹ 8,50,000',
+          orders: [
+            {
+              _id: 'ord-003',
+              orderNumber: 'ORD-2026-003',
+              customerName: 'Metro Computers',
+              shippingName: 'Connaught Place',
+              items: [
+                {
+                  productId: 'p3',
+                  productCode: 'HP-LJ-P1',
+                  productName: 'HP Printer',
+                  unit: 'pcs',
+                  unitPrice: 25000,
+                  quantity: 8,
+                  totalAmount: 200000,
+                },
+              ],
+              totalQuantity: 8,
+              totalAmount: 200000,
+              status: 'shipped',
+              createdAt: '2026-01-03T09:15:00Z',
+              paymentMethod: 'Cash',
+            },
+          ],
+          children: [
+            {
+              id: 'subdealer-1',
+              name: 'Priya Singh',
+              role: 'Sales Executive',
+              groupName: 'Delhi East',
+              email: 'priya@example.com',
+              mobile: '+91 98765 22222',
+              totalOrders: 3,
+              totalValue: '₹ 2,80,000',
+              orders: [
+                {
+                  _id: 'ord-004',
+                  orderNumber: 'ORD-2026-004',
+                  customerName: 'Local Retailer',
+                  shippingName: 'Mayur Vihar',
+                  items: [
+                    {
+                      productId: 'p4',
+                      productCode: 'DELL-MON-24',
+                      productName: 'Dell Monitor 24"',
+                      unit: 'pcs',
+                      unitPrice: 15000,
+                      quantity: 6,
+                      totalAmount: 90000,
+                    },
+                  ],
+                  totalQuantity: 6,
+                  totalAmount: 90000,
+                  status: 'delivered',
+                  createdAt: '2026-01-02T11:00:00Z',
+                  paymentMethod: 'UPI',
+                },
+              ],
+              children: [],
+            },
+          ],
+        },
+        {
+          id: 'dealer-2',
+          name: 'Neha Gupta',
+          role: 'Sales Manager',
+          groupName: 'Noida Zone',
+          email: 'neha@example.com',
+          mobile: '+91 98765 33333',
+          totalOrders: 4,
+          totalValue: '₹ 3,20,000',
+          orders: [
+            {
+              _id: 'ord-005',
+              orderNumber: 'ORD-2026-005',
+              customerName: 'Tech Bazaar',
+              shippingName: 'Sector 18',
+              items: [
+                {
+                  productId: 'p5',
+                  productCode: 'LOGI-WM-X2',
+                  productName: 'Logitech Mouse',
+                  unit: 'pcs',
+                  unitPrice: 1500,
+                  quantity: 50,
+                  totalAmount: 75000,
+                },
+              ],
+              totalQuantity: 50,
+              totalAmount: 75000,
+              status: 'approved',
+              createdAt: '2026-01-01T16:45:00Z',
+              paymentMethod: 'Credit',
+            },
+          ],
+          children: [],
+        },
+      ],
+    },
+    {
+      id: 'admin-2',
+      name: 'Suresh Patel',
+      role: 'Regional Manager',
+      groupName: 'West Region',
+      email: 'suresh@example.com',
+      mobile: '+91 98765 44444',
+      totalOrders: 6,
+      totalValue: '₹ 9,75,000',
+      orders: [
+        {
+          _id: 'ord-006',
+          orderNumber: 'ORD-2026-006',
+          customerName: 'Mumbai Electronics',
+          shippingName: 'Andheri Store',
+          items: [
+            {
+              productId: 'p1',
+              productCode: 'SAM-LP-12',
+              productName: 'Samsung Laptop',
+              unit: 'pcs',
+              unitPrice: 55000,
+              quantity: 10,
+              totalAmount: 550000,
+            },
+          ],
+          totalQuantity: 10,
+          totalAmount: 550000,
+          status: 'processing',
+          createdAt: '2025-12-31T10:30:00Z',
+          paymentMethod: 'Bank Transfer',
+        },
+      ],
+      children: [
+        {
+          id: 'dealer-3',
+          name: 'Vikram Mehta',
+          role: 'Sales Manager',
+          groupName: 'Mumbai Zone',
+          email: 'vikram@example.com',
+          mobile: '+91 98765 55555',
+          totalOrders: 5,
+          totalValue: '₹ 6,25,000',
+          orders: [
+            {
+              _id: 'ord-007',
+              orderNumber: 'ORD-2026-007',
+              customerName: 'Pune Distributors',
+              shippingName: 'Pune Warehouse',
+              items: [
+                {
+                  productId: 'p2',
+                  productCode: 'LEN-TB-10',
+                  productName: 'Lenovo Tablet',
+                  unit: 'pcs',
+                  unitPrice: 18000,
+                  quantity: 15,
+                  totalAmount: 270000,
+                },
+              ],
+              totalQuantity: 15,
+              totalAmount: 270000,
+              status: 'shipped',
+              createdAt: '2025-12-30T14:00:00Z',
+              paymentMethod: 'Cheque',
+            },
+          ],
+          children: [],
+        },
+      ],
+    },
+  ];
 
-  // Listen for navigation params to refresh orders
-  useEffect(() => {
-    const params = route.params as any;
-    if (params?.refreshOrders) {
-      console.log('🔄 Refreshing orders from navigation...');
-      fetchOrders();
-    }
-  }, [route.params]);
-
-  // Refresh orders when screen comes into focus (e.g., when navigating back from edit)
-  // Skip on initial mount to avoid double loading
-  useFocusEffect(
-    useCallback(() => {
-      if (isInitialMount.current) {
-        isInitialMount.current = false;
-        return;
-      }
-      console.log('🔄 Screen focused, refreshing orders...');
-      fetchOrders();
-    }, [])
-  );
-
-  const fetchOrders = async () => {
-    try {
-      if (!user?._id) {
-        console.log('⏳ User not loaded yet, skipping fetch');
-        return;
-      }
-
-      setLoading(true);
-      
-      // Filter orders created by this admin (createdBy = admin._id)
-      const params: any = { 
-        page: 1, 
-        limit: 50,
-        createdBy: user._id
-      };
-      
-      if (filter !== 'all') {
-        params.status = filter;
-      }
-      
-      console.log('🔍 Fetching admin orders with params:', params);
-      const response = await getOrders(params);
-      console.log('📡 Orders response:', response);
-      
-      if (response?.success) {
-        // Double-check: filter to ensure createdBy matches
-        let filteredOrders = response.orders || [];
-        filteredOrders = filteredOrders.filter((order: Order) => {
-          const createdBy = typeof order.createdBy === 'object' ? order.createdBy._id : order.createdBy;
-          return createdBy === user._id;
-        });
-        setOrders(filteredOrders);
-        console.log('✅ Loaded orders created by admin:', filteredOrders.length);
-      }
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      Alert.alert('Error', 'Failed to load orders');
-    } finally {
-      setLoading(false);
-    }
+  const toggleUserExpansion = (userId: string) => {
+    setExpandedUsers(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }));
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchOrders();
-    setRefreshing(false);
+  const handleUserClick = (user: UserNode) => {
+    setSelectedUser(selectedUser?.id === user.id ? null : user);
   };
 
-  const handleOrderPress = (order: Order) => {
+  const handleOrderClick = (order: Order) => {
     setSelectedOrder(order);
-    setShowDetailsModal(true);
-  };
-
-  const handleApproveOrder = async (orderId: string) => {
-    try {
-      const response = await updateOrderStatus(orderId, { 
-        status: 'approved',
-        notes: 'Order approved by admin'
-      });
-      
-      if (response?.success) {
-        Alert.alert('Success', 'Order approved successfully!');
-        fetchOrders(); // Refresh the list
-        setShowDetailsModal(false);
-      } else {
-        Alert.alert('Error', response?.message || 'Failed to approve order');
-      }
-    } catch (error) {
-      console.error('Error approving order:', error);
-      Alert.alert('Error', 'Failed to approve order');
-    }
-  };
-
-  const handleEditOrder = (order: Order) => {
-    setShowDetailsModal(false);
-    (navigation as any).navigate('AdminEditOrder', { order });
+    setShowOrderDetails(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -405,838 +331,695 @@ const getSubDealerMobile = (order: Order) => {
     }
   };
 
-  const renderOrderItem = ({ item }: { item: Order }) => (
+  const renderOrderCard = (order: Order) => (
     <TouchableOpacity
+      key={order._id}
       style={styles.orderCard}
-      onPress={() => handleOrderPress(item)}
-      activeOpacity={0.7}
+      onPress={() => handleOrderClick(order)}
     >
-      <View style={styles.orderHeader}>
-        <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>#{item.orderNumber}</Text>
-          <Text style={styles.customerName}>Customer: {getDealerName(item)}</Text>
-          <Text style={styles.shippingAddress}>Shipping: {getSubDealerName(item)}</Text>
-        </View>
-        
-        <View style={styles.orderStatus}>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-            <Ionicons 
-              name={getStatusIcon(item.status) as any} 
-              size={16} 
-              color={getStatusColor(item.status)} 
-            />
-            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-              {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-            </Text>
-          </View>
-        </View>
-      </View>
-      
-      <View style={styles.orderDetails}>
-        <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Items:</Text>
-          <Text style={styles.orderDetailValue}>{item.items.length} products</Text>
-        </View>
-        <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Quantity:</Text>
-          <Text style={styles.orderDetailValue}>{item.totalQuantity}</Text>
-        </View>
-        <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Total:</Text>
-          <Text style={styles.orderDetailValue}>₹{item.totalAmount}</Text>
-        </View>
-        <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Payment:</Text>
-          <Text style={styles.orderDetailValue}>{formatPaymentMode(item)}</Text>
-        </View>
-        <View style={styles.orderDetailRow}>
-          <Text style={styles.orderDetailLabel}>Date:</Text>
-          <Text style={styles.orderDetailValue}>
-            {new Date(item.createdAt).toLocaleDateString()}
+      <View style={styles.orderCardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
+          <Text style={styles.orderDate}>
+            {new Date(order.createdAt).toLocaleDateString()}
           </Text>
         </View>
+        <View style={[
+          styles.orderStatusBadge,
+          { backgroundColor: getStatusColor(order.status) + '20' }
+        ]}>
+          <Ionicons
+            name={getStatusIcon(order.status) as any}
+            size={14}
+            color={getStatusColor(order.status)}
+          />
+          <Text style={[styles.orderStatusText, { color: getStatusColor(order.status) }]}>
+            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.orderDivider} />
+
+      <View style={styles.orderCardBody}>
+        <View style={styles.orderInfoRow}>
+          <Ionicons name="person-outline" size={14} color="#6B7280" />
+          <Text style={styles.orderInfoText}>{order.customerName}</Text>
+        </View>
+        <View style={styles.orderInfoRow}>
+          <Ionicons name="location-outline" size={14} color="#6B7280" />
+          <Text style={styles.orderInfoText}>{order.shippingName}</Text>
+        </View>
+        <View style={styles.orderInfoRow}>
+          <Ionicons name="cube-outline" size={14} color="#6B7280" />
+          <Text style={styles.orderInfoText}>{order.totalQuantity} items</Text>
+        </View>
+      </View>
+
+      <View style={styles.orderCardFooter}>
+        <Text style={styles.orderAmountLabel}>Total Amount</Text>
+        <Text style={styles.orderAmountValue}>₹ {order.totalAmount.toLocaleString()}</Text>
       </View>
     </TouchableOpacity>
   );
 
-  const renderOrderDetails = () => {
+  const renderUserNode = (user: UserNode, level: number = 0): React.ReactNode => {
+    const hasChildren = user.children && user.children.length > 0;
+    const isExpanded = expandedUsers[user.id];
+    const isSelected = selectedUser?.id === user.id;
+    const hasOrders = user.orders && user.orders.length > 0;
+
+    return (
+      <View key={user.id} style={[styles.userNodeContainer, { marginLeft: level * 20 }]}>
+        {/* User Card */}
+        <TouchableOpacity
+          style={[
+            styles.userCard,
+            isSelected && styles.userCardSelected,
+            level === 0 && styles.userCardTopLevel
+          ]}
+          onPress={() => handleUserClick(user)}
+        >
+          <View style={styles.userCardLeft}>
+            {/* Expand/Collapse Icon */}
+            {hasChildren && (
+              <TouchableOpacity
+                onPress={() => toggleUserExpansion(user.id)}
+                style={styles.expandButton}
+              >
+                <Ionicons
+                  name={isExpanded ? 'chevron-down' : 'chevron-forward'}
+                  size={20}
+                  color="#6B7280"
+                />
+              </TouchableOpacity>
+            )}
+
+            {/* User Avatar */}
+            <View style={[
+              styles.userAvatar,
+              { backgroundColor: level === 0 ? '#3B82F6' : level === 1 ? '#10B981' : '#F59E0B' }
+            ]}>
+              <Text style={styles.userAvatarText}>
+                {user.name.split(' ').map(n => n[0]).join('')}
+              </Text>
+            </View>
+
+            {/* User Info */}
+            <View style={styles.userInfo}>
+              <Text style={styles.userName}>{user.name}</Text>
+              <Text style={styles.userRole}>{user.role}</Text>
+              <View style={styles.groupBadge}>
+                <Ionicons name="people-outline" size={10} color="#6B7280" />
+                <Text style={styles.groupName}>{user.groupName}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Stats */}
+          <View style={styles.userCardRight}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{user.totalOrders}</Text>
+              <Text style={styles.statLabel}>Orders</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{user.totalValue}</Text>
+              <Text style={styles.statLabel}>Value</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Show Orders if User is Selected */}
+        {isSelected && hasOrders && (
+          <View style={styles.ordersContainer}>
+            <View style={styles.ordersHeader}>
+              <Ionicons name="document-text-outline" size={16} color="#6B7280" />
+              <Text style={styles.ordersHeaderText}>
+                Orders ({user.orders.length})
+              </Text>
+            </View>
+            {user.orders.map((order) => renderOrderCard(order))}
+          </View>
+        )}
+
+        {/* Render Child Users if Expanded */}
+        {isExpanded && hasChildren && (
+          <View style={styles.childrenContainer}>
+            {user.children.map((child) => renderUserNode(child, level + 1))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderOrderDetailsModal = () => {
     if (!selectedOrder) return null;
 
     return (
       <Modal
-        visible={showDetailsModal}
+        visible={showOrderDetails}
         animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setShowDetailsModal(false)}
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowOrderDetails(false)}
       >
-        <View style={styles.modalContainer}>
+        <SafeAreaView style={styles.modalContainer}>
+          {/* Modal Header */}
           <View style={styles.modalHeader}>
             <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowDetailsModal(false)}
+              onPress={() => setShowOrderDetails(false)}
+              style={styles.closeButton}
             >
-              <Ionicons name="close" size={24} color="#374151" />
+              <Ionicons name="close" size={26} color="#111827" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Order Details</Text>
-            <View style={styles.placeholder} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.modalTitle}>Order Details</Text>
+              <Text style={styles.modalSubtitle}>#{selectedOrder.orderNumber}</Text>
+            </View>
           </View>
 
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Order Header */}
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Order Information</Text>
+            {/* Order Info Card */}
+            <View style={styles.detailsCard}>
+              <Text style={styles.detailsCardTitle}>Order Information</Text>
               
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Order Number</Text>
-                <Text style={styles.detailsValue}>#{selectedOrder.orderNumber}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Order Number</Text>
+                <Text style={styles.detailValue}>#{selectedOrder.orderNumber}</Text>
               </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Status</Text>
-                <View style={[styles.detailsBadge, { backgroundColor: getStatusColor(selectedOrder.status) + '20' }]}>
-                  <Text style={[styles.detailsBadgeText, { color: getStatusColor(selectedOrder.status) }]}>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Status</Text>
+                <View style={[
+                  styles.detailStatusBadge,
+                  { backgroundColor: getStatusColor(selectedOrder.status) + '20' }
+                ]}>
+                  <Text style={[
+                    styles.detailStatusText,
+                    { color: getStatusColor(selectedOrder.status) }
+                  ]}>
                     {selectedOrder.status.charAt(0).toUpperCase() + selectedOrder.status.slice(1)}
                   </Text>
                 </View>
               </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Created Date</Text>
-                <Text style={styles.detailsValue}>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Date</Text>
+                <Text style={styles.detailValue}>
                   {new Date(selectedOrder.createdAt).toLocaleDateString()} {new Date(selectedOrder.createdAt).toLocaleTimeString()}
                 </Text>
               </View>
-            </View>
 
-            {/* Customer Information */}
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Customer Information (Dealer)</Text>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Name</Text>
-                <Text style={styles.detailsValue}>{getDealerName(selectedOrder)}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Email</Text>
-                <Text style={styles.detailsValue}>{getDealerEmail(selectedOrder)}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>{getDealerMobile(selectedOrder)}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Dealer Address</Text>
-                <Text style={styles.detailsValue}>
-                  {formatAddress(selectedOrder.customerAddress)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Shipping Information */}
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Shipping Information (Sub Dealer)</Text>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Sub Dealer Name</Text>
-                <Text style={styles.detailsValue}>{getSubDealerName(selectedOrder)}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Sub Dealer Email</Text>
-                <Text style={styles.detailsValue}>{getSubDealerEmail(selectedOrder)}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Sub Dealer Mobile</Text>
-                <Text style={styles.detailsValue}>{getSubDealerMobile(selectedOrder)}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Shipping Address</Text>
-                <Text style={styles.detailsValue}>{getSubDealerAddress(selectedOrder)}</Text>
-              </View>
-            </View>
-
-            {/* Payment & Delivery */}
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Payment & Delivery</Text>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Payment Mode</Text>
-                <Text style={styles.detailsValue}>{formatPaymentMode(selectedOrder)}</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Customer</Text>
+                <Text style={styles.detailValue}>{selectedOrder.customerName}</Text>
               </View>
 
-              {selectedOrder.termsOfPayment ? (
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Terms of Payment</Text>
-                  <Text style={styles.detailsValue}>{selectedOrder.termsOfPayment}</Text>
-                </View>
-              ) : null}
-
-              {selectedOrder.otherReference ? (
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Other Reference</Text>
-                  <Text style={styles.detailsValue}>{selectedOrder.otherReference}</Text>
-                </View>
-              ) : null}
-
-              {selectedOrder.termsOfDelivery1 ? (
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Terms of Delivery 1</Text>
-                  <Text style={styles.detailsValue}>{selectedOrder.termsOfDelivery1}</Text>
-                </View>
-              ) : null}
-
-              {selectedOrder.termsOfDelivery2 ? (
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Terms of Delivery 2</Text>
-                  <Text style={styles.detailsValue}>{selectedOrder.termsOfDelivery2}</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Order Items */}
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Order Items</Text>
-              
-              {selectedOrder.items.map((item, index) => {
-                const taxableValue =
-                  typeof item.taxableValue === 'number'
-                    ? item.taxableValue
-                    : item.unitPrice * item.quantity;
-                const totalTaxAmount =
-                  typeof item.totalTaxAmount === 'number'
-                    ? item.totalTaxAmount
-                    : (item.cgstAmount || 0) + (item.sgstAmount || 0) + (item.igstAmount || 0);
-
-                return (
-                  <View key={index} style={styles.itemContainer}>
-                    <View style={styles.itemRow}>
-                      <View style={styles.itemInfo}>
-                        <Text style={styles.itemName}>{item.productName}</Text>
-                        <Text style={styles.itemCode}>{item.productCode}</Text>
-                        {item.partNo ? (
-                          <Text style={styles.itemMeta}>Part No: {item.partNo}</Text>
-                        ) : null}
-                        {item.itemHsn ? (
-                          <Text style={styles.itemMeta}>HSN: {item.itemHsn}</Text>
-                        ) : null}
-                        {item.category ? (
-                          <Text style={styles.itemMeta}>Category: {item.category}</Text>
-                        ) : null}
-                        <Text style={styles.itemPrice}>
-                          {formatCurrency(item.unitPrice)} / {item.unit}
-                        </Text>
-                      </View>
-                      <View style={styles.itemQuantity}>
-                        <Text style={styles.itemQuantityText}>Qty: {item.quantity}</Text>
-                        <Text style={styles.itemTotal}>{formatCurrency(item.totalAmount)}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.itemTaxContainer}>
-                      <Text style={styles.itemTaxLine}>
-                        Taxable Value: {formatCurrency(taxableValue)}
-                      </Text>
-                      <Text style={styles.itemTaxLine}>
-                        GST Rate: {(item.gstRate ?? DEFAULT_GST_RATE)}%
-                      </Text>
-                      {item.cgstAmount ? (
-                        <Text style={styles.itemTaxLine}>
-                          CGST ({item.cgstRate ?? (item.gstRate ?? DEFAULT_GST_RATE) / 2}%):{' '}
-                          {formatCurrency(item.cgstAmount)}
-                        </Text>
-                      ) : null}
-                      {item.sgstAmount ? (
-                        <Text style={styles.itemTaxLine}>
-                          SGST/UTGST ({item.sgstRate ?? (item.gstRate ?? DEFAULT_GST_RATE) / 2}%):{' '}
-                          {formatCurrency(item.sgstAmount)}
-                        </Text>
-                      ) : null}
-                      {item.igstAmount ? (
-                        <Text style={styles.itemTaxLine}>
-                          IGST ({item.igstRate ?? item.gstRate ?? DEFAULT_GST_RATE}%):{' '}
-                          {formatCurrency(item.igstAmount)}
-                        </Text>
-                      ) : null}
-                      <Text style={styles.itemTaxTotal}>
-                        Total GST: {formatCurrency(totalTaxAmount)}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Order Summary */}
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Order Summary</Text>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Total Items</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.items.length}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Total Quantity</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.totalQuantity}</Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Total Amount</Text>
-                <Text style={[styles.detailsValue, styles.totalAmount]}>
-                  {formatCurrency(selectedOrder.totalAmount)}
-                </Text>
-              </View>
-              
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>GST Type</Text>
-                <Text style={styles.detailsValue}>
-                  {selectedOrder.gstType === 'INTRA_STATE'
-                    ? 'Intra-state (CGST + SGST/UTGST)'
-                    : selectedOrder.gstType === 'INTER_STATE'
-                      ? 'Inter-state (IGST)'
-                      : 'Not specified'}
-                </Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Shipping To</Text>
+                <Text style={styles.detailValue}>{selectedOrder.shippingName}</Text>
               </View>
 
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Seller State</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.sellerState || 'N/A'}</Text>
-              </View>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Buyer State</Text>
-                <Text style={styles.detailsValue}>{selectedOrder.buyerState || 'N/A'}</Text>
-              </View>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Taxable Value</Text>
-                <Text style={styles.detailsValue}>
-                  {formatCurrency(selectedOrder.taxableValueTotal ?? 0)}
-                </Text>
-              </View>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>CGST</Text>
-                <Text style={styles.detailsValue}>
-                  {formatCurrency(selectedOrder.cgstTotal ?? 0)}
-                </Text>
-              </View>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>SGST/UTGST</Text>
-                <Text style={styles.detailsValue}>
-                  {formatCurrency(selectedOrder.sgstTotal ?? 0)}
-                </Text>
-              </View>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>IGST</Text>
-                <Text style={styles.detailsValue}>
-                  {formatCurrency(selectedOrder.igstTotal ?? 0)}
-                </Text>
-              </View>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Total GST</Text>
-                <Text style={styles.detailsValue}>
-                  {formatCurrency(selectedOrder.taxAmount ?? 0)}
-                </Text>
-              </View>
-
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailsLabel}>Grand Total</Text>
-                <Text style={[styles.detailsValue, styles.totalAmount]}>
-                  {formatCurrency(selectedOrder.finalAmount ?? selectedOrder.totalAmount)}
-                </Text>
-              </View>
-
-              {selectedOrder.notes && (
-                <View style={styles.detailsRow}>
-                  <Text style={styles.detailsLabel}>Notes</Text>
-                  <Text style={styles.detailsValue}>{selectedOrder.notes}</Text>
+              {selectedOrder.paymentMethod && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Payment Method</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.paymentMethod}</Text>
                 </View>
               )}
             </View>
-          </ScrollView>
 
-          {/* Action Buttons */}
-          <View style={styles.modalActions}>
-            {selectedOrder.status === 'draft' && (
-              <>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.editButton]}
-                  onPress={() => handleEditOrder(selectedOrder)}
-                >
-                  <Ionicons name="create-outline" size={20} color="#3B82F6" />
-                  <Text style={styles.actionButtonText}>Edit</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.approveButton]}
-                  onPress={() => handleApproveOrder(selectedOrder._id)}
-                >
-                  <Ionicons name="checkmark-circle-outline" size={20} color="#10B981" />
-                  <Text style={styles.actionButtonText}>Approve</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
+            {/* Items Card */}
+            <View style={styles.detailsCard}>
+              <Text style={styles.detailsCardTitle}>Order Items</Text>
+              
+              {selectedOrder.items.map((item, index) => (
+                <View key={index} style={styles.itemCard}>
+                  <View style={styles.itemHeader}>
+                    <Text style={styles.itemName}>{item.productName}</Text>
+                    <Text style={styles.itemTotal}>₹ {item.totalAmount.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.itemCode}>{item.productCode}</Text>
+                  <View style={styles.itemFooter}>
+                    <Text style={styles.itemDetail}>
+                      ₹ {item.unitPrice.toLocaleString()} / {item.unit}
+                    </Text>
+                    <Text style={styles.itemDetail}>Qty: {item.quantity}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {/* Summary Card */}
+            <View style={styles.detailsCard}>
+              <Text style={styles.detailsCardTitle}>Order Summary</Text>
+              
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Total Items</Text>
+                <Text style={styles.detailValue}>{selectedOrder.items.length}</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Total Quantity</Text>
+                <Text style={styles.detailValue}>{selectedOrder.totalQuantity}</Text>
+              </View>
+
+              <View style={[styles.detailRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Total Amount</Text>
+                <Text style={styles.totalValue}>₹ {selectedOrder.totalAmount.toLocaleString()}</Text>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
     );
   };
 
-  const filteredOrders = orders.filter(order => {
-    if (filter === 'all') return true;
-    return order.status === filter;
-  });
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading orders...</Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Order Details Modal */}
+      {renderOrderDetailsModal()}
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#374151" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Orders</Text>
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={() => navigation.navigate('AdminCreateOrder' as never)}
-        >
-          <Ionicons name="add" size={24} color="#3B82F6" />
-        </TouchableOpacity>
+        <Text style={styles.title}>Orders Hierarchy</Text>
+        <Text style={styles.subtitle}>View orders by user hierarchy</Text>
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {[
-            { key: 'all', label: 'All' },
-            { key: 'draft', label: 'Draft' },
-            { key: 'approved', label: 'Approved' },
-            { key: 'processing', label: 'Processing' },
-            { key: 'shipped', label: 'Shipped' },
-            { key: 'delivered', label: 'Delivered' },
-          ].map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.filterTab, filter === tab.key && styles.activeFilterTab]}
-              onPress={() => setFilter(tab.key as any)}
-            >
-              <Text style={[styles.filterTabText, filter === tab.key && styles.activeFilterTabText]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* Summary Strip */}
+      <View style={styles.summaryStrip}>
+        <View style={styles.summaryItem}>
+          <Ionicons name="document-text" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>18</Text>
+          <Text style={styles.summaryLab}>Total Orders</Text>
+        </View>
+        <View style={[styles.summaryItem, styles.summaryDivider]}>
+          <Ionicons name="people" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>8</Text>
+          <Text style={styles.summaryLab}>Active Users</Text>
+        </View>
+        <View style={[styles.summaryItem, styles.summaryDivider]}>
+          <Ionicons name="cash" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>₹25.2L</Text>
+          <Text style={styles.summaryLab}>Total Value</Text>
+        </View>
       </View>
 
-      {/* Orders List */}
-      <FlatList
-        data={filteredOrders}
-        renderItem={renderOrderItem}
-        keyExtractor={(item) => item._id}
-        style={styles.ordersList}
-        contentContainerStyle={styles.ordersListContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="document-outline" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyStateTitle}>No Orders Found</Text>
-            <Text style={styles.emptyStateSubtitle}>
-              {filter === 'all' 
-                ? 'You haven\'t created any orders yet'
-                : `No ${filter} orders found`
-              }
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyStateButton}
-              onPress={() => navigation.navigate('AdminCreateOrder' as never)}
-            >
-              <Text style={styles.emptyStateButtonText}>Create Your First Order</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
-
-      {renderOrderDetails()}
-    </View>
+      {/* Hierarchical User List */}
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {USER_HIERARCHY.map((user) => renderUserNode(user, 0))}
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
+    padding: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
+  },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
+  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
+
+  summaryStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  createButton: {
-    padding: 8,
-  },
-  filterContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  filterTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-  },
-  activeFilterTab: {
+    justifyContent: 'space-around',
+    paddingVertical: 18,
     backgroundColor: '#3B82F6',
+    marginHorizontal: 15,
+    borderRadius: 14,
+    marginTop: 12,
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4
   },
-  filterTabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
+  summaryItem: { alignItems: 'center', flex: 1 },
+  summaryDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255, 255, 255, 0.3)'
   },
-  activeFilterTabText: {
-    color: '#FFFFFF',
+  summaryVal: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 4
   },
-  ordersList: {
-    flex: 1,
+  summaryLab: {
+    color: '#DBEAFE',
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: '600',
+    textTransform: 'uppercase'
   },
-  ordersListContent: {
-    padding: 16,
-  },
-  orderCard: {
-    backgroundColor: '#FFFFFF',
+
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 15, paddingBottom: 40 },
+
+  userNodeContainer: { marginBottom: 12 },
+  userCard: {
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2
+  },
+  userCardSelected: {
+    borderColor: '#3B82F6',
+    borderWidth: 2,
+    backgroundColor: '#EFF6FF'
+  },
+  userCardTopLevel: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#3B82F6'
+  },
+
+  userCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  expandButton: { marginRight: 8, padding: 4 },
+
+  userAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  userAvatarText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold'
+  },
+
+  userInfo: { flex: 1 },
+  userName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#111827'
+  },
+  userRole: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2
+  },
+  groupBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 6,
+    alignSelf: 'flex-start'
+  },
+  groupName: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginLeft: 4,
+    fontWeight: '600'
+  },
+
+  userCardRight: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  statItem: {
+    alignItems: 'center',
+    paddingHorizontal: 8
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#111827'
+  },
+  statLabel: {
+    fontSize: 9,
+    color: '#9CA3AF',
+    marginTop: 2,
+    textTransform: 'uppercase'
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#E5E7EB'
+  },
+
+  childrenContainer: { marginTop: 8 },
+
+  ordersContainer: {
+    marginTop: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB'
+  },
+  ordersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
+  },
+  ordersHeaderText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#374151',
+    marginLeft: 6
+  },
+
+  orderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1
   },
-  orderHeader: {
+  orderCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  orderInfo: {
-    flex: 1,
+    alignItems: 'center'
   },
   orderNumber: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  customerName: {
     fontSize: 14,
-    color: '#374151',
-    marginBottom: 2,
+    fontWeight: 'bold',
+    color: '#111827'
   },
-  shippingAddress: {
-    fontSize: 12,
-    color: '#6B7280',
+  orderDate: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2
   },
-  orderStatus: {
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
+  orderStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 6,
+    gap: 4
   },
-  statusText: {
+  orderStatusText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    textTransform: 'uppercase'
+  },
+
+  orderDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 10
+  },
+
+  orderCardBody: {
+    gap: 6,
+    marginBottom: 10
+  },
+  orderInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  orderInfoText: {
     fontSize: 12,
-    fontWeight: '500',
-    marginLeft: 4,
+    color: '#6B7280'
   },
-  orderDetails: {
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 12,
-  },
-  orderDetailRow: {
+
+  orderCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F9FAFB'
   },
-  orderDetailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
+  orderAmountLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    fontWeight: '600'
   },
-  orderDetailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
+  orderAmountValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111827'
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#374151',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  emptyStateButton: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  emptyStateButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+
+  // Modal Styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8F9FA'
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    padding: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E5E7EB'
   },
-  modalCloseButton: {
-    padding: 8,
-  },
+  closeButton: { padding: 4 },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827'
   },
-  placeholder: {
-    width: 40,
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2
   },
+
   modalContent: {
     flex: 1,
-    padding: 16,
+    padding: 15
   },
-  detailsSection: {
-    backgroundColor: '#FFFFFF',
+
+  detailsCard: {
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E5E7EB'
   },
-  detailsSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  detailsCardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 12,
     paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
   },
-  detailsRow: {
+
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#F3F4F6'
   },
-  detailsLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+  detailLabel: {
+    fontSize: 13,
     color: '#6B7280',
-    flex: 1,
+    fontWeight: '600',
+    flex: 1
   },
-  detailsValue: {
-    fontSize: 14,
-    fontWeight: '400',
+  detailValue: {
+    fontSize: 13,
     color: '#1F2937',
     flex: 2,
-    textAlign: 'right',
+    textAlign: 'right'
   },
-  detailsBadge: {
-    paddingHorizontal: 12,
+  detailStatusBadge: {
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-end',
+    borderRadius: 6
   },
-  detailsBadgeText: {
-    fontSize: 12,
-    fontWeight: '500',
+  detailStatusText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase'
   },
-  totalAmount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  itemContainer: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+
+  itemCard: {
+    backgroundColor: '#F9FAFB',
     borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 12,
-    overflow: 'hidden',
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB'
   },
-  itemRow: {
+  itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  itemInfo: {
-    flex: 1,
+    marginBottom: 4
   },
   itemName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 2,
+    flex: 1
+  },
+  itemTotal: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#10B981'
   },
   itemCode: {
     fontSize: 12,
     color: '#6B7280',
-    marginBottom: 2,
+    marginBottom: 6
   },
-  itemMeta: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginBottom: 2,
-  },
-  itemPrice: {
-    fontSize: 12,
-    color: '#059669',
-  },
-  itemQuantity: {
-    alignItems: 'flex-end',
-  },
-  itemQuantityText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  itemTotal: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  itemTaxContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#F9FAFB',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  itemTaxLine: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginBottom: 2,
-  },
-  itemTaxTotal: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#059669',
-    marginTop: 4,
-  },
-  modalActions: {
+  itemFooter: {
     flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 12,
+    justifyContent: 'space-between'
   },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
+  itemDetail: {
+    fontSize: 12,
+    color: '#4B5563'
   },
-  editButton: {
-    backgroundColor: '#EBF4FF',
-    borderWidth: 1,
-    borderColor: '#3B82F6',
+
+  totalRow: {
+    borderBottomWidth: 0,
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#E5E7EB'
   },
-  approveButton: {
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  actionButtonText: {
+  totalLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: '#111827'
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#10B981'
   },
 });
 

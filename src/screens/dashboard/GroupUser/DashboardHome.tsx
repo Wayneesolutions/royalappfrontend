@@ -284,8 +284,8 @@ const DashboardHome = () => {
         </View>
 
         {/* Quick Actions */}
-        {/* Quick Actions */}
         <View style={styles.actionsContainer}>
+          {/* Create Order */}
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('AdminCreateOrder' as never)}
@@ -294,22 +294,25 @@ const DashboardHome = () => {
             <Text style={styles.actionText}>Create Order</Text>
           </TouchableOpacity>
 
+          {/* My Orders */}
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('AdminOrderList' as never)}
           >
-            <Ionicons name="list" size={32} color="#10B981" />
+            <Ionicons name="clipboard-outline" size={32} color="#10B981" />
             <Text style={styles.actionText}>My Orders</Text>
           </TouchableOpacity>
 
+          {/* My Dealers */}
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('DealersListScreen' as never)}
           >
-            <Ionicons name="storefront" size={32} color="#F59E0B" />
+            <Ionicons name="storefront-outline" size={32} color="#F59E0B" />
             <Text style={styles.actionText}>My Dealers</Text>
           </TouchableOpacity>
 
+          {/* Group Hierarchy */}
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => setShowHierarchy(true)}
@@ -323,10 +326,38 @@ const DashboardHome = () => {
             style={styles.actionCard}
             onPress={() => navigation.navigate('LedgerReportScreen' as never)}
           >
-            <Ionicons name="document-text-outline" size={32} color="#EF4444" />
+            <Ionicons name="book-outline" size={32} color="#EF4444" />
             <Text style={styles.actionText}>Ledger Report</Text>
           </TouchableOpacity>
+
+          {/* Outstanding Report */}
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('OutstandingReportScreen' as never)}
+          >
+            <Ionicons name="alert-circle-outline" size={32} color="#F97316" />
+            <Text style={styles.actionText}>Outstanding Report</Text>
+          </TouchableOpacity>
+
+          {/* Pending Orders */}
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('PendingOrdersScreen' as never)}
+          >
+            <Ionicons name="time-outline" size={32} color="#0EA5E9" />
+            <Text style={styles.actionText}>Pending Orders</Text>
+          </TouchableOpacity>
+
+          {/* Sales & Stock */}
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('SalesStockScreen' as never)}
+          >
+            <Ionicons name="bar-chart-outline" size={32} color="#22C55E" />
+            <Text style={styles.actionText}>Sales & Stock</Text>
+          </TouchableOpacity>
         </View>
+
 
 
         {/* Quick Stats */}
