@@ -57,7 +57,7 @@ const DashboardHome = () => {
   const handleCompanySwitch = async (companyId: string) => {
     console.log('handleCompanySwitch called with companyId:', companyId);
     console.log('Current company ID:', currentCompany?._id);
-    
+
     if (!companyId) {
       console.error('Company ID is missing!');
       Alert.alert('Error', 'Company ID is missing. Please try again.');
@@ -90,7 +90,7 @@ const DashboardHome = () => {
       console.log('⚠️ No default company, skipping dealer fetch');
       return;
     }
-    
+
     try {
       setLoadingDealers(true);
       console.log('🔄 Fetching dealers for company:', user.defaultCompany._id);
@@ -156,7 +156,7 @@ const DashboardHome = () => {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Dashboard</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.companyButton}
             onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
             disabled={availableCompanies.length <= 1}
@@ -165,10 +165,10 @@ const DashboardHome = () => {
               {user?.defaultCompany?.companyName || 'Company'}
             </Text>
             {availableCompanies.length > 1 && (
-              <Ionicons 
-                name={showCompanyDropdown ? "chevron-up" : "chevron-down"} 
-                size={16} 
-                color="#E0E7FF" 
+              <Ionicons
+                name={showCompanyDropdown ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#E0E7FF"
               />
             )}
           </TouchableOpacity>
@@ -187,7 +187,7 @@ const DashboardHome = () => {
           animationType="fade"
           onRequestClose={() => setShowCompanyDropdown(false)}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.companyModalOverlay}
             activeOpacity={1}
             onPress={() => setShowCompanyDropdown(false)}
@@ -204,13 +204,13 @@ const DashboardHome = () => {
                   .filter((company: any) => {
                     // Filter out inactive company assignments
                     if (company.isActive === false) return false;
-                    
+
                     // Filter out companies where companyId doesn't exist (deleted company)
                     if (!company.companyId) return false;
-                    
+
                     // Filter out companies where the company itself is inactive
                     if (company.companyId?.isActive === false) return false;
-                    
+
                     return true;
                   })
                   .map((company: any) => {
@@ -234,10 +234,10 @@ const DashboardHome = () => {
                             styles.companyItemIcon,
                             isActive && styles.companyItemIconActive
                           ]}>
-                            <Ionicons 
-                              name="business" 
-                              size={20} 
-                              color={isActive ? '#3B82F6' : '#6B7280'} 
+                            <Ionicons
+                              name="business"
+                              size={20}
+                              color={isActive ? '#3B82F6' : '#6B7280'}
                             />
                           </View>
                           <View style={styles.companyItemInfo}>
@@ -284,6 +284,7 @@ const DashboardHome = () => {
         </View>
 
         {/* Quick Actions */}
+        {/* Quick Actions */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.actionCard}
@@ -292,6 +293,7 @@ const DashboardHome = () => {
             <Ionicons name="add-circle" size={32} color="#3B82F6" />
             <Text style={styles.actionText}>Create Order</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('AdminOrderList' as never)}
@@ -299,6 +301,7 @@ const DashboardHome = () => {
             <Ionicons name="list" size={32} color="#10B981" />
             <Text style={styles.actionText}>My Orders</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('DealersListScreen' as never)}
@@ -306,6 +309,7 @@ const DashboardHome = () => {
             <Ionicons name="storefront" size={32} color="#F59E0B" />
             <Text style={styles.actionText}>My Dealers</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => setShowHierarchy(true)}
@@ -313,7 +317,17 @@ const DashboardHome = () => {
             <Ionicons name="git-network-outline" size={32} color="#8B5CF6" />
             <Text style={styles.actionText}>Group Hierarchy</Text>
           </TouchableOpacity>
+
+          {/* Ledger Report */}
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('LedgerReportScreen' as never)}
+          >
+            <Ionicons name="document-text-outline" size={32} color="#EF4444" />
+            <Text style={styles.actionText}>Ledger Report</Text>
+          </TouchableOpacity>
         </View>
+
 
         {/* Quick Stats */}
         <View style={styles.statsContainer}>
