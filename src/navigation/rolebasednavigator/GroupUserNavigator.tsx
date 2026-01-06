@@ -17,6 +17,7 @@ import LedgerReportScreen from '../../screens/dashboard/GroupUser/LedgerReportSc
 import OutstandingReportScreen from '../../screens/dashboard/GroupUser/OutstandingReportScreen';
 import PendingOrdersScreen from '../../screens/dashboard/GroupUser/PendingOrdersScreen';
 import SalesStockScreen from '../../screens/dashboard/GroupUser/SalesStockScreen';
+import StockSummaryScreen from "../../screens/dashboard/GroupUser/StockSummaryScreen"
 
 // Common Screens
 import ProfileScreen from '../../screens/common/ProfileScreen';
@@ -44,6 +45,7 @@ export default function GroupUserNavigator() {
       <GroupUserStack.Screen name="OutstandingReportScreen" component={OutstandingReportScreen} />
       <GroupUserStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
       <GroupUserStack.Screen name="SalesStockScreen" component={SalesStockScreen} />
+      <GroupUserStack.Screen name="StockSummaryScreen" component={StockSummaryScreen} />
       {/* Common Screens */}
       <GroupUserStack.Screen name="ProfileScreen" component={ProfileScreen} />
       <GroupUserStack.Screen name="SettingsScreen" component={SettingsScreen} />

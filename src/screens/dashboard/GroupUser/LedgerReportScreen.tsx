@@ -246,12 +246,12 @@ const LedgerReportScreen = () => {
   const renderGroups = () => (
     <View style={styles.container}>
       <View style={styles.headerBlue}>
-        <Text style={styles.headerTitle}>All Groups</Text>
+        <Text style={styles.headerTitle}>All Ledgers</Text>
         <View style={styles.searchContainer}>
-          <Text style={{color: '#fff', marginRight: 10}}>🔍</Text>
+         
           <TextInput 
             style={styles.searchBar} 
-            placeholder="Search Groups..." 
+            placeholder="Search Ledgers..." 
             placeholderTextColor="#A0D8F1"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -281,7 +281,7 @@ const LedgerReportScreen = () => {
            <TouchableOpacity onPress={() => setCurrentView('hierarchy')}>
              <Text style={styles.whiteLink}>← {selectedLedger}</Text>
            </TouchableOpacity>
-           <Text style={styles.headerIcons}>🔍 ⓘ 🔗 ⋮</Text>
+          
         </View>
         <TouchableOpacity style={styles.dateSelectorBar} onPress={() => setDateModalVisible(true)}>
           <TouchableOpacity onPress={() => {}}>

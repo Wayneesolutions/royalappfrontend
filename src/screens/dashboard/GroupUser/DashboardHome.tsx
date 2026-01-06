@@ -354,8 +354,16 @@ const DashboardHome = () => {
             onPress={() => navigation.navigate('SalesStockScreen' as never)}
           >
             <Ionicons name="bar-chart-outline" size={32} color="#22C55E" />
-            <Text style={styles.actionText}>Sales & Stock</Text>
+            <Text style={styles.actionText}>Sales</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('StockSummaryScreen' as never)}
+          >
+            <Ionicons name="bar-chart-outline" size={32} color="#22C55E" />
+            <Text style={styles.actionText}>Stocks</Text>
+          </TouchableOpacity>
+          
         </View>
 
 

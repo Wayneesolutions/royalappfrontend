@@ -1,370 +1,374 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  SafeAreaView, TextInput, Modal, ScrollView
+  SafeAreaView, TextInput, Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-const StockSummaryScreen = () => {
+const SalesSummaryScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all'); // all, low, out, overstock, fast
-  const [showSalesRegister, setShowSalesRegister] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [viewAllTransactions, setViewAllTransactions] = useState(false);
 
-  // --- Enhanced Static Data with Stock Status ---
-  const STOCK_SUMMARY = [
+  // Sales Summary Data - Grouped by Stock/Product
+  const SALES_SUMMARY = [
     {
       id: '1',
-      productName: 'Samsung 12 Laptop',
+      stockName: 'Samsung 12 Laptop',
       sku: 'SAM-LP-12',
       category: 'Laptops',
-      inHand: 45,
-      subDealerSold: 120,
+      totalQuantitySold: 40,
+      totalAmount: 2200000,
+      averageRate: 55000,
+      transactionCount: 2,
       lastSaleDate: '02 Jan 26',
       trend: 'up',
-      status: 'Healthy'
+      status: 'Top Seller'
     },
     {
       id: '2',
-      productName: 'Lenovo Tab M10',
+      stockName: 'Lenovo Tab M10',
       sku: 'LEN-TB-M10',
       category: 'Tablets',
-      inHand: 5, // LOW STOCK
-      subDealerSold: 85,
+      totalQuantitySold: 55,
+      totalAmount: 770000,
+      averageRate: 14000,
+      transactionCount: 2,
       lastSaleDate: '04 Jan 26',
-      trend: 'down',
-      status: 'Low Stock'
+      trend: 'up',
+      status: 'Good'
     },
     {
       id: '3',
-      productName: 'HP LaserJet Pro',
+      stockName: 'HP LaserJet Pro',
       sku: 'HP-LJ-P11',
       category: 'Printers',
-      inHand: 0, // OUT OF STOCK
-      subDealerSold: 210,
+      totalQuantitySold: 90,
+      totalAmount: 2250000,
+      averageRate: 25000,
+      transactionCount: 2,
       lastSaleDate: '05 Jan 26',
       trend: 'up',
-      status: 'Out of Stock'
+      status: 'Top Seller'
     },
     {
       id: '4',
-      productName: 'Dell 24" Monitor',
+      stockName: 'Dell 24" Monitor',
       sku: 'DELL-MON-24',
       category: 'Peripherals',
-      inHand: 82,
-      subDealerSold: 15,
+      totalQuantitySold: 15,
+      totalAmount: 225000,
+      averageRate: 15000,
+      transactionCount: 2,
       lastSaleDate: '30 Dec 25',
       trend: 'down',
-      status: 'Overstocked'
+      status: 'Slow Mover'
     },
     {
       id: '5',
-      productName: 'Logitech Wireless Mouse',
+      stockName: 'Logitech Wireless Mouse',
       sku: 'LOGI-WM-X2',
       category: 'Accessories',
-      inHand: 150,
-      subDealerSold: 450,
+      totalQuantitySold: 220,
+      totalAmount: 330000,
+      averageRate: 1500,
+      transactionCount: 2,
       lastSaleDate: '05 Jan 26',
       trend: 'up',
-      status: 'Fast Mover'
+      status: 'Top Seller'
     }
   ];
 
-  // --- Sales Register Data for Each Product ---
-  const SALES_REGISTER = {
-    '1': [ // Samsung 12 Laptop
+  // Detailed Transaction Register
+  const TRANSACTION_REGISTER = {
+    '1': [
       {
-        id: 'SR-001',
+        id: 'TXN-001',
         date: '02 Jan 26',
         subDealer: 'Sharma Electronics',
         location: 'Delhi NCR',
         quantity: 15,
-        amount: '₹ 8,25,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2026-001'
+        rate: 55000,
+        amount: 825000,
+        status: 'Completed',
+        invoiceNo: 'INV-2026-001',
+        paymentMode: 'Credit'
       },
       {
-        id: 'SR-002',
+        id: 'TXN-002',
         date: '28 Dec 25',
         subDealer: 'Tech Hub Store',
         location: 'Noida',
         quantity: 25,
-        amount: '₹ 13,75,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-998'
-      },
-      {
-        id: 'SR-003',
-        date: '20 Dec 25',
-        subDealer: 'Digital World',
-        location: 'Gurgaon',
-        quantity: 30,
-        amount: '₹ 16,50,000',
-        status: 'In Transit',
-        invoiceNo: 'INV-2025-985'
-      },
-      {
-        id: 'SR-004',
-        date: '15 Dec 25',
-        subDealer: 'Metro Computers',
-        location: 'Faridabad',
-        quantity: 50,
-        amount: '₹ 27,50,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-972'
+        rate: 55000,
+        amount: 1375000,
+        status: 'Completed',
+        invoiceNo: 'INV-2025-998',
+        paymentMode: 'Cash'
       }
     ],
-    '2': [ // Lenovo Tab M10
+    '2': [
       {
-        id: 'SR-005',
+        id: 'TXN-005',
         date: '04 Jan 26',
         subDealer: 'Mobile Plus',
         location: 'Mumbai',
         quantity: 20,
-        amount: '₹ 2,80,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2026-005'
+        rate: 14000,
+        amount: 280000,
+        status: 'Completed',
+        invoiceNo: 'INV-2026-005',
+        paymentMode: 'Credit'
       },
       {
-        id: 'SR-006',
+        id: 'TXN-006',
         date: '30 Dec 25',
         subDealer: 'Gadget Zone',
         location: 'Pune',
         quantity: 35,
-        amount: '₹ 4,90,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-999'
-      },
-      {
-        id: 'SR-007',
-        date: '22 Dec 25',
-        subDealer: 'Tech Bazaar',
-        location: 'Nashik',
-        quantity: 30,
-        amount: '₹ 4,20,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-987'
+        rate: 14000,
+        amount: 490000,
+        status: 'Completed',
+        invoiceNo: 'INV-2025-999',
+        paymentMode: 'UPI'
       }
     ],
-    '3': [ // HP LaserJet Pro
+    '3': [
       {
-        id: 'SR-008',
+        id: 'TXN-008',
         date: '05 Jan 26',
         subDealer: 'Office Solutions',
         location: 'Bangalore',
         quantity: 50,
-        amount: '₹ 12,50,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2026-008'
+        rate: 25000,
+        amount: 1250000,
+        status: 'Completed',
+        invoiceNo: 'INV-2026-008',
+        paymentMode: 'Credit'
       },
       {
-        id: 'SR-009',
+        id: 'TXN-009',
         date: '03 Jan 26',
         subDealer: 'Print World',
         location: 'Mysore',
         quantity: 40,
-        amount: '₹ 10,00,000',
-        status: 'In Transit',
-        invoiceNo: 'INV-2026-003'
-      },
-      {
-        id: 'SR-010',
-        date: '28 Dec 25',
-        subDealer: 'Business Tech',
-        location: 'Hubli',
-        quantity: 60,
-        amount: '₹ 15,00,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-997'
-      },
-      {
-        id: 'SR-011',
-        date: '18 Dec 25',
-        subDealer: 'Corporate Supplies',
-        location: 'Mangalore',
-        quantity: 60,
-        amount: '₹ 15,00,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-980'
+        rate: 25000,
+        amount: 1000000,
+        status: 'Completed',
+        invoiceNo: 'INV-2026-003',
+        paymentMode: 'Cash'
       }
     ],
-    '4': [ // Dell 24" Monitor
+    '4': [
       {
-        id: 'SR-012',
+        id: 'TXN-012',
         date: '30 Dec 25',
         subDealer: 'Display Pro',
         location: 'Hyderabad',
         quantity: 10,
-        amount: '₹ 1,50,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-1000'
+        rate: 15000,
+        amount: 150000,
+        status: 'Completed',
+        invoiceNo: 'INV-2025-1000',
+        paymentMode: 'Credit'
       },
       {
-        id: 'SR-013',
+        id: 'TXN-013',
         date: '10 Dec 25',
         subDealer: 'Vision Electronics',
         location: 'Warangal',
         quantity: 5,
-        amount: '₹ 75,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-965'
+        rate: 15000,
+        amount: 75000,
+        status: 'Completed',
+        invoiceNo: 'INV-2025-965',
+        paymentMode: 'Cash'
       }
     ],
-    '5': [ // Logitech Wireless Mouse
+    '5': [
       {
-        id: 'SR-014',
+        id: 'TXN-014',
         date: '05 Jan 26',
         subDealer: 'Accessories Hub',
         location: 'Chennai',
         quantity: 100,
-        amount: '₹ 1,50,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2026-010'
+        rate: 1500,
+        amount: 150000,
+        status: 'Completed',
+        invoiceNo: 'INV-2026-010',
+        paymentMode: 'UPI'
       },
       {
-        id: 'SR-015',
+        id: 'TXN-015',
         date: '03 Jan 26',
         subDealer: 'PC Peripherals',
         location: 'Coimbatore',
         quantity: 120,
-        amount: '₹ 1,80,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2026-004'
-      },
-      {
-        id: 'SR-016',
-        date: '01 Jan 26',
-        subDealer: 'Gadget Store',
-        location: 'Madurai',
-        quantity: 80,
-        amount: '₹ 1,20,000',
-        status: 'In Transit',
-        invoiceNo: 'INV-2026-001'
-      },
-      {
-        id: 'SR-017',
-        date: '28 Dec 25',
-        subDealer: 'Tech Accessories',
-        location: 'Trichy',
-        quantity: 150,
-        amount: '₹ 2,25,000',
-        status: 'Delivered',
-        invoiceNo: 'INV-2025-996'
+        rate: 1500,
+        amount: 180000,
+        status: 'Completed',
+        invoiceNo: 'INV-2026-004',
+        paymentMode: 'Credit'
       }
     ]
   };
 
-  // Get status badge styling
+  // Format currency
+  const formatCurrency = (amount) => {
+    if (amount >= 10000000) {
+      return `₹ ${(amount / 10000000).toFixed(2)} Cr`;
+    }
+    if (amount >= 100000) {
+      return `₹ ${(amount / 100000).toFixed(2)} L`;
+    }
+    return `₹ ${(amount / 1000).toFixed(0)}K`;
+  };
+
   const getStatusStyle = (status) => {
     switch (status) {
-      case 'Out of Stock':
-        return { bg: '#FEE2E2', text: '#DC2626', icon: 'close-circle' };
-      case 'Low Stock':
-        return { bg: '#FEF3C7', text: '#D97706', icon: 'warning' };
-      case 'Overstocked':
-        return { bg: '#DBEAFE', text: '#2563EB', icon: 'archive' };
-      case 'Fast Mover':
-        return { bg: '#D1FAE5', text: '#059669', icon: 'flash' };
-      case 'Healthy':
+      case 'Top Seller':
+        return { bg: '#D1FAE5', text: '#059669', icon: 'trophy' };
+      case 'Slow Mover':
+        return { bg: '#FEF3C7', text: '#D97706', icon: 'alert-circle' };
+      case 'Good':
+        return { bg: '#DBEAFE', text: '#2563EB', icon: 'checkmark-circle' };
       default:
         return { bg: '#D1FAE5', text: '#10B981', icon: 'checkmark-circle' };
     }
   };
 
-  // Filter data based on search and status
-  const filteredData = STOCK_SUMMARY.filter(item => {
+  const filteredData = SALES_SUMMARY.filter(item => {
     const matchesSearch = 
-      item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchQuery.toLowerCase());
+      item.stockName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.sku.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesFilter = 
       filterStatus === 'all' ||
-      (filterStatus === 'low' && item.status === 'Low Stock') ||
-      (filterStatus === 'out' && item.status === 'Out of Stock') ||
-      (filterStatus === 'overstock' && item.status === 'Overstocked') ||
-      (filterStatus === 'fast' && item.status === 'Fast Mover');
+      (filterStatus === 'top' && item.status === 'Top Seller') ||
+      (filterStatus === 'slow' && item.status === 'Slow Mover') ||
+      (filterStatus === 'good' && item.status === 'Good');
 
     return matchesSearch && matchesFilter;
   });
 
-  // Calculate summary stats
-  const totalSales = STOCK_SUMMARY.reduce((sum, item) => sum + item.subDealerSold, 0);
-  const totalStock = STOCK_SUMMARY.reduce((sum, item) => sum + item.inHand, 0);
-  const lowStockCount = STOCK_SUMMARY.filter(item => item.status === 'Low Stock' || item.status === 'Out of Stock').length;
+  const totalSales = SALES_SUMMARY.reduce((sum, item) => sum + item.totalQuantitySold, 0);
+  const totalRevenue = SALES_SUMMARY.reduce((sum, item) => sum + item.totalAmount, 0);
+  const totalTransactions = SALES_SUMMARY.reduce((sum, item) => sum + item.transactionCount, 0);
 
-  // Open sales register modal
-  const openSalesRegister = (product) => {
-    setSelectedProduct(product);
-    setShowSalesRegister(true);
+  const openTransactionDetails = (stock) => {
+    setSelectedStock(stock);
+    setViewAllTransactions(false);
+    setShowTransactionDetails(true);
   };
 
-  // Close sales register modal
-  const closeSalesRegister = () => {
-    setShowSalesRegister(false);
-    setSelectedProduct(null);
+  const openAllTransactions = () => {
+    setSelectedStock(null);
+    setViewAllTransactions(true);
+    setShowTransactionDetails(true);
   };
 
-  // Render Sales Register Modal
-  const renderSalesRegisterModal = () => {
-    if (!selectedProduct) return null;
+  // Get all transaction data combined with stock info
+  const getAllTransactionsData = () => {
+    const allTransactions = [];
+    Object.keys(TRANSACTION_REGISTER).forEach(stockId => {
+      const stock = SALES_SUMMARY.find(s => s.id === stockId);
+      TRANSACTION_REGISTER[stockId].forEach(txn => {
+        allTransactions.push({
+          ...txn,
+          stockId,
+          stockName: stock?.stockName || 'Unknown',
+          sku: stock?.sku || 'N/A'
+        });
+      });
+    });
+    // Sort by date (most recent first)
+    return allTransactions.sort((a, b) => {
+      const dateA = new Date(a.date.replace(/(\d{2}) (\w+) (\d{2})/, '20$3-$2-$1'));
+      const dateB = new Date(b.date.replace(/(\d{2}) (\w+) (\d{2})/, '20$3-$2-$1'));
+      return dateB - dateA;
+    });
+  };
 
-    const salesData = SALES_REGISTER[selectedProduct.id] || [];
-    const totalQty = salesData.reduce((sum, sale) => sum + sale.quantity, 0);
-    const totalAmount = salesData.reduce((sum, sale) => {
-      const amount = parseFloat(sale.amount.replace(/[₹,]/g, ''));
-      return sum + amount;
-    }, 0);
+  const renderTransactionModal = () => {
+    const isAllTransactions = viewAllTransactions;
+    const transactionData = isAllTransactions 
+      ? getAllTransactionsData() 
+      : (selectedStock ? TRANSACTION_REGISTER[selectedStock.id] || [] : []);
+    
+    const totalQty = transactionData.reduce((sum, txn) => sum + txn.quantity, 0);
+    const totalAmt = transactionData.reduce((sum, txn) => sum + txn.amount, 0);
+    const totalTxns = transactionData.length;
 
-    const renderSaleItem = ({ item }) => (
-      <View style={styles.saleCard}>
-        <View style={styles.saleCardHeader}>
+    const renderTransactionItem = ({ item }) => (
+      <View style={styles.transactionCard}>
+        <View style={styles.transactionCardHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.saleInvoice}>#{item.invoiceNo}</Text>
-            <Text style={styles.saleDate}>{item.date}</Text>
+            <Text style={styles.transactionInvoice}>#{item.invoiceNo}</Text>
+            <Text style={styles.transactionDate}>{item.date}</Text>
           </View>
           <View style={[
-            styles.saleStatusBadge,
-            { backgroundColor: item.status === 'Delivered' ? '#D1FAE5' : '#DBEAFE' }
+            styles.transactionStatusBadge,
+            { backgroundColor: item.status === 'Completed' ? '#D1FAE5' : '#DBEAFE' }
           ]}>
-            <Ionicons 
-              name={item.status === 'Delivered' ? 'checkmark-circle' : 'time'} 
-              size={12} 
-              color={item.status === 'Delivered' ? '#059669' : '#2563EB'} 
-            />
             <Text style={[
-              styles.saleStatusText,
-              { color: item.status === 'Delivered' ? '#059669' : '#2563EB' }
+              styles.transactionStatusText,
+              { color: item.status === 'Completed' ? '#059669' : '#2563EB' }
             ]}>
               {item.status}
             </Text>
           </View>
         </View>
 
-        <View style={styles.saleDivider} />
+        <View style={styles.transactionDivider} />
 
-        <View style={styles.saleDetails}>
-          <View style={styles.saleDetailRow}>
-            <Ionicons name="business-outline" size={14} color="#6B7280" />
-            <Text style={styles.saleDetailLabel}>Sub-Dealer:</Text>
-            <Text style={styles.saleDetailValue}>{item.subDealer}</Text>
+        {isAllTransactions && (
+          <View style={styles.transactionStockInfo}>
+            <Ionicons name="cube-outline" size={14} color="#3B82F6" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.transactionStockName}>{item.stockName}</Text>
+              <Text style={styles.transactionStockSku}>SKU: {item.sku}</Text>
+            </View>
           </View>
-          <View style={styles.saleDetailRow}>
+        )}
+
+        <View style={styles.transactionDetails}>
+          <View style={styles.transactionDetailRow}>
+            <Ionicons name="business-outline" size={14} color="#6B7280" />
+            <Text style={styles.transactionDetailLabel}>Sub-Dealer:</Text>
+            <Text style={styles.transactionDetailValue}>{item.subDealer}</Text>
+          </View>
+          <View style={styles.transactionDetailRow}>
             <Ionicons name="location-outline" size={14} color="#6B7280" />
-            <Text style={styles.saleDetailLabel}>Location:</Text>
-            <Text style={styles.saleDetailValue}>{item.location}</Text>
+            <Text style={styles.transactionDetailLabel}>Location:</Text>
+            <Text style={styles.transactionDetailValue}>{item.location}</Text>
+          </View>
+          <View style={styles.transactionDetailRow}>
+            <Ionicons name="card-outline" size={14} color="#6B7280" />
+            <Text style={styles.transactionDetailLabel}>Payment:</Text>
+            <Text style={styles.transactionDetailValue}>{item.paymentMode}</Text>
           </View>
         </View>
 
-        <View style={styles.saleFooter}>
-          <View style={styles.saleFooterItem}>
-            <Text style={styles.saleFooterLabel}>Quantity</Text>
-            <Text style={styles.saleFooterValue}>{item.quantity} units</Text>
+        <View style={styles.transactionFooter}>
+          <View style={styles.transactionFooterItem}>
+            <Text style={styles.transactionFooterLabel}>Quantity</Text>
+            <Text style={styles.transactionFooterValue}>{item.quantity} units</Text>
           </View>
-          <View style={styles.saleFooterDivider} />
-          <View style={styles.saleFooterItem}>
-            <Text style={styles.saleFooterLabel}>Amount</Text>
-            <Text style={[styles.saleFooterValue, { color: '#10B981' }]}>{item.amount}</Text>
+          <View style={styles.transactionFooterDivider} />
+          <View style={styles.transactionFooterItem}>
+            <Text style={styles.transactionFooterLabel}>Rate</Text>
+            <Text style={[styles.transactionFooterValue, { color: '#3B82F6' }]}>
+              ₹ {item.rate.toLocaleString('en-IN')}
+            </Text>
+          </View>
+          <View style={styles.transactionFooterDivider} />
+          <View style={styles.transactionFooterItem}>
+            <Text style={styles.transactionFooterLabel}>Amount</Text>
+            <Text style={[styles.transactionFooterValue, { color: '#10B981' }]}>
+              {formatCurrency(item.amount)}
+            </Text>
           </View>
         </View>
       </View>
@@ -372,81 +376,59 @@ const StockSummaryScreen = () => {
 
     return (
       <Modal
-        visible={showSalesRegister}
+        visible={showTransactionDetails}
         animationType="slide"
         presentationStyle="fullScreen"
-        onRequestClose={closeSalesRegister}
+        onRequestClose={() => setShowTransactionDetails(false)}
       >
         <SafeAreaView style={styles.modalContainer}>
-          {/* Modal Header */}
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={closeSalesRegister} style={styles.closeButton}>
+            <TouchableOpacity onPress={() => setShowTransactionDetails(false)} style={styles.closeButton}>
               <Ionicons name="close" size={26} color="#111827" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.modalTitle}>Sales Register</Text>
-              <Text style={styles.modalSubtitle}>{selectedProduct.productName}</Text>
+              <Text style={styles.modalTitle}>Transaction Details</Text>
+              <Text style={styles.modalSubtitle}>
+                {isAllTransactions ? 'All Products' : selectedStock?.stockName}
+              </Text>
             </View>
+            {!isAllTransactions && (
+              <TouchableOpacity 
+                style={styles.viewAllButton}
+                onPress={openAllTransactions}
+              >
+                <Ionicons name="grid-outline" size={18} color="#0088CC" />
+                <Text style={styles.viewAllButtonText}>View All</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Product Info Card */}
           <View style={styles.modalProductCard}>
-            <View style={styles.modalProductInfo}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalProductName}>{selectedProduct.productName}</Text>
-                <Text style={styles.modalProductSKU}>SKU: {selectedProduct.sku}</Text>
-                <View style={styles.modalCategoryBadge}>
-                  <Ionicons name="pricetag-outline" size={10} color="#6B7280" />
-                  <Text style={styles.modalCategoryText}>{selectedProduct.category}</Text>
-                </View>
-              </View>
-              <View style={[
-                styles.modalStatusBadge,
-                { backgroundColor: getStatusStyle(selectedProduct.status).bg }
-              ]}>
-                <Text style={[
-                  styles.modalStatusText,
-                  { color: getStatusStyle(selectedProduct.status).text }
-                ]}>
-                  {selectedProduct.status}
-                </Text>
-              </View>
-            </View>
-
-            {/* Summary Stats */}
             <View style={styles.modalStatsRow}>
               <View style={styles.modalStatBox}>
                 <Text style={styles.modalStatLabel}>Total Transactions</Text>
-                <Text style={styles.modalStatValue}>{salesData.length}</Text>
+                <Text style={styles.modalStatValue}>{totalTxns}</Text>
               </View>
               <View style={styles.modalStatBox}>
-                <Text style={styles.modalStatLabel}>Total Quantity Sold</Text>
+                <Text style={styles.modalStatLabel}>Total Quantity</Text>
                 <Text style={[styles.modalStatValue, { color: '#3B82F6' }]}>{totalQty}</Text>
               </View>
               <View style={styles.modalStatBox}>
-                <Text style={styles.modalStatLabel}>Total Value</Text>
-                <Text style={[styles.modalStatValue, { color: '#10B981' }]}>
-                  ₹ {(totalAmount / 100000).toFixed(2)}L
-                </Text>
+                <Text style={styles.modalStatLabel}>Total Amount</Text>
+                <Text style={[styles.modalStatValue, { color: '#10B981' }]}>{formatCurrency(totalAmt)}</Text>
               </View>
             </View>
           </View>
 
-          {/* Sales List */}
-          <View style={styles.modalListHeader}>
-            <Ionicons name="receipt-outline" size={18} color="#6B7280" />
-            <Text style={styles.modalListTitle}>Transaction History ({salesData.length})</Text>
-          </View>
-
           <FlatList
-            data={salesData}
+            data={transactionData}
             keyExtractor={item => item.id}
-            renderItem={renderSaleItem}
+            renderItem={renderTransactionItem}
             contentContainerStyle={styles.modalListContent}
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name="document-outline" size={60} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No sales records found</Text>
+              <View style={styles.emptyState}>
+                <Ionicons name="document-text-outline" size={48} color="#D1D5DB" />
+                <Text style={styles.emptyStateText}>No transaction records found</Text>
               </View>
             }
           />
@@ -455,28 +437,20 @@ const StockSummaryScreen = () => {
     );
   };
 
-  const renderStockItem = ({ item }) => {
+  const renderSalesItem = ({ item }) => {
     const statusStyle = getStatusStyle(item.status);
 
     return (
-      <View style={styles.stockCard}>
-        {/* Product Header */}
+      <View style={styles.salesCard}>
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
-            <View style={styles.productHeader}>
-              <Text style={styles.productName}>{item.productName}</Text>
-              {item.status === 'Fast Mover' && (
-                <Ionicons name="flame" size={16} color="#F59E0B" style={{ marginLeft: 6 }} />
-              )}
-            </View>
+            <Text style={styles.stockName}>{item.stockName}</Text>
             <Text style={styles.skuText}>SKU: {item.sku}</Text>
             <View style={styles.categoryBadge}>
-              <Ionicons name="pricetag-outline" size={10} color="#6B7280" />
               <Text style={styles.categoryText}>{item.category}</Text>
             </View>
           </View>
 
-          {/* Status Badge */}
           <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
             <Ionicons name={statusStyle.icon} size={14} color={statusStyle.text} />
             <Text style={[styles.statusText, { color: statusStyle.text }]}>
@@ -485,42 +459,43 @@ const StockSummaryScreen = () => {
           </View>
         </View>
 
-        {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statBox}>
-            <View style={styles.statIconRow}>
-              <Ionicons name="cube-outline" size={16} color="#6B7280" />
-              <Text style={styles.statLabel}>IN HAND</Text>
-            </View>
-            <Text style={[
-              styles.statValue,
-              item.inHand === 0 && { color: '#DC2626' },
-              item.inHand > 0 && item.inHand <= 10 && { color: '#F59E0B' }
-            ]}>
-              {item.inHand}
-            </Text>
+            <Text style={styles.statLabel}>QUANTITY SOLD</Text>
+            <Text style={styles.statValue}>{item.totalQuantitySold}</Text>
+            <Text style={styles.statUnit}>units</Text>
           </View>
 
           <View style={[styles.statBox, styles.borderLeft]}>
-            <View style={styles.statIconRow}>
-              <Ionicons name="people-outline" size={16} color="#3B82F6" />
-              <Text style={styles.statLabel}>SUB-DEALER SOLD</Text>
-            </View>
+            <Text style={styles.statLabel}>AVG RATE</Text>
             <Text style={[styles.statValue, { color: '#3B82F6' }]}>
-              {item.subDealerSold}
+              {formatCurrency(item.averageRate)}
             </Text>
+            <Text style={styles.statUnit}>per unit</Text>
           </View>
 
           <View style={[styles.statBox, styles.borderLeft]}>
-            <View style={styles.statIconRow}>
-              <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-              <Text style={styles.statLabel}>LAST MOVEMENT</Text>
-            </View>
-            <Text style={styles.dateValue}>{item.lastSaleDate}</Text>
+            <Text style={styles.statLabel}>TOTAL AMOUNT</Text>
+            <Text style={[styles.statValue, { color: '#10B981' }]}>
+              {formatCurrency(item.totalAmount)}
+            </Text>
+            <Text style={styles.statUnit}>revenue</Text>
           </View>
         </View>
 
-        {/* Trend Indicator */}
+        <View style={styles.bottomRow}>
+          <View style={styles.metaInfo}>
+            <View style={styles.metaItem}>
+              <Ionicons name="receipt-outline" size={14} color="#6B7280" />
+              <Text style={styles.metaText}>{item.transactionCount} transactions</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+              <Text style={styles.metaText}>Last: {item.lastSaleDate}</Text>
+            </View>
+          </View>
+        </View>
+
         <View style={styles.trendRow}>
           <View style={styles.trendIndicator}>
             <Ionicons 
@@ -537,10 +512,10 @@ const StockSummaryScreen = () => {
           </View>
 
           <TouchableOpacity 
-            style={styles.viewRegisterBtn}
-            onPress={() => openSalesRegister(item)}
+            style={styles.viewDetailsBtn}
+            onPress={() => openTransactionDetails(item)}
           >
-            <Text style={styles.viewRegisterText}>VIEW SALES REGISTER</Text>
+            <Text style={styles.viewDetailsText}>VIEW DETAILS</Text>
             <Ionicons name="chevron-forward" size={14} color="#0088CC" />
           </TouchableOpacity>
         </View>
@@ -550,108 +525,95 @@ const StockSummaryScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Sales Register Modal */}
-      {renderSalesRegisterModal()}
+      {renderTransactionModal()}
 
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Stock Summary</Text>
-        <Text style={styles.headerSub}>Sub-dealer Sales Movement & Inventory Status</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Sales Summary</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={openAllTransactions}
+        >
+          <Ionicons name="receipt-outline" size={20} color="#0088CC" />
+          <Text style={styles.headerButtonText}>All Transactions</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchSection}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={18} color="#9CA3AF" />
           <TextInput 
-            placeholder="Search product, SKU or category..." 
+            placeholder="Search stock or SKU..." 
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#9CA3AF"
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
         </View>
       </View>
 
-      {/* Quick Summary Strip */}
       <View style={styles.summaryStrip}>
         <View style={styles.summaryItem}>
-          <Ionicons name="trending-up" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>{totalSales}</Text>
-          <Text style={styles.summaryLab}>Total Sales</Text>
-        </View>
-        <View style={[styles.summaryItem, styles.summaryDivider]}>
           <Ionicons name="cube" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>{totalStock}</Text>
-          <Text style={styles.summaryLab}>Total Stock</Text>
+          <Text style={styles.summaryVal}>{totalSales}</Text>
+          <Text style={styles.summaryLab}>Units Sold</Text>
         </View>
         <View style={[styles.summaryItem, styles.summaryDivider]}>
-          <Ionicons name="alert-circle" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>{lowStockCount}</Text>
-          <Text style={styles.summaryLab}>Alerts</Text>
+          <Ionicons name="trending-up" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>{formatCurrency(totalRevenue)}</Text>
+          <Text style={styles.summaryLab}>Total Revenue</Text>
+        </View>
+        <View style={[styles.summaryItem, styles.summaryDivider]}>
+          <Ionicons name="receipt" size={20} color="#fff" />
+          <Text style={styles.summaryVal}>{totalTransactions}</Text>
+          <Text style={styles.summaryLab}>Transactions</Text>
         </View>
       </View>
 
-      {/* Filter Pills */}
       <View style={styles.filterContainer}>
         <TouchableOpacity 
           style={[styles.filterPill, filterStatus === 'all' && styles.filterPillActive]}
           onPress={() => setFilterStatus('all')}
         >
           <Text style={[styles.filterPillText, filterStatus === 'all' && styles.filterPillTextActive]}>
-            All Products
+            All
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.filterPill, filterStatus === 'low' && styles.filterPillActive]}
-          onPress={() => setFilterStatus('low')}
+          style={[styles.filterPill, filterStatus === 'top' && styles.filterPillActive]}
+          onPress={() => setFilterStatus('top')}
         >
-          <Ionicons name="warning" size={12} color={filterStatus === 'low' ? '#fff' : '#D97706'} />
-          <Text style={[styles.filterPillText, filterStatus === 'low' && styles.filterPillTextActive]}>
-            Low Stock
+          <Text style={[styles.filterPillText, filterStatus === 'top' && styles.filterPillTextActive]}>
+            Top Seller
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.filterPill, filterStatus === 'out' && styles.filterPillActive]}
-          onPress={() => setFilterStatus('out')}
+          style={[styles.filterPill, filterStatus === 'good' && styles.filterPillActive]}
+          onPress={() => setFilterStatus('good')}
         >
-          <Ionicons name="close-circle" size={12} color={filterStatus === 'out' ? '#fff' : '#DC2626'} />
-          <Text style={[styles.filterPillText, filterStatus === 'out' && styles.filterPillTextActive]}>
-            Out of Stock
+          <Text style={[styles.filterPillText, filterStatus === 'good' && styles.filterPillTextActive]}>
+            Good
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.filterPill, filterStatus === 'fast' && styles.filterPillActive]}
-          onPress={() => setFilterStatus('fast')}
+          style={[styles.filterPill, filterStatus === 'slow' && styles.filterPillActive]}
+          onPress={() => setFilterStatus('slow')}
         >
-          <Ionicons name="flash" size={12} color={filterStatus === 'fast' ? '#fff' : '#059669'} />
-          <Text style={[styles.filterPillText, filterStatus === 'fast' && styles.filterPillTextActive]}>
-            Fast Mover
+          <Text style={[styles.filterPillText, filterStatus === 'slow' && styles.filterPillTextActive]}>
+            Slow Mover
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Product List */}
       <FlatList
         data={filteredData}
         keyExtractor={item => item.id}
-        renderItem={renderStockItem}
+        renderItem={renderSalesItem}
         contentContainerStyle={styles.listPadding}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="search-outline" size={60} color="#D1D5DB" />
-            <Text style={styles.emptyText}>No products found</Text>
-            <Text style={styles.emptySubText}>Try adjusting your search or filters</Text>
-          </View>
-        }
       />
     </SafeAreaView>
   );
@@ -660,14 +622,25 @@ const StockSummaryScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
   header: { 
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 20, 
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB'
   },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  headerSub: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-
+  headerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6
+  },
+  headerButtonText: { fontSize: 13, fontWeight: '600', color: '#0088CC' },
+  
   searchSection: { paddingHorizontal: 15, paddingVertical: 12, backgroundColor: '#fff' },
   searchBar: { 
     flexDirection: 'row', 
@@ -677,104 +650,51 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     height: 48
   },
-  searchInput: { 
-    flex: 1, 
-    marginLeft: 10, 
-    fontSize: 14,
-    color: '#111827'
-  },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 14, color: '#111827' },
 
   summaryStrip: { 
     flexDirection: 'row', 
-    justifyContent: 'space-around', 
     paddingVertical: 18, 
-    backgroundColor: '#0088CC',
+    backgroundColor: '#10B981',
     marginHorizontal: 15,
     borderRadius: 14,
-    marginTop: 12,
-    shadowColor: '#0088CC',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4
+    marginTop: 12
   },
   summaryItem: { alignItems: 'center', flex: 1 },
-  summaryDivider: {
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255, 255, 255, 0.3)'
-  },
+  summaryDivider: { borderLeftWidth: 1, borderLeftColor: 'rgba(255, 255, 255, 0.3)' },
   summaryVal: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 4 },
-  summaryLab: { 
-    color: '#E0F2FE', 
-    fontSize: 10, 
-    marginTop: 2, 
-    fontWeight: '600',
-    textTransform: 'uppercase'
-  },
+  summaryLab: { color: '#E0F2FE', fontSize: 10, marginTop: 2, fontWeight: '600' },
 
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    gap: 8,
-    flexWrap: 'wrap'
-  },
+  filterContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingVertical: 12, gap: 8 },
   filterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    gap: 4
+    backgroundColor: '#F3F4F6'
   },
-  filterPillActive: {
-    backgroundColor: '#0088CC'
-  },
-  filterPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280'
-  },
-  filterPillTextActive: {
-    color: '#fff'
-  },
+  filterPillActive: { backgroundColor: '#10B981' },
+  filterPillText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
+  filterPillTextActive: { color: '#fff' },
 
   listPadding: { padding: 15, paddingBottom: 50 },
-  stockCard: { 
+  salesCard: { 
     backgroundColor: '#fff', 
     borderRadius: 14, 
     marginBottom: 16, 
     borderWidth: 1, 
-    borderColor: '#E5E7EB',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2
+    borderColor: '#E5E7EB'
   },
 
-  cardHeader: { 
-    flexDirection: 'row', 
-    padding: 16, 
-    alignItems: 'flex-start',
-    gap: 12
-  },
-  productHeader: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  productName: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
+  cardHeader: { flexDirection: 'row', padding: 16, alignItems: 'flex-start', gap: 12 },
+  stockName: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
   skuText: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
   categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     marginTop: 6,
-    alignSelf: 'flex-start',
-    gap: 4
+    alignSelf: 'flex-start'
   },
   categoryText: { fontSize: 10, color: '#6B7280', fontWeight: '600' },
 
@@ -786,85 +706,40 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 4
   },
-  statusText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    textTransform: 'uppercase'
-  },
+  statusText: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
 
-  statsGrid: { 
-    flexDirection: 'row', 
-    backgroundColor: '#F9FAFB', 
-    borderTopWidth: 1, 
-    borderBottomWidth: 1, 
-    borderColor: '#E5E7EB' 
-  },
+  statsGrid: { flexDirection: 'row', backgroundColor: '#F9FAFB', borderTopWidth: 1, borderColor: '#E5E7EB' },
   statBox: { flex: 1, padding: 14, alignItems: 'center' },
   borderLeft: { borderLeftWidth: 1, borderColor: '#E5E7EB' },
-  statIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 6
-  },
-  statLabel: { 
-    fontSize: 9, 
-    color: '#9CA3AF', 
-    fontWeight: 'bold',
-    textTransform: 'uppercase'
-  },
+  statLabel: { fontSize: 9, color: '#9CA3AF', fontWeight: 'bold', marginBottom: 6 },
   statValue: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
-  dateValue: { fontSize: 13, fontWeight: '600', color: '#4B5563' },
+  statUnit: { fontSize: 10, color: '#9CA3AF', marginTop: 4, fontWeight: '500' },
+
+  bottomRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6'
+  },
+  metaInfo: { flexDirection: 'row', gap: 16 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 11, color: '#6B7280', fontWeight: '500' },
 
   trendRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: '#fff'
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6'
   },
-  trendIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  trendText: {
-    fontSize: 13,
-    fontWeight: '600'
-  },
-  viewRegisterBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4
-  },
-  viewRegisterText: { 
-    color: '#0088CC', 
-    fontSize: 12, 
-    fontWeight: 'bold'
-  },
+  trendIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  trendText: { fontSize: 13, fontWeight: '600' },
+  viewDetailsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  viewDetailsText: { color: '#0088CC', fontSize: 12, fontWeight: 'bold' },
 
-  emptyContainer: { 
-    alignItems: 'center', 
-    marginTop: 80,
-    paddingHorizontal: 40
-  },
-  emptyText: { 
-    color: '#6B7280', 
-    marginTop: 12, 
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  emptySubText: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    marginTop: 4
-  },
-
-  // Sales Register Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F8F9FA'
-  },
+  // Modal Styles
+  modalContainer: { flex: 1, backgroundColor: '#F8F9FA' },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -873,209 +748,84 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB'
   },
-  closeButton: {
-    padding: 4
+  closeButton: { padding: 4 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
+  modalSubtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827'
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 2
-  },
+  viewAllButtonText: { fontSize: 12, fontWeight: '600', color: '#0088CC' },
+  
   modalProductCard: {
     backgroundColor: '#fff',
     margin: 15,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 3
+    borderColor: '#E5E7EB'
   },
-  modalProductInfo: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 16
-  },
-  modalProductName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937'
-  },
-  modalProductSKU: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4
-  },
-  modalCategoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginTop: 6,
-    alignSelf: 'flex-start',
-    gap: 4
-  },
-  modalCategoryText: {
-    fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '600'
-  },
-  modalStatusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8
-  },
-  modalStatusText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    textTransform: 'uppercase'
-  },
-  modalStatsRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    padding: 12,
-    gap: 12
-  },
-  modalStatBox: {
-    flex: 1,
-    alignItems: 'center'
-  },
-  modalStatLabel: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 6,
-    textTransform: 'uppercase'
-  },
-  modalStatValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1F2937'
-  },
-  modalListHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    gap: 8,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB'
-  },
-  modalListTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#374151'
-  },
-  modalListContent: {
-    padding: 15,
-    paddingBottom: 50
-  },
-  saleCard: {
+  modalStatsRow: { flexDirection: 'row', gap: 12 },
+  modalStatBox: { flex: 1, alignItems: 'center' },
+  modalStatLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '600', marginBottom: 6 },
+  modalStatValue: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
+  
+  modalListContent: { padding: 15, paddingBottom: 50 },
+  
+  transactionCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2
+    borderColor: '#E5E7EB'
   },
-  saleCardHeader: {
+  transactionCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 14
   },
-  saleInvoice: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#1F2937'
-  },
-  saleDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 2
-  },
-  saleStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  transactionInvoice: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
+  transactionDate: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  transactionStatusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 6,
-    gap: 4
+    borderRadius: 6
   },
-  saleStatusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase'
-  },
-  saleDivider: {
-    height: 1,
-    backgroundColor: '#F3F4F6'
-  },
-  saleDetails: {
-    padding: 14,
-    gap: 8
-  },
-  saleDetailRow: {
+  transactionStatusText: { fontSize: 10, fontWeight: 'bold' },
+  
+  transactionDivider: { height: 1, backgroundColor: '#F3F4F6' },
+  
+  transactionStockInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
-  },
-  saleDetailLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '600',
-    minWidth: 80
-  },
-  saleDetailValue: {
-    fontSize: 13,
-    color: '#1F2937',
-    fontWeight: '600',
-    flex: 1
-  },
-  saleFooter: {
-    flexDirection: 'row',
+    padding: 14,
     backgroundColor: '#F9FAFB',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB'
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
   },
-  saleFooterItem: {
-    flex: 1,
-    padding: 12,
-    alignItems: 'center'
-  },
-  saleFooterDivider: {
-    width: 1,
-    backgroundColor: '#E5E7EB'
-  },
-  saleFooterLabel: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    marginBottom: 4
-  },
-  saleFooterValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1F2937'
-  }
+  transactionStockName: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  transactionStockSku: { fontSize: 11, color: '#6B7280', marginTop: 2 },
+  
+  transactionDetails: { padding: 14, gap: 8 },
+  transactionDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  transactionDetailLabel: { fontSize: 12, color: '#6B7280', fontWeight: '600', minWidth: 80 },
+  transactionDetailValue: { fontSize: 13, color: '#1F2937', fontWeight: '600', flex: 1 },
+  
+  transactionFooter: { flexDirection: 'row', backgroundColor: '#F9FAFB', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  transactionFooterItem: { flex: 1, padding: 12, alignItems: 'center' },
+  transactionFooterDivider: { width: 1, backgroundColor: '#E5E7EB' },
+  transactionFooterLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '600', marginBottom: 4 },
+  transactionFooterValue: { fontSize: 14, fontWeight: 'bold', color: '#1F2937' },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyStateText: { fontSize: 14, color: '#9CA3AF', marginTop: 12, fontWeight: '500' }
 });
 
-export default StockSummaryScreen;
+export default SalesSummaryScreen;
