@@ -39,6 +39,9 @@ export interface User {
 type CommonStackParamList = {
   Splash: undefined;
   SignIn: undefined;
+  ForgotPassword: undefined;
+  OTPVerification: { emailOrPhone: string };
+  ResetPassword: { emailOrPhone: string };
   ProfileScreen: undefined;
   SettingsScreen: undefined;
   MyTargetsScreen: undefined;

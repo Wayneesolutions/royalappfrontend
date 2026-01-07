@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from "../../navigation/types";
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +20,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 const SignIn: React.FC<Props> = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
   const { login, error, clearError } = useAuth();
@@ -67,13 +69,34 @@ const SignIn: React.FC<Props> = ({ navigation }) => {
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          secureTextEntry
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          autoCapitalize="none"
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Enter your password"
+            secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            placeholderTextColor="#9CA3AF"
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            style={styles.eyeIcon}
+          >
+            <Ionicons
+              name={showPassword ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color="#9CA3AF"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('ForgotPassword')}
+          style={styles.forgotPasswordContainer}
+        >
+          <Text style={styles.forgotPassword}>Forgot Password?</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity 
           style={[styles.signInButton, isLoading && { opacity: 0.7 }]} 
@@ -136,13 +159,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     marginBottom: 16,
+    fontSize: 16,
+    color: '#000000',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: '#000000',
+  },
+  eyeIcon: {
+    padding: 16,
+  },
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
+    marginBottom: 8,
   },
   forgotPassword: {
     color: '#077BC3',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 80,
-    textAlign: 'right',
   },
   signInButton: {
     backgroundColor: '#077BC3',
