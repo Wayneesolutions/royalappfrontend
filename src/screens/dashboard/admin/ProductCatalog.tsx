@@ -180,9 +180,10 @@ const ProductCatalog = () => {
     console.log('📝 Form Data:', formData);
     
     // Validate required fields
-    if (!formData.productCode || !formData.productName || !formData.category || !formData.price) {
+    // productCode is optional (backend will accept missing/empty values)
+    if (!formData.productName || !formData.category || !formData.price) {
       console.log('❌ Validation failed - missing required fields');
-      Alert.alert('Validation Error', 'Please fill in all required fields (Product Code, Product Name, Category, and Price)');
+      Alert.alert('Validation Error', 'Please fill in all required fields (Product Name, Category, and Price)');
       return;
     }
 
@@ -203,8 +204,9 @@ const ProductCatalog = () => {
     try {
       setLoading(true);
       
-      const productData = {
-        productCode: formData.productCode.trim(),
+      const trimmedProductCode = formData.productCode.trim();
+      const productData: Record<string, any> = {
+        ...(trimmedProductCode ? { productCode: trimmedProductCode } : {}),
         productName: formData.productName.trim(),
         description: formData.description.trim(),
         category: formData.category.trim(),
@@ -732,7 +734,7 @@ const ProductCatalog = () => {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Product Code *</Text>
+              <Text style={styles.formLabel}>Product Code</Text>
               <TextInput
                 style={styles.formInput}
                 value={formData.productCode}

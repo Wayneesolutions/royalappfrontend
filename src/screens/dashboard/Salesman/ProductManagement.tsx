@@ -143,13 +143,14 @@ const ProductManagement = () => {
   // Handle create/edit product
   const handleCreateProduct = async () => {
     try {
-      if (!formData.productCode || !formData.productName || !formData.category || !formData.price) {
+      if (!formData.productName || !formData.category || !formData.price) {
         Alert.alert('Error', 'Please fill in all required fields');
         return;
       }
 
-      const productData = {
-        productCode: formData.productCode,
+      const trimmedProductCode = formData.productCode?.trim();
+      const productData: Record<string, any> = {
+        ...(trimmedProductCode ? { productCode: trimmedProductCode } : {}),
         productName: formData.productName,
         description: formData.description,
         category: formData.category,
@@ -483,7 +484,7 @@ const ProductManagement = () => {
               <Text style={styles.sectionTitle}>Basic Information</Text>
               
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Product Code *</Text>
+                <Text style={styles.inputLabel}>Product Code</Text>
                 <TextInput
                   style={styles.input}
                   value={formData.productCode}

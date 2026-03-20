@@ -1,10 +1,8 @@
 module.exports = function (api) {
-  // Enable cache but invalidate when .env file changes
-  api.cache(() => {
-    // Invalidate cache when .env file changes
-    // This allows caching for performance while still reloading when env changes
-    return process.env.NODE_ENV;
-  });
+  // Troubleshooting note:
+  // `module:react-native-dotenv` inlines values at Babel transform-time.
+  // To avoid any chance of stale production values being inlined, disable Babel caching.
+  api.cache(false);
 
   return {
     presets: [

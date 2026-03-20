@@ -290,10 +290,10 @@ const toTrimmed = (value: string) => {
     const resolvedCategory = toTrimmed(formData.category);
     const resolvedPrice = toNumber(formData.price);
 
-    if (!productCode || !resolvedName || !resolvedCategory) {
+    if (!resolvedName || !resolvedCategory) {
       Alert.alert(
         'Validation Error',
-        'Product Code, Product Name, and Category are required.',
+        'Product Name, and Category are required.',
       );
       return;
     }
@@ -307,7 +307,7 @@ const toTrimmed = (value: string) => {
       setLoading(true);
       
       const productData: Record<string, any> = {
-        productCode,
+        productCode: productCode || undefined,
         name: resolvedName,
         productName: toTrimmed(formData.productName) || resolvedName,
         partNo: toTrimmed(formData.partNo),
@@ -385,10 +385,10 @@ const toTrimmed = (value: string) => {
     const resolvedCategory = toTrimmed(formData.category);
     const resolvedPrice = toNumber(formData.price);
 
-    if (!productCode || !resolvedName || !resolvedCategory) {
+    if (!resolvedName || !resolvedCategory) {
       Alert.alert(
         'Validation Error',
-        'Product Code, Product Name, and Category are required.',
+        'Product Name, and Category are required.',
       );
       return;
     }
@@ -402,7 +402,7 @@ const toTrimmed = (value: string) => {
       setLoading(true);
       
       const updateData: Record<string, any> = {
-        productCode,
+        productCode: productCode || undefined,
         name: resolvedName,
         productName: toTrimmed(formData.productName) || resolvedName,
         partNo: toTrimmed(formData.partNo),
@@ -667,7 +667,7 @@ const toTrimmed = (value: string) => {
           <Text style={styles.sectionTitle}>Basic Information</Text>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Code *</Text>
+              <Text style={styles.inputLabel}>Product Code</Text>
               <TextInput
                 style={styles.input}
                 value={formData.productCode}
