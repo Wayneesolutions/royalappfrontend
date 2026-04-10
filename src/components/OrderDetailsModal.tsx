@@ -115,6 +115,8 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       case 'processing':
       case 'dispatched':
         return <Truck size={20} color="#3b82f6" />;
+      case 'sent_to_tally':
+        return <FileText size={20} color="#7c3aed" />;
       default:
         return <Package size={20} color="#6b7280" />;
     }
@@ -134,6 +136,8 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       case 'processing':
       case 'dispatched':
         return '#3b82f6';
+      case 'sent_to_tally':
+        return '#7c3aed';
       default:
         return '#6b7280';
     }
@@ -477,6 +481,13 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   >
                     <CheckCircle size={20} color="#16a34a" />
                     <Text style={styles.actionButtonText}>Approve Order</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleStatusUpdate('sent_to_tally')}
+                  >
+                    <FileText size={20} color="#7c3aed" />
+                    <Text style={styles.actionButtonText}>Send to Tally</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionButton}

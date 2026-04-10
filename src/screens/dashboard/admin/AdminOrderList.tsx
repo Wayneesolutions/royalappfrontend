@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,14 @@ import {
   TouchableOpacity,
   Modal,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 interface OrderItem {
   productId: string;
@@ -28,9 +34,11 @@ interface Order {
   items: OrderItem[];
   totalQuantity: number;
   totalAmount: number;
-  status: 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'draft' | 'pending_approval' | 'approved' | 'sent_to_tally' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'rejected';
   createdAt: string;
   paymentMethod?: string;
+  // raw API order for edit/approve passthrough
+  _raw?: any;
 }
 
 interface UserNode {
@@ -47,249 +55,109 @@ interface UserNode {
 }
 
 const AdminOrderList = () => {
+  const { getOrders, approveRejectOrder } = useAuth();
+  const navigation = useNavigation<any>();
+
   const [expandedUsers, setExpandedUsers] = useState<{ [key: string]: boolean }>({});
   const [selectedUser, setSelectedUser] = useState<UserNode | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approveAction, setApproveAction] = useState<'approved' | 'rejected'>('approved');
+  const [approveNotes, setApproveNotes] = useState('');
+  const [approving, setApproving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [userHierarchy, setUserHierarchy] = useState<UserNode[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalValue, setTotalValue] = useState(0);
 
-  // --- Hierarchical User Structure with Orders ---
-  const USER_HIERARCHY: UserNode[] = [
-    {
-      id: 'admin-1',
-      name: 'Rajesh Kumar',
-      role: 'Regional Manager',
-      groupName: 'North Region',
-      email: 'rajesh@example.com',
-      mobile: '+91 98765 43210',
-      totalOrders: 12,
-      totalValue: '₹ 15,45,000',
-      orders: [
-        {
-          _id: 'ord-001',
-          orderNumber: 'ORD-2026-001',
-          customerName: 'Tech Solutions',
-          shippingName: 'Delhi Warehouse',
-          items: [
-            {
-              productId: 'p1',
-              productCode: 'SAM-LP-12',
-              productName: 'Samsung Laptop',
-              unit: 'pcs',
-              unitPrice: 55000,
-              quantity: 5,
-              totalAmount: 275000,
-            },
-          ],
-          totalQuantity: 5,
-          totalAmount: 275000,
-          status: 'approved',
-          createdAt: '2026-01-05T10:30:00Z',
-          paymentMethod: 'Credit',
-        },
-        {
-          _id: 'ord-002',
-          orderNumber: 'ORD-2026-002',
-          customerName: 'Digital World',
-          shippingName: 'Noida Store',
-          items: [
-            {
-              productId: 'p2',
-              productCode: 'LEN-TB-10',
-              productName: 'Lenovo Tablet',
-              unit: 'pcs',
-              unitPrice: 18000,
-              quantity: 10,
-              totalAmount: 180000,
-            },
-          ],
-          totalQuantity: 10,
-          totalAmount: 180000,
-          status: 'processing',
-          createdAt: '2026-01-04T14:20:00Z',
-          paymentMethod: 'Bank Transfer',
-        },
-      ],
-      children: [
-        {
-          id: 'dealer-1',
-          name: 'Amit Sharma',
-          role: 'Sales Manager',
-          groupName: 'Delhi Zone',
-          email: 'amit@example.com',
-          mobile: '+91 98765 11111',
-          totalOrders: 8,
-          totalValue: '₹ 8,50,000',
-          orders: [
-            {
-              _id: 'ord-003',
-              orderNumber: 'ORD-2026-003',
-              customerName: 'Metro Computers',
-              shippingName: 'Connaught Place',
-              items: [
-                {
-                  productId: 'p3',
-                  productCode: 'HP-LJ-P1',
-                  productName: 'HP Printer',
-                  unit: 'pcs',
-                  unitPrice: 25000,
-                  quantity: 8,
-                  totalAmount: 200000,
-                },
-              ],
-              totalQuantity: 8,
-              totalAmount: 200000,
-              status: 'shipped',
-              createdAt: '2026-01-03T09:15:00Z',
-              paymentMethod: 'Cash',
-            },
-          ],
-          children: [
-            {
-              id: 'subdealer-1',
-              name: 'Priya Singh',
-              role: 'Sales Executive',
-              groupName: 'Delhi East',
-              email: 'priya@example.com',
-              mobile: '+91 98765 22222',
-              totalOrders: 3,
-              totalValue: '₹ 2,80,000',
-              orders: [
-                {
-                  _id: 'ord-004',
-                  orderNumber: 'ORD-2026-004',
-                  customerName: 'Local Retailer',
-                  shippingName: 'Mayur Vihar',
-                  items: [
-                    {
-                      productId: 'p4',
-                      productCode: 'DELL-MON-24',
-                      productName: 'Dell Monitor 24"',
-                      unit: 'pcs',
-                      unitPrice: 15000,
-                      quantity: 6,
-                      totalAmount: 90000,
-                    },
-                  ],
-                  totalQuantity: 6,
-                  totalAmount: 90000,
-                  status: 'delivered',
-                  createdAt: '2026-01-02T11:00:00Z',
-                  paymentMethod: 'UPI',
-                },
-              ],
-              children: [],
-            },
-          ],
-        },
-        {
-          id: 'dealer-2',
-          name: 'Neha Gupta',
-          role: 'Sales Manager',
-          groupName: 'Noida Zone',
-          email: 'neha@example.com',
-          mobile: '+91 98765 33333',
-          totalOrders: 4,
-          totalValue: '₹ 3,20,000',
-          orders: [
-            {
-              _id: 'ord-005',
-              orderNumber: 'ORD-2026-005',
-              customerName: 'Tech Bazaar',
-              shippingName: 'Sector 18',
-              items: [
-                {
-                  productId: 'p5',
-                  productCode: 'LOGI-WM-X2',
-                  productName: 'Logitech Mouse',
-                  unit: 'pcs',
-                  unitPrice: 1500,
-                  quantity: 50,
-                  totalAmount: 75000,
-                },
-              ],
-              totalQuantity: 50,
-              totalAmount: 75000,
-              status: 'approved',
-              createdAt: '2026-01-01T16:45:00Z',
-              paymentMethod: 'Credit',
-            },
-          ],
+  const buildUserHierarchy = (orders: any[]): UserNode[] => {
+    const userMap = new Map<string, UserNode>();
+
+    orders.forEach((order: any) => {
+      const creator = order.createdBy || {};
+      const userId = creator._id || 'unknown';
+      const userName = creator.name || 'Unknown User';
+      const userRole = creator.role || 'Unknown';
+
+      const mappedOrder: Order = {
+        _id: order._id,
+        orderNumber: order.orderNumber || order._id,
+        customerName: order.customerName || 'N/A',
+        shippingName: order.shippingAddress?.city || order.shippingAddress?.street || 'N/A',
+        items: (order.items || []).map((item: any) => ({
+          productId: item.productId || '',
+          productCode: item.productCode || '',
+          productName: item.productName || '',
+          unit: item.unit || 'pcs',
+          unitPrice: item.unitPrice || 0,
+          quantity: item.quantity || 0,
+          totalAmount: item.totalPrice || item.totalAmount || 0,
+        })),
+        totalQuantity: (order.items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
+        totalAmount: order.finalAmount || order.totalAmount || 0,
+        status: order.status || 'draft',
+        createdAt: order.orderDate || order.createdAt || new Date().toISOString(),
+        paymentMethod: order.paymentMethod,
+        _raw: order, // keep full API object for edit navigation
+      };
+
+      if (userMap.has(userId)) {
+        const node = userMap.get(userId)!;
+        node.orders.push(mappedOrder);
+        node.totalOrders += 1;
+        node.totalValue = `₹ ${(parseInt(node.totalValue.replace(/[^0-9]/g, '')) + mappedOrder.totalAmount).toLocaleString()}`;
+      } else {
+        userMap.set(userId, {
+          id: userId,
+          name: userName,
+          role: userRole,
+          groupName: creator.groupName || creator.companyName || userRole,
+          email: creator.email || '',
+          mobile: creator.mobile || '',
+          totalOrders: 1,
+          totalValue: `₹ ${mappedOrder.totalAmount.toLocaleString()}`,
+          orders: [mappedOrder],
           children: [],
-        },
-      ],
-    },
-    {
-      id: 'admin-2',
-      name: 'Suresh Patel',
-      role: 'Regional Manager',
-      groupName: 'West Region',
-      email: 'suresh@example.com',
-      mobile: '+91 98765 44444',
-      totalOrders: 6,
-      totalValue: '₹ 9,75,000',
-      orders: [
-        {
-          _id: 'ord-006',
-          orderNumber: 'ORD-2026-006',
-          customerName: 'Mumbai Electronics',
-          shippingName: 'Andheri Store',
-          items: [
-            {
-              productId: 'p1',
-              productCode: 'SAM-LP-12',
-              productName: 'Samsung Laptop',
-              unit: 'pcs',
-              unitPrice: 55000,
-              quantity: 10,
-              totalAmount: 550000,
-            },
-          ],
-          totalQuantity: 10,
-          totalAmount: 550000,
-          status: 'processing',
-          createdAt: '2025-12-31T10:30:00Z',
-          paymentMethod: 'Bank Transfer',
-        },
-      ],
-      children: [
-        {
-          id: 'dealer-3',
-          name: 'Vikram Mehta',
-          role: 'Sales Manager',
-          groupName: 'Mumbai Zone',
-          email: 'vikram@example.com',
-          mobile: '+91 98765 55555',
-          totalOrders: 5,
-          totalValue: '₹ 6,25,000',
-          orders: [
-            {
-              _id: 'ord-007',
-              orderNumber: 'ORD-2026-007',
-              customerName: 'Pune Distributors',
-              shippingName: 'Pune Warehouse',
-              items: [
-                {
-                  productId: 'p2',
-                  productCode: 'LEN-TB-10',
-                  productName: 'Lenovo Tablet',
-                  unit: 'pcs',
-                  unitPrice: 18000,
-                  quantity: 15,
-                  totalAmount: 270000,
-                },
-              ],
-              totalQuantity: 15,
-              totalAmount: 270000,
-              status: 'shipped',
-              createdAt: '2025-12-30T14:00:00Z',
-              paymentMethod: 'Cheque',
-            },
-          ],
-          children: [],
-        },
-      ],
-    },
-  ];
+        });
+      }
+    });
+
+    return Array.from(userMap.values());
+  };
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await getOrders({ limit: 100, page: 1 });
+      if (response?.success) {
+        const orders = response.orders || [];
+        const hierarchy = buildUserHierarchy(orders);
+        setUserHierarchy(hierarchy);
+        setTotalOrders(orders.length);
+        setTotalValue(orders.reduce((sum: number, o: any) => sum + (o.finalAmount || o.totalAmount || 0), 0));
+      } else {
+        Alert.alert('Error', 'Failed to load orders');
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      Alert.alert('Error', 'Failed to load orders');
+    } finally {
+      setLoading(false);
+    }
+  }, [getOrders]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchOrders();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
 
   const toggleUserExpansion = (userId: string) => {
     setExpandedUsers(prev => ({
@@ -302,19 +170,70 @@ const AdminOrderList = () => {
     setSelectedUser(selectedUser?.id === user.id ? null : user);
   };
 
+  // Open action sheet (not details modal directly)
   const handleOrderClick = (order: Order) => {
     setSelectedOrder(order);
+    setShowActionSheet(true);
+  };
+
+  const handleViewDetails = () => {
+    setShowActionSheet(false);
     setShowOrderDetails(true);
   };
+
+  const handleEditOrder = () => {
+    if (!selectedOrder) return;
+    setShowActionSheet(false);
+    navigation.navigate('AdminEditOrder', { order: selectedOrder._raw ?? selectedOrder });
+  };
+
+  const openApproveModal = (action: 'approved' | 'rejected') => {
+    setApproveAction(action);
+    setApproveNotes('');
+    setShowActionSheet(false);
+    setShowApproveModal(true);
+  };
+
+  const handleApproveReject = async () => {
+    if (!selectedOrder) return;
+    try {
+      setApproving(true);
+      const response = await approveRejectOrder(selectedOrder._id, approveAction, approveNotes);
+      if (response?.success) {
+        Alert.alert(
+          'Success',
+          `Order ${approveAction === 'approved' ? 'approved' : 'rejected'} successfully`,
+          [{ text: 'OK', onPress: () => { setShowApproveModal(false); setApproveNotes(''); fetchOrders(); } }]
+        );
+      } else {
+        Alert.alert('Error', response?.message || `Failed to ${approveAction} order`);
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to ${approveAction} order`);
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  // canEdit: admin can always edit; allow even after approval like tally flow
+  const canEdit = (status: string) =>
+    !['delivered', 'cancelled'].includes(status);
+
+  // canApprove: only pending_approval or draft orders can be approved
+  const canApprove = (status: string) =>
+    ['draft', 'pending_approval'].includes(status);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return '#F59E0B';
+      case 'pending_approval': return '#F97316';
       case 'approved': return '#10B981';
+      case 'sent_to_tally': return '#7C3AED';
       case 'processing': return '#3B82F6';
       case 'shipped': return '#8B5CF6';
       case 'delivered': return '#059669';
       case 'cancelled': return '#EF4444';
+      case 'rejected': return '#DC2626';
       default: return '#6B7280';
     }
   };
@@ -322,12 +241,23 @@ const AdminOrderList = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'draft': return 'document-outline';
+      case 'pending_approval': return 'time-outline';
       case 'approved': return 'checkmark-circle-outline';
-      case 'processing': return 'time-outline';
+      case 'sent_to_tally': return 'cloud-upload-outline';
+      case 'processing': return 'reload-outline';
       case 'shipped': return 'car-outline';
       case 'delivered': return 'checkmark-done-circle-outline';
       case 'cancelled': return 'close-circle-outline';
+      case 'rejected': return 'ban-outline';
       default: return 'help-circle-outline';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending_approval': return 'Pending Approval';
+      case 'sent_to_tally': return 'Sent to Tally';
+      default: return status.charAt(0).toUpperCase() + status.slice(1);
     }
   };
 
@@ -354,7 +284,7 @@ const AdminOrderList = () => {
             color={getStatusColor(order.status)}
           />
           <Text style={[styles.orderStatusText, { color: getStatusColor(order.status) }]}>
-            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+            {getStatusLabel(order.status)}
           </Text>
         </View>
       </View>
@@ -473,6 +403,7 @@ const AdminOrderList = () => {
     );
   };
 
+  // ─── Order Details Modal ────────────────────────────────────────────────────
   const renderOrderDetailsModal = () => {
     if (!selectedOrder) return null;
 
@@ -484,62 +415,46 @@ const AdminOrderList = () => {
         onRequestClose={() => setShowOrderDetails(false)}
       >
         <SafeAreaView style={styles.modalContainer}>
-          {/* Modal Header */}
           <View style={styles.modalHeader}>
-            <TouchableOpacity
-              onPress={() => setShowOrderDetails(false)}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close" size={26} color="#111827" />
+            <TouchableOpacity onPress={() => setShowOrderDetails(false)} style={styles.closeButton}>
+              <Ionicons name="arrow-back" size={24} color="#111827" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.modalTitle}>Order Details</Text>
               <Text style={styles.modalSubtitle}>#{selectedOrder.orderNumber}</Text>
             </View>
+            {/* Status pill */}
+            <View style={[styles.orderStatusBadge, { backgroundColor: getStatusColor(selectedOrder.status) + '20' }]}>
+              <Ionicons name={getStatusIcon(selectedOrder.status) as any} size={12} color={getStatusColor(selectedOrder.status)} />
+              <Text style={[styles.orderStatusText, { color: getStatusColor(selectedOrder.status) }]}>
+                {getStatusLabel(selectedOrder.status)}
+              </Text>
+            </View>
           </View>
 
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Order Info Card */}
+            {/* Order Info */}
             <View style={styles.detailsCard}>
               <Text style={styles.detailsCardTitle}>Order Information</Text>
-              
+
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Order Number</Text>
                 <Text style={styles.detailValue}>#{selectedOrder.orderNumber}</Text>
               </View>
-
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Status</Text>
-                <View style={[
-                  styles.detailStatusBadge,
-                  { backgroundColor: getStatusColor(selectedOrder.status) + '20' }
-                ]}>
-                  <Text style={[
-                    styles.detailStatusText,
-                    { color: getStatusColor(selectedOrder.status) }
-                  ]}>
-                    {selectedOrder.status.charAt(0).toUpperCase() + selectedOrder.status.slice(1)}
-                  </Text>
-                </View>
-              </View>
-
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Date</Text>
                 <Text style={styles.detailValue}>
                   {new Date(selectedOrder.createdAt).toLocaleDateString()} {new Date(selectedOrder.createdAt).toLocaleTimeString()}
                 </Text>
               </View>
-
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Customer</Text>
                 <Text style={styles.detailValue}>{selectedOrder.customerName}</Text>
               </View>
-
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Shipping To</Text>
                 <Text style={styles.detailValue}>{selectedOrder.shippingName}</Text>
               </View>
-
               {selectedOrder.paymentMethod && (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Payment Method</Text>
@@ -548,10 +463,9 @@ const AdminOrderList = () => {
               )}
             </View>
 
-            {/* Items Card */}
+            {/* Items */}
             <View style={styles.detailsCard}>
-              <Text style={styles.detailsCardTitle}>Order Items</Text>
-              
+              <Text style={styles.detailsCardTitle}>Order Items ({selectedOrder.items.length})</Text>
               {selectedOrder.items.map((item, index) => (
                 <View key={index} style={styles.itemCard}>
                   <View style={styles.itemHeader}>
@@ -560,32 +474,57 @@ const AdminOrderList = () => {
                   </View>
                   <Text style={styles.itemCode}>{item.productCode}</Text>
                   <View style={styles.itemFooter}>
-                    <Text style={styles.itemDetail}>
-                      ₹ {item.unitPrice.toLocaleString()} / {item.unit}
-                    </Text>
+                    <Text style={styles.itemDetail}>₹ {item.unitPrice.toLocaleString()} / {item.unit}</Text>
                     <Text style={styles.itemDetail}>Qty: {item.quantity}</Text>
                   </View>
                 </View>
               ))}
             </View>
 
-            {/* Summary Card */}
+            {/* Summary */}
             <View style={styles.detailsCard}>
               <Text style={styles.detailsCardTitle}>Order Summary</Text>
-              
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Total Items</Text>
-                <Text style={styles.detailValue}>{selectedOrder.items.length}</Text>
-              </View>
-
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Total Quantity</Text>
                 <Text style={styles.detailValue}>{selectedOrder.totalQuantity}</Text>
               </View>
-
               <View style={[styles.detailRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total Amount</Text>
                 <Text style={styles.totalValue}>₹ {selectedOrder.totalAmount.toLocaleString()}</Text>
+              </View>
+            </View>
+
+            {/* Quick Actions inside details */}
+            <View style={styles.detailsCard}>
+              <Text style={styles.detailsCardTitle}>Actions</Text>
+              <View style={styles.detailActionRow}>
+                {canEdit(selectedOrder.status) && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, { backgroundColor: '#EFF6FF', borderColor: '#3B82F6' }]}
+                    onPress={handleEditOrder}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#3B82F6" />
+                    <Text style={[styles.detailActionText, { color: '#3B82F6' }]}>Edit Order</Text>
+                  </TouchableOpacity>
+                )}
+                {canApprove(selectedOrder.status) && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, { backgroundColor: '#F0FDF4', borderColor: '#10B981' }]}
+                    onPress={() => { setShowOrderDetails(false); openApproveModal('approved'); }}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#10B981" />
+                    <Text style={[styles.detailActionText, { color: '#10B981' }]}>Approve</Text>
+                  </TouchableOpacity>
+                )}
+                {canApprove(selectedOrder.status) && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, { backgroundColor: '#FFF1F2', borderColor: '#EF4444' }]}
+                    onPress={() => { setShowOrderDetails(false); openApproveModal('rejected'); }}
+                  >
+                    <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+                    <Text style={[styles.detailActionText, { color: '#EF4444' }]}>Reject</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </ScrollView>
@@ -594,10 +533,188 @@ const AdminOrderList = () => {
     );
   };
 
+  // ─── Action Sheet (on order card tap) ───────────────────────────────────────
+  const renderActionSheet = () => {
+    if (!selectedOrder) return null;
+
+    return (
+      <Modal
+        visible={showActionSheet}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowActionSheet(false)}
+      >
+        <TouchableOpacity
+          style={styles.sheetOverlay}
+          activeOpacity={1}
+          onPress={() => setShowActionSheet(false)}
+        />
+        <View style={styles.sheetContainer}>
+          {/* Handle */}
+          <View style={styles.sheetHandle} />
+
+          {/* Order Header */}
+          <View style={styles.sheetHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sheetOrderNum}>#{selectedOrder.orderNumber}</Text>
+              <Text style={styles.sheetCustomer}>{selectedOrder.customerName}</Text>
+            </View>
+            <View style={[styles.orderStatusBadge, { backgroundColor: getStatusColor(selectedOrder.status) + '20' }]}>
+              <Ionicons name={getStatusIcon(selectedOrder.status) as any} size={12} color={getStatusColor(selectedOrder.status)} />
+              <Text style={[styles.orderStatusText, { color: getStatusColor(selectedOrder.status) }]}>
+                {getStatusLabel(selectedOrder.status)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.sheetAmountRow}>
+            <Text style={styles.sheetAmountLabel}>Total Amount</Text>
+            <Text style={styles.sheetAmount}>₹ {selectedOrder.totalAmount.toLocaleString()}</Text>
+          </View>
+
+          <View style={styles.sheetDivider} />
+
+          {/* Actions */}
+          <TouchableOpacity style={styles.sheetAction} onPress={handleViewDetails}>
+            <View style={[styles.sheetActionIcon, { backgroundColor: '#F0F9FF' }]}>
+              <Ionicons name="eye-outline" size={20} color="#0EA5E9" />
+            </View>
+            <View style={styles.sheetActionInfo}>
+              <Text style={styles.sheetActionTitle}>View Details</Text>
+              <Text style={styles.sheetActionSub}>See full order information</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+
+          {canEdit(selectedOrder.status) && (
+            <TouchableOpacity style={styles.sheetAction} onPress={handleEditOrder}>
+              <View style={[styles.sheetActionIcon, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="create-outline" size={20} color="#3B82F6" />
+              </View>
+              <View style={styles.sheetActionInfo}>
+                <Text style={styles.sheetActionTitle}>Edit Order</Text>
+                <Text style={styles.sheetActionSub}>Modify items, quantity or details</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+
+          {canApprove(selectedOrder.status) && (
+            <TouchableOpacity style={styles.sheetAction} onPress={() => openApproveModal('approved')}>
+              <View style={[styles.sheetActionIcon, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#10B981" />
+              </View>
+              <View style={styles.sheetActionInfo}>
+                <Text style={[styles.sheetActionTitle, { color: '#10B981' }]}>Approve Order</Text>
+                <Text style={styles.sheetActionSub}>Move order to approved status</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+
+          {canApprove(selectedOrder.status) && (
+            <TouchableOpacity style={styles.sheetAction} onPress={() => openApproveModal('rejected')}>
+              <View style={[styles.sheetActionIcon, { backgroundColor: '#FFF1F2' }]}>
+                <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
+              </View>
+              <View style={styles.sheetActionInfo}>
+                <Text style={[styles.sheetActionTitle, { color: '#EF4444' }]}>Reject Order</Text>
+                <Text style={styles.sheetActionSub}>Reject with a reason</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.sheetAction, styles.sheetCancelAction]}
+            onPress={() => setShowActionSheet(false)}
+          >
+            <Text style={styles.sheetCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+    );
+  };
+
+  // ─── Approve / Reject Confirmation Modal ────────────────────────────────────
+  const renderApproveModal = () => {
+    if (!selectedOrder) return null;
+    const isApprove = approveAction === 'approved';
+
+    return (
+      <Modal
+        visible={showApproveModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowApproveModal(false)}
+      >
+        <View style={styles.approveOverlay}>
+          <View style={styles.approveCard}>
+            {/* Icon */}
+            <View style={[styles.approveIconCircle, { backgroundColor: isApprove ? '#F0FDF4' : '#FFF1F2' }]}>
+              <Ionicons
+                name={isApprove ? 'checkmark-circle' : 'close-circle'}
+                size={40}
+                color={isApprove ? '#10B981' : '#EF4444'}
+              />
+            </View>
+
+            <Text style={styles.approveTitle}>
+              {isApprove ? 'Approve Order' : 'Reject Order'}
+            </Text>
+            <Text style={styles.approveSub}>
+              Order #{selectedOrder.orderNumber} • {selectedOrder.customerName}
+            </Text>
+            <Text style={styles.approveAmount}>
+              ₹ {selectedOrder.totalAmount.toLocaleString()}
+            </Text>
+
+            {/* Notes */}
+            <TextInput
+              style={styles.approveNotes}
+              placeholder={isApprove ? 'Approval notes (optional)' : 'Reason for rejection (optional)'}
+              placeholderTextColor="#9CA3AF"
+              value={approveNotes}
+              onChangeText={setApproveNotes}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+
+            {/* Buttons */}
+            <View style={styles.approveButtons}>
+              <TouchableOpacity
+                style={styles.approveCancelBtn}
+                onPress={() => setShowApproveModal(false)}
+                disabled={approving}
+              >
+                <Text style={styles.approveCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.approveConfirmBtn, { backgroundColor: isApprove ? '#10B981' : '#EF4444' }]}
+                onPress={handleApproveReject}
+                disabled={approving}
+              >
+                {approving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.approveConfirmText}>
+                    {isApprove ? 'Approve' : 'Reject'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Order Details Modal */}
       {renderOrderDetailsModal()}
+      {renderActionSheet()}
+      {renderApproveModal()}
 
       {/* Header */}
       <View style={styles.header}>
@@ -609,29 +726,44 @@ const AdminOrderList = () => {
       <View style={styles.summaryStrip}>
         <View style={styles.summaryItem}>
           <Ionicons name="document-text" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>18</Text>
+          <Text style={styles.summaryVal}>{totalOrders}</Text>
           <Text style={styles.summaryLab}>Total Orders</Text>
         </View>
         <View style={[styles.summaryItem, styles.summaryDivider]}>
           <Ionicons name="people" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>8</Text>
+          <Text style={styles.summaryVal}>{userHierarchy.length}</Text>
           <Text style={styles.summaryLab}>Active Users</Text>
         </View>
         <View style={[styles.summaryItem, styles.summaryDivider]}>
           <Ionicons name="cash" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>₹25.2L</Text>
+          <Text style={styles.summaryVal}>₹{(totalValue / 100000).toFixed(1)}L</Text>
           <Text style={styles.summaryLab}>Total Value</Text>
         </View>
       </View>
 
       {/* Hierarchical User List */}
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {USER_HIERARCHY.map((user) => renderUserNode(user, 0))}
-      </ScrollView>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {userHierarchy.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="document-outline" size={64} color="#9CA3AF" />
+              <Text style={styles.emptyStateText}>No orders found</Text>
+            </View>
+          ) : (
+            userHierarchy.map((user: UserNode) => renderUserNode(user, 0))
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -1020,6 +1152,234 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#10B981'
+  },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280'
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60
+  },
+  emptyStateText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280'
+  },
+
+  // Detail action buttons inside details modal
+  detailActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingTop: 4,
+  },
+  detailActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  detailActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Action Sheet
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheetContainer: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 32,
+    paddingHorizontal: 0,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  sheetOrderNum: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  sheetCustomer: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  sheetAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 14,
+  },
+  sheetAmountLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  sheetAmount: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginBottom: 6,
+  },
+  sheetAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    gap: 14,
+  },
+  sheetActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetActionInfo: {
+    flex: 1,
+  },
+  sheetActionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  sheetActionSub: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  sheetCancelAction: {
+    justifyContent: 'center',
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  sheetCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#EF4444',
+    textAlign: 'center',
+    flex: 1,
+  },
+
+  // Approve / Reject Modal
+  approveOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  approveCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  approveIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  approveTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  approveSub: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  approveAmount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 18,
+  },
+  approveNotes: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    color: '#111827',
+    backgroundColor: '#F9FAFB',
+    minHeight: 80,
+    marginBottom: 20,
+  },
+  approveButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  approveCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  approveCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  approveConfirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  approveConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
 

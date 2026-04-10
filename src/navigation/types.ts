@@ -92,7 +92,7 @@ type AdminStackParamList = {
       ProductCatalog: undefined;
       AdminCreateOrder: undefined;
       AdminOrderList: undefined;
-      AdminEditOrder: undefined;
+      AdminEditOrder: { order: any };
       DealersList: undefined;
       SubDealersList: undefined;
 } & CommonStackParamList;
@@ -111,7 +111,7 @@ type ZonalStackParamList = {
   // Admin screens (same functionality)
   AdminCreateOrder: undefined;
   AdminOrderList: undefined;
-  AdminEditOrder: undefined;
+  AdminEditOrder: { order: any };
   Companies: undefined;
   Product: undefined;
   ProductSummary: { cart: any[] };
@@ -151,7 +151,7 @@ export type RSMStackParamList = {
   // Admin screens (same functionality)
   AdminCreateOrder: undefined;
   AdminOrderList: undefined;
-  AdminEditOrder: undefined;
+  AdminEditOrder: { order: any };
   Companies: undefined;
   Product: undefined;
   ProductSummary: { cart: any[] };
@@ -191,7 +191,7 @@ export type ASMStackParamList = {
   // Admin screens (same functionality)
   AdminCreateOrder: undefined;
   AdminOrderList: undefined;
-  AdminEditOrder: undefined;
+  AdminEditOrder: { order: any };
   Companies: undefined;
   Product: undefined;
   ProductSummary: { cart: any[] };

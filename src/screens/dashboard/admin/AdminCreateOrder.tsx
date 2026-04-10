@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
@@ -300,6 +302,11 @@ const AdminCreateOrder = () => {
     country: address?.country || 'India',
   });
   
+
+  const [subDealerInput, setSubDealerInput] = useState('');
+  const [filteredSubDealers, setFilteredSubDealers] = useState<SubDealer[]>([]);
+  const [customSubDealerEntries, setCustomSubDealerEntries] = useState<SubDealer[]>([]);
+  const subDealerInputRef = useRef<TextInput>(null);
   // State for dropdowns
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [subDealers, setSubDealers] = useState<SubDealer[]>([]);
@@ -440,6 +447,19 @@ const AdminCreateOrder = () => {
       ),
     []
   );
+
+  useEffect(() => {
+    const allEntries = [...subDealers, ...customSubDealerEntries];
+    if (!subDealerInput.trim()) {
+      setFilteredSubDealers(allEntries);
+    } else {
+      const query = subDealerInput.toLowerCase();
+      const filtered = allEntries.filter((sd) =>
+        (sd.SDName || sd.name || '').toLowerCase().includes(query)
+      );
+      setFilteredSubDealers(filtered);
+    }
+  }, [subDealerInput, subDealers, customSubDealerEntries]);
 
   useEffect(() => {
     fetchInitialData();
@@ -592,6 +612,27 @@ const AdminCreateOrder = () => {
   const handleSubDealerSelect = (subDealer: SubDealer) => {
     console.log('🎯 Sub dealer selected:', subDealer);
     setSelectedSubDealer(subDealer);
+    setSubDealerInput(subDealer.SDName || subDealer.name || '');
+    setShowSubDealerDropdown(false);
+  };
+
+  const handleSaveCustomSubDealer = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const alreadyExists =
+      [...subDealers, ...customSubDealerEntries].some(
+        (sd) => (sd.SDName || sd.name || '').toLowerCase() === trimmed.toLowerCase()
+      );
+    const customEntry: SubDealer = {
+      _id: `custom_${Date.now()}`,
+      SDName: trimmed,
+      name: trimmed,
+    };
+    if (!alreadyExists) {
+      setCustomSubDealerEntries((prev) => [...prev, customEntry]);
+    }
+    setSelectedSubDealer(customEntry);
+    setSubDealerInput(trimmed);
     setShowSubDealerDropdown(false);
   };
 
@@ -619,9 +660,12 @@ const AdminCreateOrder = () => {
   };
 
   const handleProductQuantityChange = (product: Product, rawValue: string) => {
-    const sanitized = rawValue.replace(/[^0-9]/g, '');
+    // Allow digits and a single decimal point
+    const sanitized = rawValue
+      .replace(/[^0-9.]/g, '')
+      .replace(/(\..*)\./g, '$1');
     const quantityString = sanitized === '' ? '0' : sanitized;
-    const quantityNumber = parseInt(quantityString, 10) || 0;
+    const quantityNumber = parseFloat(quantityString) || 0;
 
     setProductSelections((prev) => {
       const prevState = prev[product._id] ?? createSelectionState();
@@ -639,14 +683,14 @@ const AdminCreateOrder = () => {
 
   const adjustProductSelectionQuantity = (product: Product, delta: number) => {
     const currentSelection = getSelectionState(product);
-    const currentQuantity = parseInt(currentSelection.quantity, 10) || 0;
-    const nextQuantity = Math.max(0, currentQuantity + delta);
+    const currentQuantity = parseFloat(currentSelection.quantity) || 0;
+    const nextQuantity = Math.max(0, Math.round((currentQuantity + delta) * 100) / 100);
     handleProductQuantityChange(product, String(nextQuantity));
   };
 
   const handleAddProductSelection = async (product: Product) => {
     const selection = getSelectionState(product);
-    const quantityNumber = parseInt(selection.quantity, 10) || 0;
+    const quantityNumber = parseFloat(selection.quantity) || 0;
 
     if (quantityNumber <= 0 || selection.adding) {
       return;
@@ -711,7 +755,7 @@ const AdminCreateOrder = () => {
     const entries = products
       .map((product) => {
         const selection = getSelectionState(product);
-        const quantity = parseInt(selection.quantity, 10) || 0;
+        const quantity = parseFloat(selection.quantity) || 0;
         return { product, selection, quantity };
       })
       .filter(({ quantity }) => quantity > 0);
@@ -947,7 +991,9 @@ const AdminCreateOrder = () => {
       
       // Ensure IDs are properly converted to strings
       const dealerId = selectedDealer._id?.toString();
-      const subDealerId = selectedSubDealer?._id?.toString() || null;
+      const rawSubDealerId = selectedSubDealer?._id?.toString();
+      const subDealerId =
+        rawSubDealerId && !rawSubDealerId.startsWith('custom_') ? rawSubDealerId : null;
       
       if (!dealerId) {
         Alert.alert('Validation Error', 'Invalid dealer ID. Please select a valid dealer.');
@@ -1091,7 +1137,7 @@ const AdminCreateOrder = () => {
 
   const renderProductItem = ({ item }: { item: Product }) => {
     const selection = getSelectionState(item);
-    const quantityNumber = parseInt(selection.quantity, 10) || 0;
+    const quantityNumber = parseFloat(selection.quantity) || 0;
     const resolvedUnit = getProductUnitLabel(item, getUnitLabel(item.unit));
     const resolvedPrice = getProductPrice(item);
     const resolvedGst = getProductGstRate(item);
@@ -1211,10 +1257,10 @@ const AdminCreateOrder = () => {
               style={styles.selectionQuantityInput}
               value={selection.quantity}
               onChangeText={(value) => handleProductQuantityChange(item, value)}
-              keyboardType="number-pad"
+              keyboardType="decimal-pad"
               returnKeyType="done"
               editable={!isLoading}
-              maxLength={6}
+              maxLength={10}
               selectTextOnFocus
               blurOnSubmit={false}
             />
@@ -1327,7 +1373,7 @@ const AdminCreateOrder = () => {
 
   const productSelectionEntries = products.map((product) => {
     const selection = getSelectionState(product);
-    const quantity = parseInt(selection.quantity, 10) || 0;
+    const quantity = parseFloat(selection.quantity) || 0;
     return { product, selection, quantity };
   });
 
@@ -1360,7 +1406,7 @@ const AdminCreateOrder = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color="#374151" />
+          <Ionicons name="arrow-back" size={24} color="#513737" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Order</Text>
         <View style={styles.placeholder} />
@@ -1405,41 +1451,71 @@ const AdminCreateOrder = () => {
         {/* Shipping Address Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) - Optional</Text>
-          <View style={styles.selectionRow}>
-            <TouchableOpacity
-              style={[styles.dropdownButton, styles.selectionButton, subDealers.length === 0 && !loading && styles.disabledButton]}
-              onPress={() => {
-                if (subDealers.length > 0) {
-                  console.log('🔍 Opening sub dealer dropdown, sub dealers available:', subDealers.length);
-                  setShowSubDealerDropdown(true);
-                } else if (!loading) {
-                  Alert.alert('Info', 'No sub dealers available. Order will use dealer address.');
+          <View style={styles.comboBoxRow}>
+            <View style={styles.comboBoxInputWrapper}>
+              <TextInput
+                ref={subDealerInputRef}
+                style={styles.comboBoxInput}
+                placeholder={
+                  loading
+                    ? 'Loading sub dealers...'
+                    : 'Type name or select from list...'
                 }
-              }}
-              disabled={subDealers.length === 0 && !loading}
+                placeholderTextColor="#9CA3AF"
+                value={subDealerInput}
+                editable={!loading}
+                onChangeText={(text) => {
+                  setSubDealerInput(text);
+                  if (selectedSubDealer && (selectedSubDealer.SDName || selectedSubDealer.name) !== text) {
+                    setSelectedSubDealer(null);
+                  }
+                }}
+                onBlur={() => {
+                  const trimmed = subDealerInput.trim();
+                  if (trimmed && !selectedSubDealer) {
+                    handleSaveCustomSubDealer(trimmed);
+                  }
+                }}
+                returnKeyType="done"
+                onSubmitEditing={() => {
+                  const trimmed = subDealerInput.trim();
+                  if (trimmed && !selectedSubDealer) {
+                    handleSaveCustomSubDealer(trimmed);
+                  }
+                }}
+              />
+              {subDealerInput.length > 0 && (
+                <TouchableOpacity
+                  style={styles.comboBoxClearButton}
+                  onPress={() => {
+                    setSubDealerInput('');
+                    setSelectedSubDealer(null);
+                  }}
+                >
+                  <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.comboBoxBrowseButton}
+              onPress={() => setShowSubDealerDropdown(true)}
             >
-              <Text style={[styles.dropdownButtonText, !selectedSubDealer && styles.placeholderText]}>
-                {loading ? 'Loading sub dealers...' : 
-                selectedSubDealer ? (selectedSubDealer.SDName || selectedSubDealer.name) : 
-                subDealers.length > 0 ? 'Select Sub Dealer (Optional)' : 
-                'No Sub Dealers Available'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+              <Ionicons name="list-outline" size={20} color="#3B82F6" />
             </TouchableOpacity>
-            {selectedSubDealer && (
-              <TouchableOpacity
-                style={styles.clearSelectionButton}
-                onPress={() => setSelectedSubDealer(null)}
-              >
-                <Ionicons name="close-circle" size={20} color="#EF4444" />
-              </TouchableOpacity>
-            )}
           </View>
           {selectedSubDealer && (
+            <View style={styles.comboBoxSelectedBadge}>
+              <Ionicons name="checkmark-circle" size={14} color="#059669" />
+              <Text style={styles.comboBoxSelectedText}>
+                {selectedSubDealer._id.startsWith('custom_') ? 'Custom entry saved' : 'Selected from list'}
+              </Text>
+            </View>
+          )}
+          {selectedSubDealer?.address && formatAddress(selectedSubDealer.address) !== 'Address not specified' && (
             <Text style={styles.addressText}>{formatAddress(selectedSubDealer.address)}</Text>
           )}
-          {subDealers.length === 0 && !loading && (
-            <Text style={styles.infoText}>Order will be shipped to dealer address</Text>
+          {!selectedSubDealer && subDealers.length === 0 && !loading && (
+            <Text style={styles.infoText}>No sub dealers found — type a name above or leave blank to ship to dealer address</Text>
           )}
         </View>
 
@@ -1686,15 +1762,59 @@ const AdminCreateOrder = () => {
             >
               <Ionicons name="close" size={24} color="#374151" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Select Shipping Address</Text>
+            <Text style={styles.modalTitle}>Select Sub Dealer</Text>
             <View style={styles.placeholder} />
           </View>
-          
+
+          {/* Search input */}
+          <View style={styles.modalSearchContainer}>
+            <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder="Search or type a new name..."
+              placeholderTextColor="#9CA3AF"
+              value={subDealerInput}
+              onChangeText={setSubDealerInput}
+              autoFocus
+              returnKeyType="done"
+            />
+            {subDealerInput.length > 0 && (
+              <TouchableOpacity onPress={() => setSubDealerInput('')}>
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+          </View>
+
           <FlatList
-            data={subDealers}
+            data={filteredSubDealers}
             renderItem={renderSubDealerItem}
             keyExtractor={(item) => item._id}
             style={styles.dropdownList}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <View style={styles.modalEmptyContainer}>
+                <Ionicons name="search-outline" size={32} color="#D1D5DB" />
+                <Text style={styles.modalEmptyText}>No matches found</Text>
+              </View>
+            }
+            ListFooterComponent={
+              subDealerInput.trim().length > 0 &&
+              !filteredSubDealers.some(
+                (sd) =>
+                  (sd.SDName || sd.name || '').toLowerCase() ===
+                  subDealerInput.trim().toLowerCase()
+              ) ? (
+                <TouchableOpacity
+                  style={styles.modalSaveCustomButton}
+                  onPress={() => handleSaveCustomSubDealer(subDealerInput)}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#3B82F6" />
+                  <Text style={styles.modalSaveCustomText}>
+                    Use "{subDealerInput.trim()}" as sub dealer name
+                  </Text>
+                </TouchableOpacity>
+              ) : null
+            }
           />
         </View>
       </Modal>
@@ -1706,7 +1826,11 @@ const AdminCreateOrder = () => {
         presentationStyle="formSheet"
         onRequestClose={() => setShowProductDropdown(false)}
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        >
           <View style={styles.modalHeader}>
             <TouchableOpacity
               style={styles.modalCloseButton}
@@ -1717,7 +1841,7 @@ const AdminCreateOrder = () => {
             <Text style={styles.modalTitle}>Select Product</Text>
             <View style={styles.placeholder} />
           </View>
-          
+
           <FlatList
             data={products}
             renderItem={renderProductItem}
@@ -1750,7 +1874,7 @@ const AdminCreateOrder = () => {
               )
             }
           />
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -2265,6 +2389,99 @@ const styles = StyleSheet.create({
     color: '#D97706',
     fontWeight: '500',
     marginTop: 2,
+  },
+  // Combo-box styles for sub dealer field
+  comboBoxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  comboBoxInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    minHeight: 48,
+  },
+  comboBoxInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+    paddingVertical: 10,
+  },
+  comboBoxClearButton: {
+    padding: 4,
+  },
+  comboBoxBrowseButton: {
+    width: 44,
+    height: 48,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  comboBoxSelectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  comboBoxSelectedText: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '500',
+  },
+  // Modal search & utility styles
+  modalSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    margin: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+    paddingVertical: 10,
+  },
+  modalEmptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  modalEmptyText: {
+    fontSize: 15,
+    color: '#9CA3AF',
+  },
+  modalSaveCustomButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    margin: 16,
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+  },
+  modalSaveCustomText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    fontWeight: '500',
+    flex: 1,
   },
 });
 
