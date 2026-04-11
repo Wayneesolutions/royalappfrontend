@@ -22,7 +22,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/splash-logo.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.santkaur.royalsoftware",

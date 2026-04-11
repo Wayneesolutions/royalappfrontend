@@ -8,10 +8,10 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
-  FlatList,
   Modal,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -30,80 +30,97 @@ interface Dealer {
   };
 }
 
+const actionCards = [
+  {
+    label: 'Create Order',
+    icon: 'add-circle-outline',
+    iconType: 'Ionicons',
+    color: '#3B82F6',
+    bgColor: '#EFF6FF',
+    screen: 'AdminCreateOrder',
+  },
+  {
+    label: 'My Orders',
+    icon: 'clipboard-outline',
+    iconType: 'Ionicons',
+    color: '#10B981',
+    bgColor: '#ECFDF5',
+    screen: 'AdminOrderList',
+  },
+  {
+    label: 'My Dealers',
+    icon: 'storefront-outline',
+    iconType: 'Ionicons',
+    color: '#8B5CF6',
+    bgColor: '#F3E8FF',
+    screen: 'DealersListScreen',
+  },
+  {
+    label: 'Pending Orders',
+    icon: 'time-outline',
+    iconType: 'Ionicons',
+    color: '#F59E0B',
+    bgColor: '#FEF3C7',
+    screen: 'PendingOrdersScreen',
+  },
+  {
+    label: 'Ledger Report',
+    icon: 'book-outline',
+    iconType: 'Ionicons',
+    color: '#EF4444',
+    bgColor: '#FEF2F2',
+    screen: 'LedgerReportScreen',
+  },
+  {
+    label: 'Outstanding',
+    icon: 'file-document-outline',
+    iconType: 'MaterialCommunityIcons',
+    color: '#F97316',
+    bgColor: '#FFF7ED',
+    screen: 'OutstandingReportScreen',
+  },
+  {
+    label: 'Sales',
+    icon: 'trending-up-outline',
+    iconType: 'Ionicons',
+    color: '#22C55E',
+    bgColor: '#F0FDF4',
+    screen: 'SalesStockScreen',
+  },
+  {
+    label: 'Stocks',
+    icon: 'bar-chart-outline',
+    iconType: 'Ionicons',
+    color: '#0EA5E9',
+    bgColor: '#F0F9FF',
+    screen: 'StockSummaryScreen',
+  },
+];
 
 const DashboardHome = () => {
-  const { user, logout, switchCompany } = useAuth();
+  const { user, logout } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [loadingDealers, setLoadingDealers] = useState(false);
   const [showHierarchy, setShowHierarchy] = useState(false);
-  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
-  const [isSwitchingCompany, setIsSwitchingCompany] = useState(false);
-
-  // Get user details from auth context
-  const currentCompany = user?.defaultCompany;
-  const availableCompanies = user?.companies || [];
 
   useEffect(() => {
-    fetchAllData();
+    fetchDealers();
   }, [user?.defaultCompany?._id]);
 
-  const fetchAllData = async () => {
-    await fetchDealers();
-  };
-
-  const handleCompanySwitch = async (companyId: string) => {
-    console.log('handleCompanySwitch called with companyId:', companyId);
-    console.log('Current company ID:', currentCompany?._id);
-
-    if (!companyId) {
-      console.error('Company ID is missing!');
-      Alert.alert('Error', 'Company ID is missing. Please try again.');
-      return;
-    }
-
-    if (companyId === currentCompany?._id) {
-      setShowCompanyDropdown(false);
-      return;
-    }
-
-    setIsSwitchingCompany(true);
-    try {
-      console.log('Calling switchCompany with ID:', companyId);
-      await switchCompany(companyId);
-      setShowCompanyDropdown(false);
-      Alert.alert('Success', 'Company switched successfully!');
-      // Refresh data after switching
-      await fetchAllData();
-    } catch (error) {
-      console.error('Error switching company:', error);
-      Alert.alert('Error', 'Failed to switch company. Please try again.');
-    } finally {
-      setIsSwitchingCompany(false);
-    }
-  };
-
   const fetchDealers = async () => {
-    if (!user?.defaultCompany?._id) {
-      console.log('⚠️ No default company, skipping dealer fetch');
-      return;
-    }
-
+    if (!user?.defaultCompany?._id) return;
     try {
       setLoadingDealers(true);
-      console.log('🔄 Fetching dealers for company:', user.defaultCompany._id);
       const result = await apiService.adminGetAllDealers();
       if (result?.success && result?.data?.dealers) {
-        console.log('✅ Dealers fetched:', result.data.dealers.length);
         setDealers(result.data.dealers);
       } else {
-        console.log('⚠️ No dealers found or fetch failed');
         setDealers([]);
       }
-    } catch (error) {
-      console.error('❌ Error fetching dealers:', error);
+    } catch {
       setDealers([]);
     } finally {
       setLoadingDealers(false);
@@ -112,315 +129,138 @@ const DashboardHome = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchAllData();
+    await fetchDealers();
     setRefreshing(false);
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout },
-      ]
-    );
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Logout', style: 'destructive', onPress: logout },
+    ]);
   };
 
-  const renderDealer = ({ item }: { item: Dealer }) => (
-    <View style={styles.listItem}>
-      <View style={styles.listItemIcon}>
-        <Ionicons name="storefront" size={20} color="#10B981" />
-      </View>
-      <View style={styles.listItemContent}>
-        <Text style={styles.listItemName}>{item.LedgerName}</Text>
-        {item.Email && (
-          <Text style={styles.listItemEmail}>{item.Email}</Text>
-        )}
-        {item.LedgerMobile && (
-          <Text style={styles.listItemMobile}>{item.LedgerMobile}</Text>
-        )}
-        {item.LedgerState && (
-          <Text style={styles.listItemState}>{item.LedgerState}</Text>
-        )}
-        {item.group?.GroupName && (
-          <Text style={styles.listItemGroup}>Group: {item.group.GroupName}</Text>
-        )}
-      </View>
-    </View>
-  );
+  const renderCardIcon = (icon: string, iconType: string, color: string) => {
+    if (iconType === 'MaterialCommunityIcons') {
+      return <MaterialCommunityIcons name={icon as any} size={30} color={color} />;
+    }
+    return <Ionicons name={icon as any} size={30} color={color} />;
+  };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.mainContainer}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop:6 }]}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Dashboard</Text>
-          <TouchableOpacity
-            style={styles.companyButton}
-            onPress={() => setShowCompanyDropdown(!showCompanyDropdown)}
-            disabled={availableCompanies.length <= 1}
-          >
-            <Text style={styles.companyButtonText}>
-              {user?.defaultCompany?.companyName || 'Company'}
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarText}>
+              {(user?.name || 'U').charAt(0).toUpperCase()}
             </Text>
-            {availableCompanies.length > 1 && (
-              <Ionicons
-                name={showCompanyDropdown ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#E0E7FF"
-              />
-            )}
-          </TouchableOpacity>
-          <Text style={styles.headerSubtitle}>{user?.name || 'User'}</Text>
+          </View>
+          <View>
+            <Text style={styles.headerName}>{user?.name || 'User'}</Text>
+            <Text style={styles.headerCompany} numberOfLines={1}>
+              {user?.defaultCompany?.companyName || ''}
+            </Text>
+          </View>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <Ionicons name="log-out-outline" size={24} color="#fff" />
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn} activeOpacity={0.7}>
+          <Ionicons name="log-out-outline" size={22} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
-      {/* Company Dropdown Modal */}
-      {showCompanyDropdown && availableCompanies.length > 1 && (
-        <Modal
-          visible={showCompanyDropdown}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowCompanyDropdown(false)}
-        >
-          <TouchableOpacity
-            style={styles.companyModalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowCompanyDropdown(false)}
-          >
-            <View style={styles.companyDropdownContainer}>
-              <View style={styles.companyDropdownHeader}>
-                <Text style={styles.companyDropdownTitle}>Switch Company</Text>
-                <TouchableOpacity onPress={() => setShowCompanyDropdown(false)}>
-                  <Ionicons name="close" size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.companyList}>
-                {availableCompanies
-                  .filter((company: any) => {
-                    // Filter out inactive company assignments
-                    if (company.isActive === false) return false;
-
-                    // Filter out companies where companyId doesn't exist (deleted company)
-                    if (!company.companyId) return false;
-
-                    // Filter out companies where the company itself is inactive
-                    if (company.companyId?.isActive === false) return false;
-
-                    return true;
-                  })
-                  .map((company: any) => {
-                    const companyId = company.companyId?._id || company.companyId?.id || company.companyId;
-                    const companyName = company.companyId?.companyName || company.companyName || 'Unknown';
-                    const companyCode = company.companyId?.companyCode || company.companyCode || '';
-                    const isActive = companyId === currentCompany?._id;
-
-                    return (
-                      <TouchableOpacity
-                        key={companyId}
-                        style={[
-                          styles.companyItem,
-                          isActive && styles.companyItemActive
-                        ]}
-                        onPress={() => handleCompanySwitch(companyId)}
-                        disabled={isSwitchingCompany || isActive}
-                      >
-                        <View style={styles.companyItemLeft}>
-                          <View style={[
-                            styles.companyItemIcon,
-                            isActive && styles.companyItemIconActive
-                          ]}>
-                            <Ionicons
-                              name="business"
-                              size={20}
-                              color={isActive ? '#3B82F6' : '#6B7280'}
-                            />
-                          </View>
-                          <View style={styles.companyItemInfo}>
-                            <Text style={[
-                              styles.companyItemName,
-                              isActive && styles.companyItemNameActive
-                            ]}>
-                              {companyName}
-                            </Text>
-                            {companyCode && (
-                              <Text style={styles.companyItemCode}>{companyCode}</Text>
-                            )}
-                          </View>
-                        </View>
-                        {isActive && (
-                          <Ionicons name="checkmark-circle" size={24} color="#3B82F6" />
-                        )}
-                        {isSwitchingCompany && !isActive && (
-                          <ActivityIndicator size="small" color="#3B82F6" />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      )}
-
       <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
+        style={styles.scroll}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Welcome Section */}
-        <View style={styles.welcomeCard}>
-          <View style={styles.welcomeIcon}>
-            <Ionicons name="people" size={32} color="#3B82F6" />
+        {/* Company Overview */}
+        {user?.defaultCompany && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Company Overview</Text>
+            <View style={styles.sectionCard}>
+              <View style={styles.companyRow}>
+                <View style={styles.companyIconBox}>
+                  <Ionicons name="business" size={24} color="#0493D2" />
+                </View>
+                <View style={styles.companyInfo}>
+                  <Text style={styles.companyName}>{user.defaultCompany.companyName}</Text>
+                  <Text style={styles.companyCode}>Code: {user.defaultCompany.companyCode}</Text>
+                </View>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <View style={[styles.statIconBox, { backgroundColor: '#ECFDF5' }]}>
+                    <Ionicons name="storefront-outline" size={20} color="#10B981" />
+                  </View>
+                  {loadingDealers ? (
+                    <ActivityIndicator size="small" color="#10B981" style={{ marginTop: 6 }} />
+                  ) : (
+                    <Text style={styles.statValue}>{dealers.length}</Text>
+                  )}
+                  <Text style={styles.statLabel}>My Dealers</Text>
+                </View>
+              </View>
+            </View>
           </View>
-          <Text style={styles.welcomeTitle}>Welcome, {user?.name || 'User'}!</Text>
-          <Text style={styles.welcomeText}>
-            Manage your orders and view company members.
-          </Text>
-        </View>
+        )}
 
-        {/* Quick Actions */}
-        <View style={styles.actionsContainer}>
-          {/* Create Order */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('AdminCreateOrder' as never)}
-          >
-            <Ionicons name="add-circle" size={32} color="#3B82F6" />
-            <Text style={styles.actionText}>Create Order</Text>
-          </TouchableOpacity>
+        {/* Quick Actions Grid */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Quick Actions</Text>
+          <View style={styles.grid}>
+            {actionCards.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.card}
+                onPress={() => navigation.navigate(item.screen as never)}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.cardIconBox, { backgroundColor: item.bgColor }]}>
+                  {renderCardIcon(item.icon, item.iconType, item.color)}
+                </View>
+                <Text style={styles.cardLabel}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
 
-          {/* My Orders */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('AdminOrderList' as never)}
-          >
-            <Ionicons name="clipboard-outline" size={32} color="#10B981" />
-            <Text style={styles.actionText}>My Orders</Text>
-          </TouchableOpacity>
-
-          {/* My Dealers */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('DealersListScreen' as never)}
-          >
-            <Ionicons name="storefront-outline" size={32} color="#F59E0B" />
-            <Text style={styles.actionText}>My Dealers</Text>
-          </TouchableOpacity>
-
-          {/* Group Hierarchy */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => setShowHierarchy(true)}
-          >
-            <Ionicons name="git-network-outline" size={32} color="#8B5CF6" />
-            <Text style={styles.actionText}>Group Hierarchy</Text>
-          </TouchableOpacity>
-
-          {/* Ledger Report */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('LedgerReportScreen' as never)}
-          >
-            <Ionicons name="book-outline" size={32} color="#EF4444" />
-            <Text style={styles.actionText}>Ledger Report</Text>
-          </TouchableOpacity>
-
-          {/* Outstanding Report */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('OutstandingReportScreen' as never)}
-          >
-            <Ionicons name="alert-circle-outline" size={32} color="#F97316" />
-            <Text style={styles.actionText}>Outstanding Report</Text>
-          </TouchableOpacity>
-
-          {/* Pending Orders */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('PendingOrdersScreen' as never)}
-          >
-            <Ionicons name="time-outline" size={32} color="#0EA5E9" />
-            <Text style={styles.actionText}>Pending Orders</Text>
-          </TouchableOpacity>
-
-          {/* Sales & Stock */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('SalesStockScreen' as never)}
-          >
-            <Ionicons name="bar-chart-outline" size={32} color="#22C55E" />
-            <Text style={styles.actionText}>Sales</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('StockSummaryScreen' as never)}
-          >
-            <Ionicons name="bar-chart-outline" size={32} color="#22C55E" />
-            <Text style={styles.actionText}>Stocks</Text>
-          </TouchableOpacity>
-          
-        </View>
-
-
-
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Ionicons name="storefront-outline" size={32} color="#10B981" />
-            <Text style={styles.statValue}>{dealers.length}</Text>
-            <Text style={styles.statLabel}>Dealers</Text>
-          </View>
-        </View>
-
-        {/* Dealers Section */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>My Dealers</Text>
+            {/* Group Hierarchy card */}
             <TouchableOpacity
-              onPress={() => navigation.navigate('DealersListScreen' as never)}
-              style={styles.viewAllButton}
+              style={styles.card}
+              onPress={() => setShowHierarchy(true)}
+              activeOpacity={0.75}
             >
-              <Text style={styles.viewAllText}>View All</Text>
-              <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+              <View style={[styles.cardIconBox, { backgroundColor: '#EEF2FF' }]}>
+                <Ionicons name="git-network-outline" size={30} color="#6366F1" />
+              </View>
+              <Text style={styles.cardLabel}>Group Hierarchy</Text>
             </TouchableOpacity>
           </View>
-          {loadingDealers && <ActivityIndicator size="small" color="#10B981" style={{ marginBottom: 12 }} />}
-          {dealers.length > 0 ? (
-            <>
-              <FlatList
-                data={dealers.slice(0, 5)}
-                renderItem={renderDealer}
-                keyExtractor={(item) => item._id}
-                scrollEnabled={false}
-              />
-              {dealers.length > 5 && (
-                <TouchableOpacity
-                  style={styles.viewMoreButton}
-                  onPress={() => navigation.navigate('DealersListScreen' as never)}
-                >
-                  <Text style={styles.viewMoreText}>View {dealers.length - 5} more dealers</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="storefront-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyStateText}>No dealers found</Text>
-              <TouchableOpacity
-                style={styles.createDealerButton}
-                onPress={() => navigation.navigate('DealersListScreen' as never)}
-              >
-                <Text style={styles.createDealerButtonText}>Manage Dealers</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
 
+        {/* Dealer Management */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Dealer Management</Text>
+          <View style={styles.sectionCard}>
+            <TouchableOpacity
+              style={styles.listRow}
+              onPress={() => navigation.navigate('DealersListScreen' as never)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.listRowLeft}>
+                <View style={[styles.listIconBox, { backgroundColor: '#F3E8FF' }]}>
+                  <Ionicons name="storefront-outline" size={22} color="#8B5CF6" />
+                </View>
+                <View>
+                  <Text style={styles.listTitle}>Dealers</Text>
+                  <Text style={styles.listSubtitle}>Manage all dealers</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
 
       {/* Group Hierarchy Modal */}
@@ -437,364 +277,218 @@ const DashboardHome = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  mainContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ecf0fe',
   },
+  // Header
   header: {
-    backgroundColor: '#3B82F6',
-    paddingTop: 50,
-    paddingBottom: 16,
+    backgroundColor: '#fff',
+    paddingBottom: 10,
     paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  headerTitle: {
-    fontSize: 24,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  avatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#486CD6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#486CD6',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  avatarText: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
   },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#E0E7FF',
-    marginTop: 4,
-  },
-  logoutButton: {
-    padding: 8,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-  },
-  welcomeCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  welcomeIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  welcomeTitle: {
-    fontSize: 22,
+  headerName: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#1F2937',
-    marginBottom: 8,
   },
-  welcomeText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  actionsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-  },
-  actionCard: {
-    width: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginTop: 8,
-  },
-  statLabel: {
+  headerCompany: {
     fontSize: 12,
     color: '#6B7280',
-    marginTop: 4,
+    marginTop: 2,
+    maxWidth: 200,
+  },
+  logoutBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Scroll
+  scroll: {
+    flex: 1,
+  },
+  container: {
+    paddingBottom: 100,
+  },
+  // Sections
+  section: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 10,
+    paddingLeft: 2,
   },
   sectionCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  listItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  listItemContent: {
-    flex: 1,
-  },
-  listItemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  listItemEmail: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  listItemMobile: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  listItemState: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-  listItemGroup: {
-    fontSize: 12,
-    color: '#3B82F6',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 12,
-  },
-  viewAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: '#3B82F6',
-    fontWeight: '600',
-  },
-  viewMoreButton: {
-    marginTop: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  viewMoreText: {
-    fontSize: 14,
-    color: '#3B82F6',
-    fontWeight: '500',
-  },
-  createDealerButton: {
-    marginTop: 16,
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  createDealerButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  hierarchyCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
   },
-  hierarchyCardHeader: {
+  // Company Overview
+  companyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  hierarchyCardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginLeft: 12,
-  },
-  hierarchyCardSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-  hierarchyCardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  hierarchyCardLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#3B82F6',
-    marginRight: 4,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  companyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 6,
-  },
-  companyButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#E0E7FF',
-  },
-  companyModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-start',
-    paddingTop: 120,
-  },
-  companyDropdownContainer: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    borderRadius: 12,
-    maxHeight: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  companyDropdownHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  companyDropdownTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  companyList: {
-    maxHeight: 320,
-  },
-  companyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  companyItemActive: {
+  companyIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#EFF6FF',
-  },
-  companyItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  companyItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
-  companyItemIconActive: {
-    backgroundColor: '#DBEAFE',
-  },
-  companyItemInfo: {
+  companyInfo: {
     flex: 1,
   },
-  companyItemName: {
+  companyName: {
     fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 3,
+  },
+  companyCode: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+  },
+  statItem: {
+    alignItems: 'center',
+    marginRight: 28,
+  },
+  statIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 3,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  // Action Cards Grid
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  card: {
+    width: '47%',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  cardIconBox: {
+    width: 58,
+    height: 58,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  cardLabel: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#1F2937',
+    textAlign: 'center',
+  },
+  // Dealer List Rows
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  listRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  listIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
     marginBottom: 2,
   },
-  companyItemNameActive: {
-    color: '#3B82F6',
-  },
-  companyItemCode: {
-    fontSize: 13,
+  listSubtitle: {
+    fontSize: 12,
     color: '#6B7280',
   },
 });
 
 export default DashboardHome;
-

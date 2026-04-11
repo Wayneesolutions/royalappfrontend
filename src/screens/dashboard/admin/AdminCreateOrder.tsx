@@ -665,7 +665,7 @@ const AdminCreateOrder = () => {
   };
 
   const handleProductQuantityChange = (product: Product, rawValue: string) => {
-    // Allow digits and a single decimal point
+    // Allow digits and a single decimal point (including values like .23 or 0.12)
     const sanitized = rawValue
       .replace(/[^0-9.]/g, '')
       .replace(/(\..*)\./g, '$1');
@@ -684,6 +684,22 @@ const AdminCreateOrder = () => {
         },
       };
     });
+  };
+
+  const handleProductQuantityBlur = (product: Product) => {
+    const selection = getSelectionState(product);
+    const quantityNumber = parseFloat(selection.quantity) || 0;
+    // Normalise display: ".23" → "0.23", "0." → "0", "" → "0"
+    const normalised = quantityNumber > 0 ? String(quantityNumber) : '0';
+    if (normalised !== selection.quantity) {
+      setProductSelections((prev) => ({
+        ...prev,
+        [product._id]: {
+          ...(prev[product._id] ?? createSelectionState()),
+          quantity: normalised,
+        },
+      }));
+    }
   };
 
   const adjustProductSelectionQuantity = (product: Product, delta: number) => {
@@ -946,6 +962,24 @@ const AdminCreateOrder = () => {
 
   const removeItem = (productId: string) => {
     setOrderItems(orderItems.filter(item => item.productId !== productId));
+  };
+
+  const handleRemoveProductFromOrder = (product: Product) => {
+    const resolvedUnit = getProductUnitLabel(product, getUnitLabel(product.unit));
+    const resolvedPrice = getProductPrice(product);
+    setOrderItems((prev) =>
+      prev.filter(
+        (it) =>
+          !(it.productId === product._id &&
+            it.unitPrice === resolvedPrice &&
+            it.unit === resolvedUnit)
+      )
+    );
+    // Reset the selection input back to zero
+    setProductSelections((prev) => ({
+      ...prev,
+      [product._id]: createSelectionState(),
+    }));
   };
 
   const handleCreateOrder = async () => {
@@ -1237,16 +1271,13 @@ const AdminCreateOrder = () => {
               onPress={() => adjustProductSelectionQuantity(item, -1)}
               disabled={quantityNumber <= 0 || isLoading}
             >
-              <Ionicons
-                name="remove"
-                size={18}
-                color="#111827"
-              />
+              <Ionicons name="remove" size={18} color="#111827" />
             </TouchableOpacity>
             <TextInput
               style={styles.selectionQuantityInput}
               value={selection.quantity}
               onChangeText={(value) => handleProductQuantityChange(item, value)}
+              onBlur={() => handleProductQuantityBlur(item)}
               keyboardType="decimal-pad"
               returnKeyType="done"
               editable={!isLoading}
@@ -1262,34 +1293,42 @@ const AdminCreateOrder = () => {
               onPress={() => adjustProductSelectionQuantity(item, 1)}
               disabled={isLoading}
             >
-              <Ionicons
-                name="add"
-                size={18}
-                color="#111827"
-              />
+              <Ionicons name="add" size={18} color="#111827" />
             </TouchableOpacity>
           </View>
 
-          {addButtonVisible && (
-            <TouchableOpacity
-              style={[
-                styles.addProductActionButton,
-                !canAdd && styles.addProductActionButtonDisabled,
-              ]}
-              onPress={() => handleAddProductSelection(item)}
-              disabled={!canAdd}
-            >
-              {selection.adding ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.addProductActionButtonText}>
-                  {addButtonLabel}
-                </Text>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
+          <View style={styles.productActionButtons}>
+            {addButtonVisible && (
+              <TouchableOpacity
+                style={[
+                  styles.addProductActionButton,
+                  !canAdd && styles.addProductActionButtonDisabled,
+                ]}
+                onPress={() => handleAddProductSelection(item)}
+                disabled={!canAdd}
+              >
+                {selection.adding ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.addProductActionButtonText}>
+                    {addButtonLabel}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
 
+            {existingItem && (
+              <TouchableOpacity
+                style={styles.removeProductActionButton}
+                onPress={() => handleRemoveProductFromOrder(item)}
+                disabled={isLoading}
+              >
+                <Ionicons name="trash-outline" size={15} color="#EF4444" />
+                <Text style={styles.removeProductActionButtonText}>Remove</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
         {existingItem && !selection.error && (
           <Text style={styles.selectionInfoText}>
@@ -2383,6 +2422,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     flexWrap: 'wrap',
   },
+  productActionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+  },
   selectionQuantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2426,6 +2471,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  removeProductActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+  },
+  removeProductActionButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
   },
   selectionHelperText: {
     marginTop: 6,

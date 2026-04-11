@@ -1,87 +1,89 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  Modal, SafeAreaView, ScrollView, TextInput, Platform
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  Modal, SafeAreaView, ScrollView, TextInput, ActivityIndicator, Share
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import apiService from '../../../services/api';
 
 const LedgerReportScreen = () => {
   // --- UI Navigation ---
-  const [currentView, setCurrentView] = useState('hierarchy'); 
-  const [selectedLedger, setSelectedLedger] = useState('Abbas Infotech');
-  const [selectedVoucher, setSelectedVoucher] = useState(null);
+  const [currentView, setCurrentView] = useState('hierarchy');
+  const [selectedLedger, setSelectedLedger] = useState<any>(null);
+  const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
 
-  // --- Search State for Groups ---
+  // --- Ledger list state ---
+  const [ledgers, setLedgers] = useState<any[]>([]);
+  const [loadingLedgers, setLoadingLedgers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const allGroups = ['abc', 'Abbas Infotech', 'ADITI AGENCY', 'Sundry Debtors', 'Cash in Hand', 'Bank Accounts'];
-  const filteredGroups = allGroups.filter(g => g.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  // --- Transaction state ---
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [ledgerSummary, setLedgerSummary] = useState<any>(null);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
 
   // --- Date States ---
   const [isDateModalVisible, setDateModalVisible] = useState(false);
   const [dateLabel, setDateLabel] = useState('This Year');
-  const [dateRange, setDateRange] = useState('01 Apr 25 - 31 Mar 26');
+  const [dateRange, setDateRange] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
-  const [calendarStartDate, setCalendarStartDate] = useState(null);
-  const [calendarEndDate, setCalendarEndDate] = useState(null);
+  const [calendarStartDate, setCalendarStartDate] = useState<Date | null>(null);
+  const [calendarEndDate, setCalendarEndDate] = useState<Date | null>(null);
+  const [startDateParam, setStartDateParam] = useState<string | undefined>(undefined);
+  const [endDateParam, setEndDateParam] = useState<string | undefined>(undefined);
 
-  // --- Transaction Data ---
-  const TRANSACTIONS = [
-    { 
-      id: '1', 
-      date: '26 May 25', 
-      type: 'Sales', 
-      voucherNo: 'INV-001',
-      amount: '₹ 1,00,000', 
-      balance: '₹ 1,68,000', 
-      status: 'UNPAID', 
-      dueDate: '05 Jun 25', 
-      items: [
-        { name: 'Samsung 12 laptop', qty: '10', unit: 'PC', rate: '10,000', total: '1,00,000' }
-      ],
-      taxRate: 18,
-      taxAmount: '18,000',
-      grossTotal: '1,00,000',
-      netAmount: '1,18,000'
-    },
-    { 
-      id: '2', 
-      date: '28 May 25', 
-      type: 'Purchase', 
-      voucherNo: 'PUR-002',
-      amount: '-₹ 1,34,000', 
-      balance: '₹ 34,000', 
-      status: 'PAID', 
-      dueDate: '07 Jun 25', 
-      items: [
-        { name: 'Bingo! Mad Angles 60 Gm', qty: '100', unit: 'pkt', rate: '1,340', total: '1,34,000' }
-      ],
-      taxRate: 12,
-      taxAmount: '16,080',
-      grossTotal: '1,34,000',
-      netAmount: '1,50,080'
-    },
-    { 
-      id: '3', 
-      date: '30 May 25', 
-      type: 'Sales', 
-      voucherNo: 'INV-003',
-      ref: '12', 
-      amount: '₹ 1,80,000', 
-      balance: '₹ 2,14,000', 
-      status: 'UNPAID', 
-      dueDate: '09 Jun 25', 
-      items: [
-        { name: 'Lenovo Tab M10 FHD Plus', qty: '4', unit: 'PC', rate: '45,000', total: '1,80,000' }
-      ],
-      taxRate: 18,
-      taxAmount: '32,400',
-      grossTotal: '1,80,000',
-      netAmount: '2,12,400'
-    },
-  ];
+  useEffect(() => {
+    fetchLedgers();
+    // Set default date range to this year
+    const today = new Date();
+    const yearStart = new Date(today.getFullYear(), 3, 1);
+    const yearEnd = new Date(today.getFullYear() + 1, 2, 31);
+    setDateRange(`${formatDate(yearStart)} - ${formatDate(yearEnd)}`);
+  }, []);
 
-  // --- DATE HANDLERS ---
-  const formatDate = (date) => {
+  const fetchLedgers = async () => {
+    try {
+      setLoadingLedgers(true);
+      const result = await apiService.adminGetAllDealers();
+      if (result?.success && result?.data?.dealers) {
+        setLedgers(result.data.dealers);
+      } else {
+        setLedgers([]);
+      }
+    } catch (e) {
+      setLedgers([]);
+    } finally {
+      setLoadingLedgers(false);
+    }
+  };
+
+  const fetchLedgerDetails = async (ledgerId: string) => {
+    try {
+      setLoadingTransactions(true);
+      const params: any = {};
+      if (startDateParam) params.startDate = startDateParam;
+      if (endDateParam) params.endDate = endDateParam;
+      const result = await apiService.getLedgerDetails(ledgerId, params);
+      if (result?.success && result?.data) {
+        const txns = result.data?.transactions || result.data?.entries || [];
+        setTransactions(Array.isArray(txns) ? txns : []);
+        setLedgerSummary(result.data?.summary || result.data?.ledger || null);
+      } else {
+        setTransactions([]);
+      }
+    } catch (e) {
+      setTransactions([]);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  };
+
+  const filteredLedgers = ledgers.filter(l =>
+    (l.LedgerName || l.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // --- DATE HELPERS ---
+  const formatDate = (date: Date) => {
     const day = String(date.getDate()).padStart(2, '0');
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const month = monthNames[date.getMonth()];
@@ -89,158 +91,152 @@ const LedgerReportScreen = () => {
     return `${day} ${month} ${year}`;
   };
 
-  const handlePredefinedDateSelect = (item) => {
+  const toApiDate = (date: Date) => {
+    return date.toISOString().split('T')[0];
+  };
+
+  const handlePredefinedDateSelect = (item: string) => {
     const today = new Date();
+    let start: Date | null = null;
+    let end: Date | null = null;
     let range = '';
 
-    switch(item) {
+    switch (item) {
       case 'Today':
+        start = today; end = today;
         range = formatDate(today);
         break;
       case 'Yesterday':
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        range = formatDate(yesterday);
+        const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+        start = yest; end = yest;
+        range = formatDate(yest);
         break;
       case 'This Week':
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - today.getDay());
-        range = `${formatDate(weekStart)} - ${formatDate(today)}`;
+        start = new Date(today); start.setDate(today.getDate() - today.getDay());
+        end = today;
+        range = `${formatDate(start)} - ${formatDate(end)}`;
         break;
       case 'This Month':
-        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-        range = `${formatDate(monthStart)} - ${formatDate(today)}`;
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = today;
+        range = `${formatDate(start)} - ${formatDate(end)}`;
         break;
       case 'Last Month':
-        const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-        range = `${formatDate(lastMonthStart)} - ${formatDate(lastMonthEnd)}`;
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+        range = `${formatDate(start)} - ${formatDate(end)}`;
         break;
       case 'This Quarter':
-        const quarterMonth = Math.floor(today.getMonth() / 3) * 3;
-        const quarterStart = new Date(today.getFullYear(), quarterMonth, 1);
-        range = `${formatDate(quarterStart)} - ${formatDate(today)}`;
+        const qm = Math.floor(today.getMonth() / 3) * 3;
+        start = new Date(today.getFullYear(), qm, 1); end = today;
+        range = `${formatDate(start)} - ${formatDate(end)}`;
         break;
       case 'This Year':
-        const yearStart = new Date(today.getFullYear(), 3, 1);
-        const yearEnd = new Date(today.getFullYear() + 1, 2, 31);
-        range = `${formatDate(yearStart)} - ${formatDate(yearEnd)}`;
+        start = new Date(today.getFullYear(), 3, 1);
+        end = new Date(today.getFullYear() + 1, 2, 31);
+        range = `${formatDate(start)} - ${formatDate(end)}`;
         break;
       case 'Last Year':
-        const lastYearStart = new Date(today.getFullYear() - 1, 3, 1);
-        const lastYearEnd = new Date(today.getFullYear(), 2, 31);
-        range = `${formatDate(lastYearStart)} - ${formatDate(lastYearEnd)}`;
+        start = new Date(today.getFullYear() - 1, 3, 1);
+        end = new Date(today.getFullYear(), 2, 31);
+        range = `${formatDate(start)} - ${formatDate(end)}`;
         break;
       case 'All':
-        range = 'All Time';
+        range = 'All Time'; start = null; end = null;
         break;
     }
 
     setDateLabel(item);
     setDateRange(range);
+    setStartDateParam(start ? toApiDate(start) : undefined);
+    setEndDateParam(end ? toApiDate(end) : undefined);
     setDateModalVisible(false);
+
+    if (selectedLedger) {
+      fetchLedgerDetails(selectedLedger._id || selectedLedger.id);
+    }
   };
 
-  // --- CALENDAR FUNCTIONS ---
-  const getDaysInMonth = (year, month) => {
-    return new Date(year, month + 1, 0).getDate();
-  };
-
-  const getFirstDayOfMonth = (year, month) => {
-    return new Date(year, month, 1).getDay();
-  };
-
-  const isSameDay = (date1, date2) => {
-    if (!date1 || !date2) return false;
-    return date1.getDate() === date2.getDate() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getFullYear() === date2.getFullYear();
-  };
-
-  const isInRange = (date, start, end) => {
-    if (!start || !end || !date) return false;
-    const dateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-    const endTime = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
-    return dateTime >= startTime && dateTime <= endTime;
-  };
-
-  const handleCalendarDatePress = (date) => {
-    if (!calendarStartDate || (calendarStartDate && calendarEndDate)) {
-      setCalendarStartDate(date);
+  const handleCalendarSave = () => {
+    if (calendarStartDate && calendarEndDate) {
+      setDateLabel('Custom Date');
+      setDateRange(`${formatDate(calendarStartDate)} - ${formatDate(calendarEndDate)}`);
+      setStartDateParam(toApiDate(calendarStartDate));
+      setEndDateParam(toApiDate(calendarEndDate));
+      setShowCalendar(false);
+      setCalendarStartDate(null);
       setCalendarEndDate(null);
+      if (selectedLedger) fetchLedgerDetails(selectedLedger._id || selectedLedger.id);
+    }
+  };
+
+  const handleCalendarDatePress = (date: Date) => {
+    if (!calendarStartDate || (calendarStartDate && calendarEndDate)) {
+      setCalendarStartDate(date); setCalendarEndDate(null);
     } else {
       if (date < calendarStartDate) {
-        setCalendarEndDate(calendarStartDate);
-        setCalendarStartDate(date);
+        setCalendarEndDate(calendarStartDate); setCalendarStartDate(date);
       } else {
         setCalendarEndDate(date);
       }
     }
   };
 
-  const handleCalendarSave = () => {
-    if (calendarStartDate && calendarEndDate) {
-      const formattedStart = formatDate(calendarStartDate);
-      const formattedEnd = formatDate(calendarEndDate);
-      setDateLabel('Custom Date');
-      setDateRange(`${formattedStart} - ${formattedEnd}`);
-      setShowCalendar(false);
-      setCalendarStartDate(null);
-      setCalendarEndDate(null);
-    }
+  const isSameDay = (d1: Date | null, d2: Date | null) => {
+    if (!d1 || !d2) return false;
+    return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
   };
 
-  const renderCalendarMonth = (year, month) => {
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDay = getFirstDayOfMonth(year, month);
-    const days = [];
+  const isInRange = (date: Date, start: Date | null, end: Date | null) => {
+    if (!start || !end) return false;
+    return date >= start && date <= end;
+  };
+
+  const renderCalendarMonth = (year: number, month: number) => {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<View key={`empty-${i}`} style={styles.calendarDay} />);
-    }
-    
+    const days: React.ReactNode[] = [];
+    for (let i = 0; i < firstDay; i++) days.push(<View key={`e-${i}`} style={styles.calendarDay} />);
     for (let day = 1; day <= daysInMonth; day++) {
-      const currentDate = new Date(year, month, day);
-      const isStart = isSameDay(currentDate, calendarStartDate);
-      const isEnd = isSameDay(currentDate, calendarEndDate);
-      const inRange = calendarStartDate && calendarEndDate && isInRange(currentDate, calendarStartDate, calendarEndDate);
-      
+      const cur = new Date(year, month, day);
+      const isStart = isSameDay(cur, calendarStartDate);
+      const isEnd = isSameDay(cur, calendarEndDate);
+      const inRange = calendarStartDate && calendarEndDate && isInRange(cur, calendarStartDate, calendarEndDate);
       days.push(
-        <TouchableOpacity 
-          key={day} 
-          style={[
-            styles.calendarDay,
-            (isStart || isEnd) && styles.calendarDaySelected,
-            inRange && !isStart && !isEnd && styles.calendarDayInRange
-          ]}
-          onPress={() => handleCalendarDatePress(currentDate)}
-        >
-          <Text style={[
-            styles.calendarDayText,
-            (isStart || isEnd) && styles.calendarDayTextSelected
-          ]}>
-            {day}
-          </Text>
+        <TouchableOpacity key={day} style={[styles.calendarDay, (isStart || isEnd) && styles.calendarDaySelected, inRange && !isStart && !isEnd && styles.calendarDayInRange]} onPress={() => handleCalendarDatePress(cur)}>
+          <Text style={[(isStart || isEnd) && styles.calendarDayTextSelected, styles.calendarDayText]}>{day}</Text>
         </TouchableOpacity>
       );
     }
-    
     return (
       <View key={`${year}-${month}`} style={styles.calendarMonthContainer}>
         <Text style={styles.calendarMonthTitle}>{monthNames[month]} {year}</Text>
         <View style={styles.calendarWeekDays}>
-          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-            <Text key={i} style={styles.calendarWeekDay}>{day}</Text>
-          ))}
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <Text key={i} style={styles.calendarWeekDay}>{d}</Text>)}
         </View>
-        <View style={styles.calendarDaysGrid}>
-          {days}
-        </View>
+        <View style={styles.calendarDaysGrid}>{days}</View>
       </View>
     );
   };
+
+  // Format currency
+  const formatAmount = (amount: number) => {
+    if (!amount && amount !== 0) return '—';
+    return `₹ ${Math.abs(amount).toLocaleString('en-IN')}`;
+  };
+
+  // Get transaction type label
+  const getTxnType = (txn: any) => txn.type || txn.voucherType || txn.transactionType || 'Entry';
+  const getTxnAmount = (txn: any) => txn.amount || txn.debit || txn.credit || 0;
+  const getTxnBalance = (txn: any) => txn.balance || txn.runningBalance || 0;
+  const getTxnDate = (txn: any) => {
+    const d = txn.date || txn.createdAt;
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+  };
+  const getTxnVoucher = (txn: any) => txn.voucherNo || txn.invoiceNo || txn.reference || txn._id?.slice(-6).toUpperCase();
+  const isDebit = (txn: any) => (txn.debit > 0) || (txn.amount < 0) || (txn.type === 'Purchase');
 
   // --- SCREEN RENDERS ---
   const renderGroups = () => (
@@ -248,29 +244,49 @@ const LedgerReportScreen = () => {
       <View style={styles.headerBlue}>
         <Text style={styles.headerTitle}>All Ledgers</Text>
         <View style={styles.searchContainer}>
-         
-          <TextInput 
-            style={styles.searchBar} 
-            placeholder="Search Ledgers..." 
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Search Ledgers..."
             placeholderTextColor="#A0D8F1"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
       </View>
-      <FlatList
-        data={filteredGroups}
-        keyExtractor={(item) => item}
-        renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={styles.groupRow} 
-            onPress={() => { setSelectedLedger(item); setCurrentView('report'); }}
-          >
-            <Text style={styles.groupText}>{item}</Text>
-            <Text style={{color: '#ccc'}}>›</Text>
-          </TouchableOpacity>
-        )}
-      />
+
+      {loadingLedgers ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color="#0088CC" />
+          <Text style={styles.loadingText}>Loading ledgers...</Text>
+        </View>
+      ) : filteredLedgers.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyIcon}>📒</Text>
+          <Text style={styles.emptyTitle}>No Ledgers Found</Text>
+          <Text style={styles.emptySubtitle}>No ledger records available</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredLedgers}
+          keyExtractor={(item) => item._id || item.id || item.LedgerName}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.groupRow}
+              onPress={() => {
+                setSelectedLedger(item);
+                setCurrentView('report');
+                fetchLedgerDetails(item._id || item.id);
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.groupText}>{item.LedgerName || item.name}</Text>
+                {item.LedgerMobile && <Text style={styles.groupSub}>{item.LedgerMobile}</Text>}
+              </View>
+              <Text style={{ color: '#ccc', fontSize: 20 }}>›</Text>
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </View>
   );
 
@@ -278,137 +294,170 @@ const LedgerReportScreen = () => {
     <View style={styles.container}>
       <View style={styles.headerBlue}>
         <View style={styles.headerTopRow}>
-           <TouchableOpacity onPress={() => setCurrentView('hierarchy')}>
-             <Text style={styles.whiteLink}>← {selectedLedger}</Text>
-           </TouchableOpacity>
-          
+          <TouchableOpacity onPress={() => setCurrentView('hierarchy')}>
+            <Text style={styles.whiteLink}>← {selectedLedger?.LedgerName || selectedLedger?.name}</Text>
+          </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.dateSelectorBar} onPress={() => setDateModalVisible(true)}>
-          <TouchableOpacity onPress={() => {}}>
-            <Text style={styles.chevronIcon}>‹</Text>
-          </TouchableOpacity>
-          <View style={{alignItems: 'center', flex: 1}}>
+          <Text style={styles.chevronIcon}>‹</Text>
+          <View style={{ alignItems: 'center', flex: 1 }}>
             <Text style={styles.dateLabelText}>{dateLabel.toUpperCase()}</Text>
             <Text style={styles.dateRangeText}>{dateRange}</Text>
           </View>
-          <TouchableOpacity onPress={() => {}}>
-            <Text style={styles.chevronIcon}>›</Text>
-          </TouchableOpacity>
+          <Text style={styles.chevronIcon}>›</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.balanceRow}>
-        <Text style={styles.balanceLabel}>^ Opening Balance</Text>
-        <Text style={styles.balanceValue}>₹ 68,000</Text>
-      </View>
+      {ledgerSummary && (
+        <View style={styles.balanceRow}>
+          <Text style={styles.balanceLabel}>Opening Balance</Text>
+          <Text style={styles.balanceValue}>{formatAmount(ledgerSummary.openingBalance || ledgerSummary.opening || 0)}</Text>
+        </View>
+      )}
 
-      <FlatList
-        data={TRANSACTIONS}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.reportCard} onPress={() => { setSelectedVoucher(item); setCurrentView('detail'); }}>
-            <View style={styles.voucherHeader}>
-              <View>
-                <Text style={styles.vDate}>{item.date} | {item.type}</Text>
-                {item.items.map((prod, idx) => (
-                   <Text key={idx} style={styles.itemSmallText}>{prod.name} ({prod.qty} {prod.unit})</Text>
-                ))}
+      {loadingTransactions ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color="#0088CC" />
+          <Text style={styles.loadingText}>Loading transactions...</Text>
+        </View>
+      ) : transactions.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyIcon}>📄</Text>
+          <Text style={styles.emptyTitle}>No Transactions</Text>
+          <Text style={styles.emptySubtitle}>No transactions found for selected period</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={transactions}
+          keyExtractor={(item, i) => item._id || item.id || String(i)}
+          renderItem={({ item }) => {
+            const amount = getTxnAmount(item);
+            const isNeg = isDebit(item);
+            return (
+              <TouchableOpacity style={styles.reportCard} onPress={() => { setSelectedVoucher(item); setCurrentView('detail'); }}>
+                <View style={styles.voucherHeader}>
+                  <View>
+                    <Text style={styles.vDate}>{getTxnDate(item)} | {getTxnType(item)}</Text>
+                    {item.items?.map((prod: any, idx: number) => (
+                      <Text key={idx} style={styles.itemSmallText}>{prod.name || prod.productName} ({prod.qty || prod.quantity} {prod.unit || 'pc'})</Text>
+                    ))}
+                    {!item.items && item.description && (
+                      <Text style={styles.itemSmallText}>{item.description}</Text>
+                    )}
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.vAmount, { color: isNeg ? '#D32F2F' : '#388E3C' }]}>
+                      {isNeg ? '-' : ''}{formatAmount(amount)}
+                    </Text>
+                    <Text style={styles.vRunningBal}>({formatAmount(getTxnBalance(item))})</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+          ListFooterComponent={() =>
+            ledgerSummary ? (
+              <View style={[styles.balanceRow, { borderTopWidth: 1, borderColor: '#eee', marginTop: 10 }]}>
+                <Text style={styles.balanceLabel}>Closing Balance</Text>
+                <Text style={styles.balanceValue}>{formatAmount(ledgerSummary.closingBalance || ledgerSummary.closing || 0)}</Text>
               </View>
-              <View style={{alignItems: 'flex-end'}}>
-                <Text style={[styles.vAmount, {color: item.amount.startsWith('-') ? '#D32F2F' : '#388E3C'}]}>{item.amount}</Text>
-                <Text style={styles.vRunningBal}>({item.balance})</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
-        ListFooterComponent={() => (
-          <View style={[styles.balanceRow, { borderTopWidth: 1, borderColor: '#eee', marginTop: 10 }]}>
-            <Text style={styles.balanceLabel}>^ Closing Balance</Text>
-            <Text style={styles.balanceValue}>₹ 4,22,000</Text>
-          </View>
-        )}
-      />
+            ) : null
+          }
+        />
+      )}
     </View>
   );
 
-  const renderDetail = () => (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.detailHeader}>
-        <TouchableOpacity onPress={() => setCurrentView('report')}>
-          <Text style={styles.whiteLink}>← Voucher no: {selectedVoucher.voucherNo}</Text>
-        </TouchableOpacity>
-        <View style={styles.detailHero}>
-          <Text style={styles.detailAmountBig}>{selectedVoucher.amount}</Text>
-          <Text style={styles.detailClientName}>{selectedLedger}</Text>
-          <View style={[styles.statusBadge, {backgroundColor: selectedVoucher.status === 'UNPAID' ? '#D32F2F' : '#388E3C'}]}>
-             <Text style={styles.statusText}>{selectedVoucher.status}</Text>
-          </View>
-        </View>
-        <View style={styles.invoiceDueDates}>
-          <View>
-            <Text style={styles.dateSub}>Invoice Date</Text>
-            <Text style={styles.dateMain}>{selectedVoucher.date}</Text>
-          </View>
-          <View style={{alignItems: 'flex-end'}}>
-            <Text style={styles.dateSub}>Due Date</Text>
-            <Text style={styles.dateMain}>{selectedVoucher.dueDate}</Text>
-          </View>
-        </View>
-      </View>
+  const renderDetail = () => {
+    if (!selectedVoucher) return null;
+    const amount = getTxnAmount(selectedVoucher);
+    const isNeg = isDebit(selectedVoucher);
+    const isPaid = selectedVoucher.status === 'paid' || selectedVoucher.status === 'PAID';
 
-      <ScrollView style={styles.scrollContent}>
-        <Text style={styles.sectionTitle}>ITEMS</Text>
-        {selectedVoucher.items.map((item, i) => (
-          <View key={i} style={styles.itemCard}>
-            <View style={styles.itemHeader}>
-              <Text style={styles.fullItemName}>{item.name}</Text>
-              <Text style={styles.fullItemPrice}>₹ {item.total}</Text>
-            </View>
-            <View style={styles.itemDetails}>
-              <Text style={styles.itemDetailText}>Qty: {item.qty} {item.unit}</Text>
-              <Text style={styles.itemDetailText}>Rate: ₹ {item.rate} / {item.unit}</Text>
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.detailHeader}>
+          <TouchableOpacity onPress={() => setCurrentView('report')}>
+            <Text style={styles.whiteLink}>← Voucher: {getTxnVoucher(selectedVoucher)}</Text>
+          </TouchableOpacity>
+          <View style={styles.detailHero}>
+            <Text style={styles.detailAmountBig}>{isNeg ? '-' : ''}{formatAmount(amount)}</Text>
+            <Text style={styles.detailClientName}>{selectedLedger?.LedgerName || selectedLedger?.name}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: isPaid ? '#388E3C' : '#D32F2F' }]}>
+              <Text style={styles.statusText}>{selectedVoucher.status?.toUpperCase() || (isNeg ? 'DEBIT' : 'CREDIT')}</Text>
             </View>
           </View>
-        ))}
-
-        <View style={styles.netAmountSection}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Net Amount</Text>
-            <Text style={styles.summaryValue}>₹ {selectedVoucher.netAmount}</Text>
+          <View style={styles.invoiceDueDates}>
+            <View>
+              <Text style={styles.dateSub}>Date</Text>
+              <Text style={styles.dateMain}>{getTxnDate(selectedVoucher)}</Text>
+            </View>
+            {selectedVoucher.dueDate && (
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.dateSub}>Due Date</Text>
+                <Text style={styles.dateMain}>{new Date(selectedVoucher.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</Text>
+              </View>
+            )}
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>SUMMARY</Text>
-        <View style={styles.summaryBox}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabelBlue}>Gross Total</Text>
-            <Text style={styles.summaryValueBlue}>₹ {selectedVoucher.grossTotal}</Text>
-          </View>
-          {selectedVoucher.taxRate && (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>GST @ {selectedVoucher.taxRate}%</Text>
-              <Text style={styles.summaryValue}>₹ {selectedVoucher.taxAmount}</Text>
-            </View>
+        <ScrollView style={styles.scrollContent}>
+          {selectedVoucher.items && selectedVoucher.items.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>ITEMS</Text>
+              {selectedVoucher.items.map((item: any, i: number) => (
+                <View key={i} style={styles.itemCard}>
+                  <View style={styles.itemHeader}>
+                    <Text style={styles.fullItemName}>{item.name || item.productName}</Text>
+                    <Text style={styles.fullItemPrice}>₹ {(item.total || item.amount || 0).toLocaleString('en-IN')}</Text>
+                  </View>
+                  <View style={styles.itemDetails}>
+                    <Text style={styles.itemDetailText}>Qty: {item.qty || item.quantity} {item.unit || 'pc'}</Text>
+                    <Text style={styles.itemDetailText}>Rate: ₹ {(item.rate || item.price || 0).toLocaleString('en-IN')}</Text>
+                  </View>
+                </View>
+              ))}
+            </>
           )}
-          <View style={[styles.summaryRow, styles.summaryTotal]}>
-            <Text style={styles.summaryTotalLabel}>Total</Text>
-            <Text style={styles.summaryTotalValue}>₹ {selectedVoucher.netAmount}</Text>
+
+          <Text style={styles.sectionTitle}>SUMMARY</Text>
+          <View style={styles.summaryBox}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabelBlue}>Gross Total</Text>
+              <Text style={styles.summaryValueBlue}>{formatAmount(selectedVoucher.grossTotal || amount)}</Text>
+            </View>
+            {selectedVoucher.taxAmount > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tax</Text>
+                <Text style={styles.summaryValue}>{formatAmount(selectedVoucher.taxAmount)}</Text>
+              </View>
+            )}
+            <View style={[styles.summaryRow, styles.summaryTotal]}>
+              <Text style={styles.summaryTotalLabel}>Total</Text>
+              <Text style={styles.summaryTotalValue}>{formatAmount(selectedVoucher.netAmount || amount)}</Text>
+            </View>
           </View>
-        </View>
 
-        <Text style={styles.sectionTitle}>TERMS</Text>
-        <View style={styles.termsBox}>
-          <Text style={styles.termsText}>Due date: {selectedVoucher.dueDate}</Text>
-        </View>
+          {selectedVoucher.notes && (
+            <>
+              <Text style={styles.sectionTitle}>NOTES</Text>
+              <View style={styles.termsBox}>
+                <Text style={styles.termsText}>{selectedVoucher.notes}</Text>
+              </View>
+            </>
+          )}
+          <View style={{ height: 20 }} />
+        </ScrollView>
 
-        <View style={{height: 20}} />
-      </ScrollView>
-
-      <TouchableOpacity style={styles.shareBtn}>
-        <Text style={styles.shareBtnText}>SHARE INVOICE</Text>
-      </TouchableOpacity>
-    </SafeAreaView>
-  );
+        <TouchableOpacity
+          style={styles.shareBtn}
+          onPress={() => Share.share({ message: `Ledger Entry\nVoucher: ${getTxnVoucher(selectedVoucher)}\nAmount: ${formatAmount(amount)}\nDate: ${getTxnDate(selectedVoucher)}` })}
+        >
+          <Text style={styles.shareBtnText}>SHARE DETAILS</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -421,26 +470,24 @@ const LedgerReportScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Date</Text>
-                <TouchableOpacity onPress={() => setDateModalVisible(false)}>
-                  <Text style={{fontSize: 20}}>✕</Text>
-                </TouchableOpacity>
+              <Text style={styles.modalTitle}>Select Date</Text>
+              <TouchableOpacity onPress={() => setDateModalVisible(false)}>
+                <Text style={{ fontSize: 20 }}>✕</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-                {['Today', 'Yesterday', 'This Week', 'This Month', 'Last Month', 'This Quarter', 'This Year', 'Last Year', 'All', 'Custom Date'].map(item => (
+              {['Today', 'Yesterday', 'This Week', 'This Month', 'Last Month', 'This Quarter', 'This Year', 'Last Year', 'All', 'Custom Date'].map(item => (
                 <TouchableOpacity key={item} style={styles.modalOption} onPress={() => {
-                    if (item === 'Custom Date') {
-                        setDateModalVisible(false);
-                        setTimeout(() => {
-                          setShowCalendar(true);
-                        }, 300);
-                    } else {
-                        handlePredefinedDateSelect(item);
-                    }
+                  if (item === 'Custom Date') {
+                    setDateModalVisible(false);
+                    setTimeout(() => setShowCalendar(true), 300);
+                  } else {
+                    handlePredefinedDateSelect(item);
+                  }
                 }}>
-                    <Text style={[styles.optionText, item === dateLabel && {color: '#0088cc', fontWeight: 'bold'}]}>{item}</Text>
+                  <Text style={[styles.optionText, item === dateLabel && { color: '#0088cc', fontWeight: 'bold' }]}>{item}</Text>
                 </TouchableOpacity>
-                ))}
+              ))}
             </ScrollView>
           </View>
         </View>
@@ -451,48 +498,25 @@ const LedgerReportScreen = () => {
         <View style={styles.calendarOverlay}>
           <View style={styles.calendarModal}>
             <View style={styles.calendarHeader}>
-              <TouchableOpacity onPress={() => {
-                setShowCalendar(false);
-                setCalendarStartDate(null);
-                setCalendarEndDate(null);
-              }}>
+              <TouchableOpacity onPress={() => { setShowCalendar(false); setCalendarStartDate(null); setCalendarEndDate(null); }}>
                 <Text style={styles.calendarCloseBtn}>✕</Text>
               </TouchableOpacity>
               <Text style={styles.calendarHeaderTitle}>SELECT RANGE</Text>
-              <TouchableOpacity 
-                onPress={handleCalendarSave}
-                disabled={!calendarStartDate || !calendarEndDate}
-              >
-                <Text style={[
-                  styles.calendarSaveBtn, 
-                  (!calendarStartDate || !calendarEndDate) && {opacity: 0.3}
-                ]}>
-                  SAVE
-                </Text>
+              <TouchableOpacity onPress={handleCalendarSave} disabled={!calendarStartDate || !calendarEndDate}>
+                <Text style={[styles.calendarSaveBtn, (!calendarStartDate || !calendarEndDate) && { opacity: 0.3 }]}>SAVE</Text>
               </TouchableOpacity>
             </View>
-            
             {calendarStartDate && calendarEndDate && (
               <View style={styles.calendarSelectedRange}>
-                <Text style={styles.calendarSelectedText}>
-                  {formatDate(calendarStartDate)} - {formatDate(calendarEndDate)}
-                </Text>
-                <TouchableOpacity onPress={() => {
-                  setCalendarStartDate(calendarStartDate);
-                  setCalendarEndDate(null);
-                }}>
-                  <Text style={styles.calendarEditBtn}>✏️</Text>
-                </TouchableOpacity>
+                <Text style={styles.calendarSelectedText}>{formatDate(calendarStartDate)} - {formatDate(calendarEndDate)}</Text>
               </View>
             )}
-
             <ScrollView showsVerticalScrollIndicator={false}>
               {[0, 1, 2, 3, 4, 5].map(offset => {
-                const date = new Date();
-                date.setMonth(date.getMonth() + offset);
-                return renderCalendarMonth(date.getFullYear(), date.getMonth());
+                const d = new Date(); d.setMonth(d.getMonth() + offset);
+                return renderCalendarMonth(d.getFullYear(), d.getMonth());
               })}
-              <View style={{height: 20}} />
+              <View style={{ height: 20 }} />
             </ScrollView>
           </View>
         </View>
@@ -509,13 +533,13 @@ const styles = StyleSheet.create({
   searchBar: { flex: 1, height: 40, color: '#fff' },
   headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   whiteLink: { color: '#fff', fontSize: 16 },
-  headerIcons: { color: '#fff', fontSize: 18 },
   dateSelectorBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0077B3', padding: 10, borderRadius: 5, marginTop: 15 },
   dateLabelText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   dateRangeText: { color: '#fff', fontSize: 13 },
   chevronIcon: { color: '#fff', fontSize: 20 },
-  groupRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 18, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff' },
+  groupRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff' },
   groupText: { fontSize: 16, color: '#333' },
+  groupSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
   balanceRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: '#EBF4FA' },
   balanceLabel: { color: '#555', fontSize: 14 },
   balanceValue: { fontWeight: 'bold', fontSize: 16, color: '#333' },
@@ -542,7 +566,6 @@ const styles = StyleSheet.create({
   fullItemPrice: { fontSize: 16, fontWeight: 'bold', color: '#333', marginLeft: 10 },
   itemDetails: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
   itemDetailText: { fontSize: 13, color: '#777' },
-  netAmountSection: { backgroundColor: '#fff', padding: 15, borderRadius: 6, marginTop: 10, marginBottom: 5 },
   summaryBox: { backgroundColor: '#F9FAFB', padding: 15, borderRadius: 6, borderWidth: 1, borderColor: '#E5E5E5' },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
   summaryLabel: { fontSize: 14, color: '#666' },
@@ -562,17 +585,14 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: 'bold' },
   modalOption: { paddingVertical: 15, borderBottomWidth: 0.5, borderColor: '#f0f0f0' },
   optionText: { fontSize: 16, color: '#444' },
-  
-  // Calendar Styles
   calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   calendarModal: { flex: 1, backgroundColor: '#0088CC', paddingTop: 40 },
-  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#0088CC' },
+  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
   calendarCloseBtn: { color: '#fff', fontSize: 24, fontWeight: 'bold', width: 40 },
   calendarHeaderTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
   calendarSaveBtn: { color: '#fff', fontSize: 14, fontWeight: 'bold', width: 40, textAlign: 'right' },
   calendarSelectedRange: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0088CC', paddingHorizontal: 15, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#0077B3' },
   calendarSelectedText: { color: '#fff', fontSize: 15 },
-  calendarEditBtn: { fontSize: 18 },
   calendarMonthContainer: { backgroundColor: '#fff', marginBottom: 1, padding: 15 },
   calendarMonthTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 15 },
   calendarWeekDays: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
@@ -582,6 +602,13 @@ const styles = StyleSheet.create({
   calendarDayText: { fontSize: 15, color: '#333' },
   calendarDaySelected: { backgroundColor: '#0088CC', borderRadius: 20 },
   calendarDayTextSelected: { color: '#fff', fontWeight: 'bold' },
-  calendarDayInRange: { backgroundColor: '#B3E5FC', borderRadius: 20 }
+  calendarDayInRange: { backgroundColor: '#B3E5FC', borderRadius: 20 },
+  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
+  loadingText: { color: '#6B7280', marginTop: 12, fontSize: 14 },
+  emptyBox: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937', marginBottom: 6 },
+  emptySubtitle: { fontSize: 13, color: '#6B7280' },
 });
+
 export default LedgerReportScreen;

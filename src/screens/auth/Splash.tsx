@@ -12,7 +12,7 @@ export default function Splash() {
 
   useEffect(() => {
     // Set status bar style for this screen
-    StatusBar.setBarStyle('light-content', true);
+    StatusBar.setBarStyle('dark-content', true);
     
     const timer = setTimeout(() => {
       navigation.replace('SignIn');
@@ -36,7 +36,7 @@ export default function Splash() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#077BC3',
+    backgroundColor: '#FFFFFF',
   },
   content: {
     flex: 1,

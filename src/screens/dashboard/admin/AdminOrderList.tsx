@@ -49,7 +49,7 @@ interface UserNode {
   email: string;
   mobile: string;
   totalOrders: number;
-  totalValue: string;
+  totalValue: number;
   orders: Order[];
   children: UserNode[];
 }
@@ -119,7 +119,7 @@ const AdminOrderList = () => {
         const node = userMap.get(userId)!;
         node.orders.push(mappedOrder);
         node.totalOrders += 1;
-        node.totalValue = `₹ ${(parseInt(node.totalValue.replace(/[^0-9]/g, '')) + mappedOrder.totalAmount).toLocaleString()}`;
+        node.totalValue += mappedOrder.totalAmount;
       } else {
         userMap.set(userId, {
           id: userId,
@@ -129,7 +129,7 @@ const AdminOrderList = () => {
           email: creator.email || '',
           mobile: creator.mobile || '',
           totalOrders: 1,
-          totalValue: `₹ ${mappedOrder.totalAmount.toLocaleString()}`,
+          totalValue: mappedOrder.totalAmount,
           orders: [mappedOrder],
           children: [],
         });
@@ -362,6 +362,13 @@ const AdminOrderList = () => {
     }
   };
 
+  const formatCompactCurrency = (value: number): string => {
+    if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)}Cr`;
+    if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
+    if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
+    return `₹${value.toFixed(0)}`;
+  };
+
   const renderOrderCard = (order: Order, viewOnly = false) => (
     <TouchableOpacity
       key={order._id}
@@ -419,9 +426,11 @@ const AdminOrderList = () => {
     const isExpanded = expandedUsers[user.id];
     const isSelected = selectedUser?.id === user.id;
     const hasOrders = user.orders && user.orders.length > 0;
+    const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const avatarColor = level === 0 ? '#3B82F6' : level === 1 ? '#10B981' : '#F59E0B';
 
     return (
-      <View key={user.id} style={[styles.userNodeContainer, { marginLeft: level * 20 }]}>
+      <View key={user.id} style={[styles.userNodeContainer, { marginLeft: level * 16 }]}>
         {/* User Card */}
         <TouchableOpacity
           style={[
@@ -430,53 +439,52 @@ const AdminOrderList = () => {
             level === 0 && styles.userCardTopLevel
           ]}
           onPress={() => handleUserClick(user)}
+          activeOpacity={0.85}
         >
+          {/* Left: avatar + info */}
           <View style={styles.userCardLeft}>
-            {/* Expand/Collapse Icon */}
             {hasChildren && (
               <TouchableOpacity
                 onPress={() => toggleUserExpansion(user.id)}
                 style={styles.expandButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Ionicons
                   name={isExpanded ? 'chevron-down' : 'chevron-forward'}
-                  size={20}
+                  size={18}
                   color="#6B7280"
                 />
               </TouchableOpacity>
             )}
 
-            {/* User Avatar */}
-            <View style={[
-              styles.userAvatar,
-              { backgroundColor: level === 0 ? '#3B82F6' : level === 1 ? '#10B981' : '#F59E0B' }
-            ]}>
-              <Text style={styles.userAvatarText}>
-                {user.name.split(' ').map(n => n[0]).join('')}
-              </Text>
+            <View style={[styles.userAvatar, { backgroundColor: avatarColor }]}>
+              <Text style={styles.userAvatarText}>{initials}</Text>
             </View>
 
-            {/* User Info */}
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>{user.name}</Text>
-              <Text style={styles.userRole}>{user.role}</Text>
-              <View style={styles.groupBadge}>
-                <Ionicons name="people-outline" size={10} color="#6B7280" />
-                <Text style={styles.groupName}>{user.groupName}</Text>
-              </View>
+              <Text style={styles.userName} numberOfLines={1}>{user.name}</Text>
+              <Text style={styles.userRole} numberOfLines={1}>{user.role}</Text>
+              {!!user.groupName && user.groupName !== user.role && (
+                <View style={styles.groupBadge}>
+                  <Ionicons name="people-outline" size={10} color="#6B7280" />
+                  <Text style={styles.groupName} numberOfLines={1}>{user.groupName}</Text>
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Stats */}
+          {/* Right: stats */}
           <View style={styles.userCardRight}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{user.totalOrders}</Text>
-              <Text style={styles.statLabel}>Orders</Text>
+              <Text style={styles.statLabel}>ORDERS</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{user.totalValue}</Text>
-              <Text style={styles.statLabel}>Value</Text>
+              <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {formatCompactCurrency(user.totalValue)}
+              </Text>
+              <Text style={styles.statLabel}>VALUE</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -926,13 +934,15 @@ const AdminOrderList = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 1,
+    paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB'
   },
   title: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
+  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
 
   summaryStrip: {
     flexDirection: 'row',
@@ -998,75 +1008,84 @@ const styles = StyleSheet.create({
   userCardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1
+    flex: 1,
+    minWidth: 0,          // allow flex child to shrink
+    marginRight: 8,
   },
-  expandButton: { marginRight: 8, padding: 4 },
+  expandButton: { marginRight: 6, padding: 4 },
 
   userAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12
+    marginRight: 10,
+    flexShrink: 0,
   },
   userAvatarText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
   },
 
-  userInfo: { flex: 1 },
+  userInfo: { flex: 1, minWidth: 0 },
   userName: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#111827'
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
   },
   userRole: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
-    marginTop: 2
+    marginTop: 2,
+    textTransform: 'capitalize',
   },
   groupBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 6,
-    alignSelf: 'flex-start'
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    marginTop: 5,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
   groupName: {
     fontSize: 10,
     color: '#6B7280',
-    marginLeft: 4,
-    fontWeight: '600'
+    marginLeft: 3,
+    fontWeight: '600',
   },
 
   userCardRight: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    flexShrink: 0,
   },
   statItem: {
     alignItems: 'center',
-    paddingHorizontal: 8
+    width: 56,          // fixed width so it never collapses the left side
   },
   statValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#111827'
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
   },
   statLabel: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#9CA3AF',
     marginTop: 2,
-    textTransform: 'uppercase'
+    fontWeight: '600',
+    letterSpacing: 0.4,
   },
   statDivider: {
     width: 1,
-    height: 30,
-    backgroundColor: '#E5E7EB'
+    height: 28,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 2,
   },
 
   childrenContainer: { marginTop: 8 },
