@@ -311,7 +311,8 @@ const AdminCreateOrder = () => {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [subDealers, setSubDealers] = useState<SubDealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+
   // State for selected values
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
   const [selectedSubDealer, setSelectedSubDealer] = useState<SubDealer | null>(null);
@@ -329,6 +330,10 @@ const AdminCreateOrder = () => {
   // State for loading
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Success modal
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState<{ orderNumber: string; totalAmount: number } | null>(null);
   
   // State for order details
   const [orderNotes, setOrderNotes] = useState('');
@@ -1076,27 +1081,12 @@ const AdminCreateOrder = () => {
             setOtherReference('');
             setTermsOfDelivery1('');
             setTermsOfDelivery2('');
-            
-          Alert.alert(
-            'Success',
-            `Order created successfully!\nOrder Number: ${response.order?.orderNumber || 'N/A'}\nTotal Amount: ₹${finalSummary.totalAmount.toFixed(2)}`,
-            [
-                {
-                  text: 'View Orders',
-                  onPress: () => {
-                    // Navigate to order list
-                    (navigation as any).navigate('AdminOrderList');
-                  }
-                },
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    // Just go back
-                    navigation.goBack();
-                  }
-                }
-              ]
-            );
+
+            setCreatedOrder({
+              orderNumber: response.order?.orderNumber || 'N/A',
+              totalAmount: finalSummary.totalAmount,
+            });
+            setShowSuccessModal(true);
           } else {
             console.log('❌ Order creation failed:', response?.message);
             Alert.alert('Error', response?.message || 'Failed to create order');
@@ -1371,6 +1361,17 @@ const AdminCreateOrder = () => {
     </View>
   );
 
+  const filteredProducts = useMemo(() => {
+    const q = productSearchQuery.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(p =>
+      p.productName?.toLowerCase().includes(q) ||
+      p.productCode?.toLowerCase().includes(q) ||
+      p.partNo?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q)
+    );
+  }, [products, productSearchQuery]);
+
   const productSelectionEntries = products.map((product) => {
     const selection = getSelectionState(product);
     const quantity = parseFloat(selection.quantity) || 0;
@@ -1399,8 +1400,65 @@ const AdminCreateOrder = () => {
     );
   }
 
+  const renderSuccessModal = () => (
+    <Modal
+      visible={showSuccessModal}
+      animationType="fade"
+      transparent
+      onRequestClose={() => setShowSuccessModal(false)}
+    >
+      <View style={styles.successOverlay}>
+        <View style={styles.successCard}>
+          {/* Animated tick circle */}
+          <View style={styles.successIconCircle}>
+            <Ionicons name="checkmark-circle" size={64} color="#10B981" />
+          </View>
+
+          <Text style={styles.successTitle}>Order Created!</Text>
+          <Text style={styles.successSub}>Your order has been placed successfully.</Text>
+
+          <View style={styles.successInfoBox}>
+            <View style={styles.successInfoRow}>
+              <Text style={styles.successInfoLabel}>Order Number</Text>
+              <Text style={styles.successInfoValue}>#{createdOrder?.orderNumber}</Text>
+            </View>
+            <View style={[styles.successInfoRow, { borderBottomWidth: 0 }]}>
+              <Text style={styles.successInfoLabel}>Total Amount</Text>
+              <Text style={[styles.successInfoValue, { color: '#10B981', fontWeight: '800' }]}>
+                ₹ {createdOrder?.totalAmount.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.successPrimaryBtn}
+            onPress={() => {
+              setShowSuccessModal(false);
+              (navigation as any).navigate('AdminOrderList');
+            }}
+          >
+            <Ionicons name="list-outline" size={18} color="#fff" />
+            <Text style={styles.successPrimaryBtnText}>View Order List</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.successSecondaryBtn}
+            onPress={() => setShowSuccessModal(false)}
+          >
+            <Text style={styles.successSecondaryBtnText}>Create Another Order</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      {renderSuccessModal()}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -1412,7 +1470,12 @@ const AdminCreateOrder = () => {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
         {/* Customer Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Customer (Dealer)</Text>
@@ -1449,32 +1512,34 @@ const AdminCreateOrder = () => {
         </View>
 
         {/* Shipping Address Selection */}
-        <View style={styles.section}>
+        <View style={[styles.section, { zIndex: 10 }]}>
           <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) - Optional</Text>
-          <View style={styles.comboBoxRow}>
-            <View style={styles.comboBoxInputWrapper}>
+          <View style={styles.inlineComboBox}>
+            <View style={styles.inlineComboBoxInputRow}>
+              <Ionicons name="search-outline" size={16} color="#6B7280" />
               <TextInput
                 ref={subDealerInputRef}
-                style={styles.comboBoxInput}
-                placeholder={
-                  loading
-                    ? 'Loading sub dealers...'
-                    : 'Type name or select from list...'
-                }
+                style={styles.inlineComboBoxInput}
+                placeholder={loading ? 'Loading sub dealers...' : 'Type name or select...'}
                 placeholderTextColor="#9CA3AF"
                 value={subDealerInput}
                 editable={!loading}
                 onChangeText={(text) => {
                   setSubDealerInput(text);
+                  setShowSubDealerDropdown(true);
                   if (selectedSubDealer && (selectedSubDealer.SDName || selectedSubDealer.name) !== text) {
                     setSelectedSubDealer(null);
                   }
                 }}
+                onFocus={() => setShowSubDealerDropdown(true)}
                 onBlur={() => {
-                  const trimmed = subDealerInput.trim();
-                  if (trimmed && !selectedSubDealer) {
-                    handleSaveCustomSubDealer(trimmed);
-                  }
+                  setTimeout(() => {
+                    setShowSubDealerDropdown(false);
+                    const trimmed = subDealerInput.trim();
+                    if (trimmed && !selectedSubDealer) {
+                      handleSaveCustomSubDealer(trimmed);
+                    }
+                  }, 200);
                 }}
                 returnKeyType="done"
                 onSubmitEditing={() => {
@@ -1482,27 +1547,73 @@ const AdminCreateOrder = () => {
                   if (trimmed && !selectedSubDealer) {
                     handleSaveCustomSubDealer(trimmed);
                   }
+                  setShowSubDealerDropdown(false);
                 }}
               />
               {subDealerInput.length > 0 && (
                 <TouchableOpacity
-                  style={styles.comboBoxClearButton}
                   onPress={() => {
                     setSubDealerInput('');
                     setSelectedSubDealer(null);
+                    setShowSubDealerDropdown(false);
                   }}
                 >
                   <Ionicons name="close-circle" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
               )}
+              <TouchableOpacity
+                onPress={() => setShowSubDealerDropdown((v) => !v)}
+              >
+                <Ionicons
+                  name={showSubDealerDropdown ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#6B7280"
+                />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.comboBoxBrowseButton}
-              onPress={() => setShowSubDealerDropdown(true)}
-            >
-              <Ionicons name="list-outline" size={20} color="#3B82F6" />
-            </TouchableOpacity>
+
+            {showSubDealerDropdown && (
+              <View style={styles.inlineDropdownList}>
+                {filteredSubDealers.length === 0 && !subDealerInput.trim() && (
+                  <View style={styles.inlineDropdownEmpty}>
+                    <Text style={styles.inlineDropdownEmptyText}>No sub dealers available</Text>
+                  </View>
+                )}
+                {filteredSubDealers.map((item) => (
+                  <TouchableOpacity
+                    key={item._id}
+                    style={styles.inlineDropdownItem}
+                    onPress={() => handleSubDealerSelect(item)}
+                  >
+                    <Text style={styles.inlineDropdownItemName}>{item.SDName || item.name}</Text>
+                    {item.address && formatAddress(item.address) !== 'Address not specified' && (
+                      <Text style={styles.inlineDropdownItemAddress}>{formatAddress(item.address)}</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+                {subDealerInput.trim().length > 0 &&
+                  !filteredSubDealers.some(
+                    (sd) =>
+                      (sd.SDName || sd.name || '').toLowerCase() ===
+                      subDealerInput.trim().toLowerCase()
+                  ) && (
+                    <TouchableOpacity
+                      style={styles.inlineDropdownSaveCustom}
+                      onPress={() => {
+                        handleSaveCustomSubDealer(subDealerInput);
+                        setShowSubDealerDropdown(false);
+                      }}
+                    >
+                      <Ionicons name="add-circle-outline" size={16} color="#3B82F6" />
+                      <Text style={styles.inlineDropdownSaveCustomText}>
+                        Use "{subDealerInput.trim()}" as sub dealer name
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+              </View>
+            )}
           </View>
+
           {selectedSubDealer && (
             <View style={styles.comboBoxSelectedBadge}>
               <Ionicons name="checkmark-circle" size={14} color="#059669" />
@@ -1747,94 +1858,22 @@ const AdminCreateOrder = () => {
         </View>
       </Modal>
 
-      {/* Sub Dealer Dropdown Modal */}
-      <Modal
-        visible={showSubDealerDropdown}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setShowSubDealerDropdown(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowSubDealerDropdown(false)}
-            >
-              <Ionicons name="close" size={24} color="#374151" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Select Sub Dealer</Text>
-            <View style={styles.placeholder} />
-          </View>
-
-          {/* Search input */}
-          <View style={styles.modalSearchContainer}>
-            <Ionicons name="search-outline" size={18} color="#9CA3AF" />
-            <TextInput
-              style={styles.modalSearchInput}
-              placeholder="Search or type a new name..."
-              placeholderTextColor="#9CA3AF"
-              value={subDealerInput}
-              onChangeText={setSubDealerInput}
-              autoFocus
-              returnKeyType="done"
-            />
-            {subDealerInput.length > 0 && (
-              <TouchableOpacity onPress={() => setSubDealerInput('')}>
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <FlatList
-            data={filteredSubDealers}
-            renderItem={renderSubDealerItem}
-            keyExtractor={(item) => item._id}
-            style={styles.dropdownList}
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <View style={styles.modalEmptyContainer}>
-                <Ionicons name="search-outline" size={32} color="#D1D5DB" />
-                <Text style={styles.modalEmptyText}>No matches found</Text>
-              </View>
-            }
-            ListFooterComponent={
-              subDealerInput.trim().length > 0 &&
-              !filteredSubDealers.some(
-                (sd) =>
-                  (sd.SDName || sd.name || '').toLowerCase() ===
-                  subDealerInput.trim().toLowerCase()
-              ) ? (
-                <TouchableOpacity
-                  style={styles.modalSaveCustomButton}
-                  onPress={() => handleSaveCustomSubDealer(subDealerInput)}
-                >
-                  <Ionicons name="add-circle-outline" size={18} color="#3B82F6" />
-                  <Text style={styles.modalSaveCustomText}>
-                    Use "{subDealerInput.trim()}" as sub dealer name
-                  </Text>
-                </TouchableOpacity>
-              ) : null
-            }
-          />
-        </View>
-      </Modal>
-
       {/* Product Dropdown Modal */}
       <Modal
         visible={showProductDropdown}
         animationType="slide"
         presentationStyle="formSheet"
-        onRequestClose={() => setShowProductDropdown(false)}
+        onRequestClose={() => { setShowProductDropdown(false); setProductSearchQuery(''); }}
       >
         <KeyboardAvoidingView
           style={styles.modalContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
           <View style={styles.modalHeader}>
             <TouchableOpacity
               style={styles.modalCloseButton}
-              onPress={() => setShowProductDropdown(false)}
+              onPress={() => { setShowProductDropdown(false); setProductSearchQuery(''); }}
             >
               <Ionicons name="close" size={24} color="#374151" />
             </TouchableOpacity>
@@ -1842,15 +1881,29 @@ const AdminCreateOrder = () => {
             <View style={styles.placeholder} />
           </View>
 
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={18} color="#6B7280" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products..."
+              value={productSearchQuery}
+              onChangeText={setProductSearchQuery}
+              placeholderTextColor="#9CA3AF"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+          </View>
+
           <FlatList
-            data={products}
+            data={filteredProducts}
             renderItem={renderProductItem}
             keyExtractor={(item) => item._id}
             style={styles.dropdownList}
             contentContainerStyle={styles.productListContent}
             extraData={productSelections}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
+            keyboardDismissMode="interactive"
+            automaticallyAdjustKeyboardInsets
             ListFooterComponent={
               bulkButtonVisible ? (
                 <View style={styles.productSelectionFooter}>
@@ -1876,7 +1929,7 @@ const AdminCreateOrder = () => {
           />
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -1901,7 +1954,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -2229,7 +2282,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -2243,12 +2296,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+    paddingVertical: 6,
+  },
   dropdownList: {
     flex: 1,
     padding: 16,
   },
   productListContent: {
-    paddingBottom: 24,
+    paddingBottom: 120,
   },
   productSelectionFooter: {
     marginTop: 16,
@@ -2390,14 +2459,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
-  // Combo-box styles for sub dealer field
-  comboBoxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  // Inline combobox styles for sub dealer
+  inlineComboBox: {
+    position: 'relative',
   },
-  comboBoxInputWrapper: {
-    flex: 1,
+  inlineComboBoxInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -2406,25 +2472,67 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     minHeight: 48,
+    gap: 8,
   },
-  comboBoxInput: {
+  inlineComboBoxInput: {
     flex: 1,
     fontSize: 15,
     color: '#1F2937',
     paddingVertical: 10,
   },
-  comboBoxClearButton: {
-    padding: 4,
-  },
-  comboBoxBrowseButton: {
-    width: 44,
-    height: 48,
-    backgroundColor: '#EFF6FF',
+  inlineDropdownList: {
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#D1D5DB',
     borderRadius: 8,
+    marginTop: 4,
+    maxHeight: 220,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  inlineDropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  inlineDropdownItemName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  inlineDropdownItemAddress: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  inlineDropdownEmpty: {
+    paddingVertical: 20,
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  inlineDropdownEmptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  inlineDropdownSaveCustom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#EFF6FF',
+    borderTopWidth: 1,
+    borderTopColor: '#DBEAFE',
+  },
+  inlineDropdownSaveCustomText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    fontWeight: '500',
+    flex: 1,
   },
   comboBoxSelectedBadge: {
     flexDirection: 'row',
@@ -2437,51 +2545,99 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '500',
   },
-  // Modal search & utility styles
-  modalSearchContainer: {
-    flexDirection: 'row',
+  // ─── Success Modal ───────────────────────────────────────────────────────────
+  successOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    padding: 24,
+  },
+  successCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+  },
+  successIconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#F0FDF4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  successSub: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  successInfoBox: {
+    width: '100%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    margin: 16,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    gap: 8,
+    marginBottom: 24,
+    overflow: 'hidden',
   },
-  modalSearchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#1F2937',
-    paddingVertical: 10,
-  },
-  modalEmptyContainer: {
+  successInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 32,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  modalEmptyText: {
-    fontSize: 15,
-    color: '#9CA3AF',
+  successInfoLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
   },
-  modalSaveCustomButton: {
+  successInfoValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '700',
+  },
+  successPrimaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    margin: 16,
-    marginTop: 8,
-    padding: 12,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 8,
+    width: '100%',
+    backgroundColor: '#3B82F6',
+    paddingVertical: 15,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  modalSaveCustomText: {
-    fontSize: 14,
-    color: '#3B82F6',
-    fontWeight: '500',
-    flex: 1,
+  successPrimaryBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  successSecondaryBtn: {
+    width: '100%',
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  successSecondaryBtnText: {
+    color: '#374151',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
 

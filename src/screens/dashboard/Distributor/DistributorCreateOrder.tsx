@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
@@ -95,7 +97,8 @@ const DistributorCreateOrder = () => {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [subDealers, setSubDealers] = useState<SubDealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+
   // State for selected values
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
   const [selectedSubDealer, setSelectedSubDealer] = useState<SubDealer | null>(null);
@@ -623,6 +626,17 @@ const DistributorCreateOrder = () => {
     </View>
   );
 
+  const filteredProducts = useMemo(() => {
+    const q = productSearchQuery.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(p =>
+      p.productName?.toLowerCase().includes(q) ||
+      p.productCode?.toLowerCase().includes(q) ||
+      p.partNo?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q)
+    );
+  }, [products, productSearchQuery]);
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -862,27 +876,46 @@ const DistributorCreateOrder = () => {
         visible={showProductDropdown}
         animationType="slide"
         presentationStyle="formSheet"
-        onRequestClose={() => setShowProductDropdown(false)}
+        onRequestClose={() => { setShowProductDropdown(false); setProductSearchQuery(''); }}
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        >
           <View style={styles.modalHeader}>
             <TouchableOpacity
               style={styles.modalCloseButton}
-              onPress={() => setShowProductDropdown(false)}
+              onPress={() => { setShowProductDropdown(false); setProductSearchQuery(''); }}
             >
               <Ionicons name="close" size={24} color="#374151" />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Select Product</Text>
             <View style={styles.placeholder} />
           </View>
-          
+
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={18} color="#6B7280" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products..."
+              value={productSearchQuery}
+              onChangeText={setProductSearchQuery}
+              placeholderTextColor="#9CA3AF"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+          </View>
+
           <FlatList
-            data={products}
+            data={filteredProducts}
             renderItem={renderProductItem}
             keyExtractor={(item) => item._id}
             style={styles.dropdownList}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           />
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1148,6 +1181,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+    paddingVertical: 6,
   },
   dropdownList: {
     flex: 1,

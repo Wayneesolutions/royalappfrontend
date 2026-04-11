@@ -13,6 +13,7 @@ import {
   RefreshControl,
   Platform,
   Dimensions,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import { useAuth } from "../../../../context/AuthContext";
@@ -1595,7 +1596,7 @@ const Users = () => {
               });
             }}
           >
-            <View style={styles.sidebarContainer} onStartShouldSetResponder={() => true}>
+            <KeyboardAvoidingView style={styles.sidebarContainer} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24} onStartShouldSetResponder={() => true}>
                 {/* Drag Handle */}
                 <View style={styles.sidebarDragHandle} />
                 
@@ -1664,7 +1665,7 @@ const Users = () => {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
           </TouchableOpacity>
         )}
       </Modal>
@@ -2242,7 +2243,7 @@ const styles = StyleSheet.create({
   },
   modalContentContainer: {
     padding: 24,
-    paddingBottom: 24,
+    paddingBottom: 100,
   },
   modalActions: {
     flexDirection: 'row',
@@ -2303,10 +2304,9 @@ const styles = StyleSheet.create({
   sidebarContent: {
     flex: 1,
     padding: 24,
-    paddingBottom: 0,
   },
   sidebarContentContainer: {
-    paddingBottom: 24,
+    paddingBottom: 120,
   },
   input: {
     borderWidth: 1,

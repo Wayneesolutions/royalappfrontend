@@ -6,15 +6,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
   Alert,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 interface OrderItem {
   productId: string;
@@ -55,18 +55,29 @@ interface UserNode {
 }
 
 const AdminOrderList = () => {
-  const { getOrders, approveRejectOrder } = useAuth();
+  const { getOrders, approveRejectOrder, submitOrderForApproval, user } = useAuth();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
 
+  // ── Tab state ──────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'myOrders' | 'hierarchy'>('myOrders');
+
+  // ── Shared modal / action state ────────────────────────────────────────────
   const [expandedUsers, setExpandedUsers] = useState<{ [key: string]: boolean }>({});
   const [selectedUser, setSelectedUser] = useState<UserNode | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
-  const [approveAction, setApproveAction] = useState<'approved' | 'rejected'>('approved');
   const [approveNotes, setApproveNotes] = useState('');
   const [approving, setApproving] = useState(false);
+
+  // ── My Orders tab state ────────────────────────────────────────────────────
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [myOrdersLoading, setMyOrdersLoading] = useState(true);
+  const [myOrdersTotalValue, setMyOrdersTotalValue] = useState(0);
+
+  // ── Hierarchy tab state ────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userHierarchy, setUserHierarchy] = useState<UserNode[]>([]);
@@ -149,15 +160,70 @@ const AdminOrderList = () => {
     }
   }, [getOrders]);
 
+  const fetchMyOrders = useCallback(async () => {
+    try {
+      setMyOrdersLoading(true);
+      const response = await getOrders({ limit: 100, page: 1, createdBy: user?._id });
+      if (response?.success) {
+        const raw = response.orders || [];
+        const mapped: Order[] = raw.map((order: any) => ({
+          _id: order._id,
+          orderNumber: order.orderNumber || order._id,
+          customerName: order.customerName || 'N/A',
+          shippingName: order.shippingAddress?.city || order.shippingAddress?.street || 'N/A',
+          items: (order.items || []).map((item: any) => ({
+            productId: item.productId || '',
+            productCode: item.productCode || '',
+            productName: item.productName || '',
+            unit: item.unit || 'pcs',
+            unitPrice: item.unitPrice || 0,
+            quantity: item.quantity || 0,
+            totalAmount: item.totalPrice || item.totalAmount || 0,
+          })),
+          totalQuantity: (order.items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
+          totalAmount: order.finalAmount || order.totalAmount || 0,
+          status: order.status || 'draft',
+          createdAt: order.orderDate || order.createdAt || new Date().toISOString(),
+          paymentMethod: order.paymentMethod,
+          _raw: order,
+        }));
+        setMyOrders(mapped);
+        setMyOrdersTotalValue(raw.reduce((sum: number, o: any) => sum + (o.finalAmount || o.totalAmount || 0), 0));
+      } else {
+        Alert.alert('Error', 'Failed to load your orders');
+      }
+    } catch (error) {
+      console.error('Error fetching my orders:', error);
+      Alert.alert('Error', 'Failed to load your orders');
+    } finally {
+      setMyOrdersLoading(false);
+    }
+  }, [getOrders, user?._id]);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchOrders();
+    if (activeTab === 'myOrders') {
+      await fetchMyOrders();
+    } else {
+      await fetchOrders();
+    }
     setRefreshing(false);
   };
 
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+    fetchMyOrders();
+  }, [fetchOrders, fetchMyOrders]);
+
+  // Refresh + notify when returning from AdminEditOrder
+  useEffect(() => {
+    if (route.params?.refreshOrders) {
+      fetchMyOrders();
+      fetchOrders();
+      setTimeout(() => Alert.alert('Success', 'Order updated successfully!'), 300);
+      navigation.setParams({ refreshOrders: undefined });
+    }
+  }, [route.params?.refreshOrders]);
 
   const toggleUserExpansion = (userId: string) => {
     setExpandedUsers(prev => ({
@@ -170,10 +236,16 @@ const AdminOrderList = () => {
     setSelectedUser(selectedUser?.id === user.id ? null : user);
   };
 
-  // Open action sheet (not details modal directly)
+  // My Orders tab: full action sheet (view + edit + approve)
   const handleOrderClick = (order: Order) => {
     setSelectedOrder(order);
     setShowActionSheet(true);
+  };
+
+  // Hierarchy tab: view details only
+  const handleHierarchyOrderClick = (order: Order) => {
+    setSelectedOrder(order);
+    setShowOrderDetails(true);
   };
 
   const handleViewDetails = () => {
@@ -187,37 +259,66 @@ const AdminOrderList = () => {
     navigation.navigate('AdminEditOrder', { order: selectedOrder._raw ?? selectedOrder });
   };
 
-  const openApproveModal = (action: 'approved' | 'rejected') => {
-    setApproveAction(action);
+  const openApproveModal = () => {
     setApproveNotes('');
     setShowActionSheet(false);
     setShowApproveModal(true);
   };
 
-  const handleApproveReject = async () => {
+  const handleApprove = async () => {
     if (!selectedOrder) return;
     try {
       setApproving(true);
-      const response = await approveRejectOrder(selectedOrder._id, approveAction, approveNotes);
-      if (response?.success) {
-        Alert.alert(
-          'Success',
-          `Order ${approveAction === 'approved' ? 'approved' : 'rejected'} successfully`,
-          [{ text: 'OK', onPress: () => { setShowApproveModal(false); setApproveNotes(''); fetchOrders(); } }]
-        );
-      } else {
-        Alert.alert('Error', response?.message || `Failed to ${approveAction} order`);
+
+      let approved = false;
+
+      // If order is still draft, submit it for approval first.
+      // For admin orders this triggers self-approval (isSelfApproved: true)
+      // and the order moves straight to 'approved' without a second call.
+      if (selectedOrder.status === 'draft') {
+        const submitResult = await submitOrderForApproval(selectedOrder._id);
+        if (!submitResult?.success) {
+          // Close modal first so the error alert is visible
+          setShowApproveModal(false);
+          setTimeout(() => Alert.alert('Error', submitResult?.message || 'Failed to submit order for approval'), 300);
+          return;
+        }
+        if (submitResult?.isSelfApproved) {
+          approved = true;
+        }
+        // Not self-approved — fall through to approveRejectOrder below
       }
-    } catch (error) {
-      Alert.alert('Error', `Failed to ${approveAction} order`);
+
+      if (!approved) {
+        const response = await approveRejectOrder(selectedOrder._id, 'approved', approveNotes);
+        if (response?.success) {
+          approved = true;
+        } else {
+          setShowApproveModal(false);
+          setTimeout(() => Alert.alert('Error', response?.message || 'Failed to approve order'), 300);
+          return;
+        }
+      }
+
+      if (approved) {
+        // Close modal first, then show success alert so it isn't hidden behind the modal
+        setShowApproveModal(false);
+        setApproveNotes('');
+        fetchMyOrders();
+        fetchOrders();
+        setTimeout(() => Alert.alert('Success', 'Order approved successfully!'), 300);
+      }
+    } catch {
+      setShowApproveModal(false);
+      setTimeout(() => Alert.alert('Error', 'Failed to approve order'), 300);
     } finally {
       setApproving(false);
     }
   };
 
-  // canEdit: admin can always edit; allow even after approval like tally flow
+  // canEdit: only allow editing while order is still in draft or pending_approval
   const canEdit = (status: string) =>
-    !['delivered', 'cancelled'].includes(status);
+    ['draft', 'pending_approval'].includes(status);
 
   // canApprove: only pending_approval or draft orders can be approved
   const canApprove = (status: string) =>
@@ -261,11 +362,11 @@ const AdminOrderList = () => {
     }
   };
 
-  const renderOrderCard = (order: Order) => (
+  const renderOrderCard = (order: Order, viewOnly = false) => (
     <TouchableOpacity
       key={order._id}
       style={styles.orderCard}
-      onPress={() => handleOrderClick(order)}
+      onPress={() => viewOnly ? handleHierarchyOrderClick(order) : handleOrderClick(order)}
     >
       <View style={styles.orderCardHeader}>
         <View style={{ flex: 1 }}>
@@ -389,7 +490,7 @@ const AdminOrderList = () => {
                 Orders ({user.orders.length})
               </Text>
             </View>
-            {user.orders.map((order) => renderOrderCard(order))}
+            {user.orders.map((order) => renderOrderCard(order, true))}
           </View>
         )}
 
@@ -408,6 +509,7 @@ const AdminOrderList = () => {
     if (!selectedOrder) return null;
 
     return (
+      
       <Modal
         visible={showOrderDetails}
         animationType="slide"
@@ -510,19 +612,10 @@ const AdminOrderList = () => {
                 {canApprove(selectedOrder.status) && (
                   <TouchableOpacity
                     style={[styles.detailActionBtn, { backgroundColor: '#F0FDF4', borderColor: '#10B981' }]}
-                    onPress={() => { setShowOrderDetails(false); openApproveModal('approved'); }}
+                    onPress={() => { setShowOrderDetails(false); openApproveModal(); }}
                   >
                     <Ionicons name="checkmark-circle-outline" size={18} color="#10B981" />
                     <Text style={[styles.detailActionText, { color: '#10B981' }]}>Approve</Text>
-                  </TouchableOpacity>
-                )}
-                {canApprove(selectedOrder.status) && (
-                  <TouchableOpacity
-                    style={[styles.detailActionBtn, { backgroundColor: '#FFF1F2', borderColor: '#EF4444' }]}
-                    onPress={() => { setShowOrderDetails(false); openApproveModal('rejected'); }}
-                  >
-                    <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
-                    <Text style={[styles.detailActionText, { color: '#EF4444' }]}>Reject</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -600,26 +693,13 @@ const AdminOrderList = () => {
           )}
 
           {canApprove(selectedOrder.status) && (
-            <TouchableOpacity style={styles.sheetAction} onPress={() => openApproveModal('approved')}>
+            <TouchableOpacity style={styles.sheetAction} onPress={openApproveModal}>
               <View style={[styles.sheetActionIcon, { backgroundColor: '#F0FDF4' }]}>
                 <Ionicons name="checkmark-circle-outline" size={20} color="#10B981" />
               </View>
               <View style={styles.sheetActionInfo}>
                 <Text style={[styles.sheetActionTitle, { color: '#10B981' }]}>Approve Order</Text>
                 <Text style={styles.sheetActionSub}>Move order to approved status</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-
-          {canApprove(selectedOrder.status) && (
-            <TouchableOpacity style={styles.sheetAction} onPress={() => openApproveModal('rejected')}>
-              <View style={[styles.sheetActionIcon, { backgroundColor: '#FFF1F2' }]}>
-                <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
-              </View>
-              <View style={styles.sheetActionInfo}>
-                <Text style={[styles.sheetActionTitle, { color: '#EF4444' }]}>Reject Order</Text>
-                <Text style={styles.sheetActionSub}>Reject with a reason</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
             </TouchableOpacity>
@@ -636,10 +716,9 @@ const AdminOrderList = () => {
     );
   };
 
-  // ─── Approve / Reject Confirmation Modal ────────────────────────────────────
+  // ─── Approve Confirmation Modal ──────────────────────────────────────────────
   const renderApproveModal = () => {
     if (!selectedOrder) return null;
-    const isApprove = approveAction === 'approved';
 
     return (
       <Modal
@@ -650,29 +729,21 @@ const AdminOrderList = () => {
       >
         <View style={styles.approveOverlay}>
           <View style={styles.approveCard}>
-            {/* Icon */}
-            <View style={[styles.approveIconCircle, { backgroundColor: isApprove ? '#F0FDF4' : '#FFF1F2' }]}>
-              <Ionicons
-                name={isApprove ? 'checkmark-circle' : 'close-circle'}
-                size={40}
-                color={isApprove ? '#10B981' : '#EF4444'}
-              />
+            <View style={styles.approveIconCircle}>
+              <Ionicons name="checkmark-circle" size={44} color="#10B981" />
             </View>
 
-            <Text style={styles.approveTitle}>
-              {isApprove ? 'Approve Order' : 'Reject Order'}
-            </Text>
+            <Text style={styles.approveTitle}>Approve Order</Text>
             <Text style={styles.approveSub}>
-              Order #{selectedOrder.orderNumber} • {selectedOrder.customerName}
+              #{selectedOrder.orderNumber} • {selectedOrder.customerName}
             </Text>
             <Text style={styles.approveAmount}>
               ₹ {selectedOrder.totalAmount.toLocaleString()}
             </Text>
 
-            {/* Notes */}
             <TextInput
               style={styles.approveNotes}
-              placeholder={isApprove ? 'Approval notes (optional)' : 'Reason for rejection (optional)'}
+              placeholder="Approval notes (optional)"
               placeholderTextColor="#9CA3AF"
               value={approveNotes}
               onChangeText={setApproveNotes}
@@ -681,7 +752,6 @@ const AdminOrderList = () => {
               textAlignVertical="top"
             />
 
-            {/* Buttons */}
             <View style={styles.approveButtons}>
               <TouchableOpacity
                 style={styles.approveCancelBtn}
@@ -691,22 +761,117 @@ const AdminOrderList = () => {
                 <Text style={styles.approveCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.approveConfirmBtn, { backgroundColor: isApprove ? '#10B981' : '#EF4444' }]}
-                onPress={handleApproveReject}
+                style={styles.approveConfirmBtn}
+                onPress={handleApprove}
                 disabled={approving}
               >
-                {approving ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.approveConfirmText}>
-                    {isApprove ? 'Approve' : 'Reject'}
-                  </Text>
-                )}
+                {approving
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.approveConfirmText}>Approve</Text>
+                }
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+    );
+  };
+
+  const renderMyOrdersTab = () => {
+    if (myOrdersLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading your orders...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {/* My Orders Summary */}
+        <View style={styles.summaryStrip}>
+          <View style={styles.summaryItem}>
+            <Ionicons name="document-text" size={20} color="#fff" />
+            <Text style={styles.summaryVal}>{myOrders.length}</Text>
+            <Text style={styles.summaryLab}>My Orders</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Ionicons name="cash" size={20} color="#fff" />
+            <Text style={styles.summaryVal}>₹{(myOrdersTotalValue / 100000).toFixed(1)}L</Text>
+            <Text style={styles.summaryLab}>Total Value</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Ionicons name="time" size={20} color="#fff" />
+            <Text style={styles.summaryVal}>
+              {myOrders.filter(o => o.status === 'pending_approval').length}
+            </Text>
+            <Text style={styles.summaryLab}>Pending</Text>
+          </View>
+        </View>
+
+        {myOrders.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="document-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyStateText}>No orders created by you</Text>
+          </View>
+        ) : (
+          myOrders.map((order) => renderOrderCard(order, false))
+        )}
+      </ScrollView>
+    );
+  };
+
+  const renderHierarchyTab = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {/* Hierarchy Summary */}
+        <View style={styles.summaryStrip}>
+          <View style={styles.summaryItem}>
+            <Ionicons name="document-text" size={20} color="#fff" />
+            <Text style={styles.summaryVal}>{totalOrders}</Text>
+            <Text style={styles.summaryLab}>Total Orders</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Ionicons name="people" size={20} color="#fff" />
+            <Text style={styles.summaryVal}>{userHierarchy.length}</Text>
+            <Text style={styles.summaryLab}>Active Users</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Ionicons name="cash" size={20} color="#fff" />
+            <Text style={styles.summaryVal}>₹{(totalValue / 100000).toFixed(1)}L</Text>
+            <Text style={styles.summaryLab}>Total Value</Text>
+          </View>
+        </View>
+
+        {userHierarchy.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="document-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyStateText}>No orders found</Text>
+          </View>
+        ) : (
+          userHierarchy.map((u: UserNode) => renderUserNode(u, 0))
+        )}
+      </ScrollView>
     );
   };
 
@@ -719,51 +884,41 @@ const AdminOrderList = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Orders Hierarchy</Text>
-        <Text style={styles.subtitle}>View orders by user hierarchy</Text>
+        <Text style={styles.subtitle}>Manage and view orders</Text>
       </View>
 
-      {/* Summary Strip */}
-      <View style={styles.summaryStrip}>
-        <View style={styles.summaryItem}>
-          <Ionicons name="document-text" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>{totalOrders}</Text>
-          <Text style={styles.summaryLab}>Total Orders</Text>
-        </View>
-        <View style={[styles.summaryItem, styles.summaryDivider]}>
-          <Ionicons name="people" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>{userHierarchy.length}</Text>
-          <Text style={styles.summaryLab}>Active Users</Text>
-        </View>
-        <View style={[styles.summaryItem, styles.summaryDivider]}>
-          <Ionicons name="cash" size={20} color="#fff" />
-          <Text style={styles.summaryVal}>₹{(totalValue / 100000).toFixed(1)}L</Text>
-          <Text style={styles.summaryLab}>Total Value</Text>
-        </View>
-      </View>
-
-      {/* Hierarchical User List */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading orders...</Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      {/* Tabs */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'myOrders' && styles.tabItemActive]}
+          onPress={() => setActiveTab('myOrders')}
         >
-          {userHierarchy.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="document-outline" size={64} color="#9CA3AF" />
-              <Text style={styles.emptyStateText}>No orders found</Text>
-            </View>
-          ) : (
-            userHierarchy.map((user: UserNode) => renderUserNode(user, 0))
-          )}
-        </ScrollView>
-      )}
+          <Ionicons
+            name="person-circle-outline"
+            size={18}
+            color={activeTab === 'myOrders' ? '#3B82F6' : '#9CA3AF'}
+          />
+          <Text style={[styles.tabLabel, activeTab === 'myOrders' && styles.tabLabelActive]}>
+            My Orders
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'hierarchy' && styles.tabItemActive]}
+          onPress={() => setActiveTab('hierarchy')}
+        >
+          <Ionicons
+            name="git-network-outline"
+            size={18}
+            color={activeTab === 'hierarchy' ? '#3B82F6' : '#9CA3AF'}
+          />
+          <Text style={[styles.tabLabel, activeTab === 'hierarchy' && styles.tabLabelActive]}>
+            Hierarchy
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'myOrders' ? renderMyOrdersTab() : renderHierarchyTab()}
     </SafeAreaView>
   );
 };
@@ -787,6 +942,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 15,
     borderRadius: 14,
     marginTop: 12,
+    marginBottom: 16,
     shadowColor: '#3B82F6',
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1318,6 +1474,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
+    backgroundColor: '#F0FDF4',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -1373,6 +1530,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
+    backgroundColor: '#10B981',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1380,6 +1538,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#fff',
+  },
+
+  // ── Tab Bar ──────────────────────────────────────────────────────────────
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  tabItemActive: {
+    borderBottomColor: '#3B82F6',
+  },
+  tabLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  tabLabelActive: {
+    color: '#3B82F6',
   },
 });
 

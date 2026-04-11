@@ -10,6 +10,8 @@ import {
   Modal,
   FlatList,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
@@ -1910,7 +1912,10 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -1922,7 +1927,12 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
         {/* Dealer Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Customer (Dealer) *</Text>
@@ -2368,7 +2378,8 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           />
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
+
   );
 };
 
@@ -2393,7 +2404,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
