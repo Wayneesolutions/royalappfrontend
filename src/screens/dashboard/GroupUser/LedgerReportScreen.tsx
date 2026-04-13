@@ -19,7 +19,8 @@ const LedgerReportScreen = () => {
 
   // --- Transaction state ---
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [ledgerSummary, setLedgerSummary] = useState<any>(null);
+  const [ledgerDetail, setLedgerDetail] = useState<any>(null);   // full ledger doc
+  const [ledgerSummary, setLedgerSummary] = useState<any>(null); // summary stats
   const [loadingTransactions, setLoadingTransactions] = useState(false);
 
   // --- Date States ---
@@ -65,14 +66,19 @@ const LedgerReportScreen = () => {
       if (endDateParam) params.endDate = endDateParam;
       const result = await apiService.getLedgerDetails(ledgerId, params);
       if (result?.success && result?.data) {
+        setLedgerDetail(result.data?.ledger || null);
+        setLedgerSummary(result.data?.summary || null);
         const txns = result.data?.transactions || result.data?.entries || [];
         setTransactions(Array.isArray(txns) ? txns : []);
-        setLedgerSummary(result.data?.summary || result.data?.ledger || null);
       } else {
         setTransactions([]);
+        setLedgerDetail(null);
+        setLedgerSummary(null);
       }
     } catch (e) {
       setTransactions([]);
+      setLedgerDetail(null);
+      setLedgerSummary(null);
     } finally {
       setLoadingTransactions(false);
     }
@@ -308,10 +314,10 @@ const LedgerReportScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {ledgerSummary && (
+      {(ledgerSummary || ledgerDetail) && (
         <View style={styles.balanceRow}>
           <Text style={styles.balanceLabel}>Opening Balance</Text>
-          <Text style={styles.balanceValue}>{formatAmount(ledgerSummary.openingBalance || ledgerSummary.opening || 0)}</Text>
+          <Text style={styles.balanceValue}>{formatAmount(ledgerSummary?.openingBalance ?? ledgerDetail?.LedgerOpening ?? 0)}</Text>
         </View>
       )}
 
@@ -359,7 +365,7 @@ const LedgerReportScreen = () => {
             ledgerSummary ? (
               <View style={[styles.balanceRow, { borderTopWidth: 1, borderColor: '#eee', marginTop: 10 }]}>
                 <Text style={styles.balanceLabel}>Closing Balance</Text>
-                <Text style={styles.balanceValue}>{formatAmount(ledgerSummary.closingBalance || ledgerSummary.closing || 0)}</Text>
+                <Text style={styles.balanceValue}>{formatAmount(ledgerSummary?.closingBalance ?? 0)}</Text>
               </View>
             ) : null
           }

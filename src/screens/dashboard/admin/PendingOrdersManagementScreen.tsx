@@ -303,11 +303,11 @@ const PendingOrdersManagementScreen = () => {
         <View style={styles.detailsRow}>
           <View style={styles.detailItem}>
             <Text style={styles.detailLabel}>Customer:</Text>
-            <Text style={styles.detailValue}>{item.createdBy.name}</Text>
+            <Text style={styles.detailValue}>{item.createdBy?.name ?? 'Unknown'}</Text>
           </View>
           <View style={styles.detailItem}>
             <Text style={styles.detailLabel}>Role:</Text>
-            <Text style={styles.detailValue}>{item.createdBy.role}</Text>
+            <Text style={styles.detailValue}>{item.createdBy?.role ?? 'Unknown'}</Text>
           </View>
         </View>
 

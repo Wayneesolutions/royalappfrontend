@@ -9,18 +9,15 @@ import apiService from '../../../services/api';
 const OutstandingApp = () => {
   const [currentScreen, setCurrentScreen] = useState('groups');
   const [selectedLedger, setSelectedLedger] = useState<any>(null);
+  const [selectedBill, setSelectedBill] = useState<any>(null); // ← NEW
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- API state ---
   const [ledgerGroups, setLedgerGroups] = useState<any[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [summary, setSummary] = useState<any>(null);
-
   const [bills, setBills] = useState<any[]>([]);
 
-  useEffect(() => {
-    fetchOutstandingList();
-  }, []);
+  useEffect(() => { fetchOutstandingList(); }, []);
 
   const fetchOutstandingList = async () => {
     try {
@@ -28,7 +25,6 @@ const OutstandingApp = () => {
       const result = await apiService.getOutstandingList();
       if (result?.success && result?.data) {
         const items: any[] = result.data?.outstandingList || [];
-        // Group by partyName so list screen shows one row per party
         const groupMap: Record<string, any> = {};
         items.forEach((item: any) => {
           const name = item.partyName || 'Unknown';
@@ -48,7 +44,6 @@ const OutstandingApp = () => {
         });
         const groups = Object.values(groupMap);
         setLedgerGroups(groups);
-        // Compute total outstanding from all items
         const total = items.reduce((s: number, i: any) => s + (i.outstandingAmount || 0), 0);
         setSummary({ totalOutstanding: total });
       }
@@ -59,7 +54,6 @@ const OutstandingApp = () => {
     }
   };
 
-  // Normalise field access — matched to actual API response
   const getName = (item: any) => item.partyName || item.ledgerName || item.name || item.LedgerName || 'Unknown';
   const getOutstanding = (item: any) => item.outstandingAmount || 0;
   const getInvoiceCount = (item: any) => item.items?.length || item.invoiceCount || 0;
@@ -70,7 +64,6 @@ const OutstandingApp = () => {
     return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
   };
 
-  // Bill (outstanding item) field helpers — matched to outstandingList items
   const getBillVoucher = (b: any) => b.vchnumber || b.voucherNo || b.outstandingId || b._id?.slice(-6).toUpperCase();
   const getBillAmount = (b: any) => b.outstandingAmount || b.totalAmount || 0;
   const getBillDate = (b: any) => {
@@ -96,12 +89,20 @@ const OutstandingApp = () => {
   const openLedgerDetails = (ledger: any) => {
     setSelectedLedger(ledger);
     setCurrentScreen('details');
-    // Bills are already grouped from the list — no extra API call needed
     setBills(ledger.items || []);
   };
 
+  // ── NEW: open bill detail screen ──
+  const openBillDetail = (bill: any) => {
+    setSelectedBill(bill);
+    setCurrentScreen('billDetail');
+  };
+
   const goBack = () => {
-    if (currentScreen === 'details') {
+    if (currentScreen === 'billDetail') {
+      setCurrentScreen('details');
+      setSelectedBill(null);
+    } else if (currentScreen === 'details') {
       setCurrentScreen('groups');
       setSelectedLedger(null);
       setBills([]);
@@ -163,7 +164,6 @@ const OutstandingApp = () => {
             <View style={styles.headerSpacer} />
           </View>
         </View>
-
         <View style={styles.summaryBanner}>
           <View style={styles.summaryContent}>
             <Text style={styles.summaryLabel}>Total Outstanding</Text>
@@ -173,7 +173,6 @@ const OutstandingApp = () => {
             <Text style={styles.summaryBadgeText}>{filteredGroups.length} Parties</Text>
           </View>
         </View>
-
         <View style={styles.searchContainer}>
           <View style={styles.searchBox}>
             <Text style={styles.searchIcon}>🔍</Text>
@@ -191,14 +190,12 @@ const OutstandingApp = () => {
             )}
           </View>
         </View>
-
         {filteredGroups.length > 0 && (
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>All Parties</Text>
             <Text style={styles.sectionCount}>{filteredGroups.length} result{filteredGroups.length > 1 ? 's' : ''}</Text>
           </View>
         )}
-
         {loadingGroups ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#4F46E5" />
@@ -262,7 +259,6 @@ const OutstandingApp = () => {
               <Text style={styles.billAmount}>₹{getBillAmount(item).toLocaleString('en-IN')}</Text>
             </View>
           </View>
-
           <View style={styles.detailsRow}>
             <View style={styles.dateInfo}>
               <Text style={styles.dateLabel}>Invoice Date</Text>
@@ -273,14 +269,12 @@ const OutstandingApp = () => {
               <Text style={styles.dateValue}>{getBillDue(item)}</Text>
             </View>
           </View>
-
           {typeof getBillItems(item) === 'string' && getBillItems(item) !== '—' && (
             <View style={styles.itemsRow}>
               <Text style={styles.itemLabel}>Items</Text>
               <Text style={styles.itemText} numberOfLines={2}>{getBillItems(item)}</Text>
             </View>
           )}
-
           {getBillOverdue(item) > 0 && (
             <View style={styles.overdueContainer}>
               <View style={styles.overdueBadge}>
@@ -289,9 +283,13 @@ const OutstandingApp = () => {
               </View>
             </View>
           )}
-
           <View style={styles.cardActions}>
-            <TouchableOpacity style={styles.actionBtnSecondary} onPress={() => Alert.alert(getBillVoucher(item), `Amount: ₹${getBillAmount(item).toLocaleString('en-IN')}\nDate: ${getBillDate(item)}\nDue: ${getBillDue(item)}`)} activeOpacity={0.7}>
+            {/* ── FIXED: was Alert.alert, now navigates to BillDetailScreen ── */}
+            <TouchableOpacity
+              style={styles.actionBtnSecondary}
+              onPress={() => openBillDetail(item)}
+              activeOpacity={0.7}
+            >
               <Text style={styles.actionBtnTextSecondary}>View Details</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => onRemindBill(item)} activeOpacity={0.7}>
@@ -314,67 +312,63 @@ const OutstandingApp = () => {
             <View style={styles.headerSpacer} />
           </View>
         </View>
-
         <ScrollView showsVerticalScrollIndicator={true} contentContainerStyle={styles.scrollContent}>
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryHeader}>
-                <Text style={styles.ledgerName}>{getName(selectedLedger)}</Text>
-                <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>{bills.length} Pending</Text>
-                </View>
-              </View>
-              <View style={styles.summaryAmount}>
-                <Text style={styles.amountLabel}>Total Outstanding</Text>
-                <Text style={styles.amountValue}>₹ {totalAmount.toLocaleString('en-IN')}</Text>
-              </View>
-              <View style={styles.agingSection}>
-                <Text style={styles.agingTitle}>Aging Analysis</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agingScrollContent}>
-                  {[
-                    { label: '1-30 days', key: 30 },
-                    { label: '31-60 days', key: 60 },
-                    { label: '61-90 days', key: 90 },
-                    { label: '90+ days', key: 999 },
-                  ].map(({ label, key }) => {
-                    const amt = bills
-                      .filter(b => {
-                        const d = getBillOverdue(b);
-                        if (key === 30) return d >= 1 && d <= 30;
-                        if (key === 60) return d >= 31 && d <= 60;
-                        if (key === 90) return d >= 61 && d <= 90;
-                        return d > 90;
-                      })
-                      .reduce((s, b) => s + getBillAmount(b), 0);
-                    const isActive = key === 999 && bills.some(b => getBillOverdue(b) > 90);
-                    return (
-                      <View key={key} style={[styles.agingItem, isActive && styles.agingItemActive]}>
-                        <Text style={isActive ? styles.agingDaysActive : styles.agingDays}>{label}</Text>
-                        <Text style={isActive ? styles.agingAmountActive : styles.agingAmount}>₹{amt.toLocaleString('en-IN')}</Text>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryHeader}>
+              <Text style={styles.ledgerName}>{getName(selectedLedger)}</Text>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>{bills.length} Pending</Text>
               </View>
             </View>
-
-            {bills.length > 0 && (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Invoice Details</Text>
-                <Text style={styles.sectionCount}>{bills.length} invoice{bills.length > 1 ? 's' : ''}</Text>
-              </View>
-            )}
-
-            {bills.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📋</Text>
-                <Text style={styles.emptyTitle}>No Invoices</Text>
-                <Text style={styles.emptySubtitle}>No outstanding invoices found</Text>
-              </View>
-            ) : (
-              bills.map((item, i) => <View key={item._id || item.id || i}>{renderBillCard({ item })}</View>)
-            )}
-          </ScrollView>
-
+            <View style={styles.summaryAmount}>
+              <Text style={styles.amountLabel}>Total Outstanding</Text>
+              <Text style={styles.amountValue}>₹ {totalAmount.toLocaleString('en-IN')}</Text>
+            </View>
+            <View style={styles.agingSection}>
+              <Text style={styles.agingTitle}>Aging Analysis</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agingScrollContent}>
+                {[
+                  { label: '1-30 days', key: 30 },
+                  { label: '31-60 days', key: 60 },
+                  { label: '61-90 days', key: 90 },
+                  { label: '90+ days', key: 999 },
+                ].map(({ label, key }) => {
+                  const amt = bills
+                    .filter(b => {
+                      const d = getBillOverdue(b);
+                      if (key === 30) return d >= 1 && d <= 30;
+                      if (key === 60) return d >= 31 && d <= 60;
+                      if (key === 90) return d >= 61 && d <= 90;
+                      return d > 90;
+                    })
+                    .reduce((s, b) => s + getBillAmount(b), 0);
+                  const isActive = key === 999 && bills.some(b => getBillOverdue(b) > 90);
+                  return (
+                    <View key={key} style={[styles.agingItem, isActive && styles.agingItemActive]}>
+                      <Text style={isActive ? styles.agingDaysActive : styles.agingDays}>{label}</Text>
+                      <Text style={isActive ? styles.agingAmountActive : styles.agingAmount}>₹{amt.toLocaleString('en-IN')}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+          {bills.length > 0 && (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Invoice Details</Text>
+              <Text style={styles.sectionCount}>{bills.length} invoice{bills.length > 1 ? 's' : ''}</Text>
+            </View>
+          )}
+          {bills.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyTitle}>No Invoices</Text>
+              <Text style={styles.emptySubtitle}>No outstanding invoices found</Text>
+            </View>
+          ) : (
+            bills.map((item, i) => <View key={item._id || item.id || i}>{renderBillCard({ item })}</View>)
+          )}
+        </ScrollView>
         {bills.length > 0 && (
           <View style={styles.footer}>
             <TouchableOpacity style={[styles.shareBtn, isSharing && styles.shareBtnDisabled]} onPress={onShareStatement} disabled={isSharing} activeOpacity={0.7}>
@@ -387,7 +381,94 @@ const OutstandingApp = () => {
     );
   };
 
-  return currentScreen === 'groups' ? <GroupsListScreen /> : <DetailsScreen />;
+  // ─── NEW: Bill Detail Screen ───
+  const BillDetailScreen = () => {
+    const bill = selectedBill;
+    const overdue = getBillOverdue(bill);
+
+    const onSendReminder = async () => {
+      try {
+        await Share.share({
+          message: `Payment Reminder\n\nInvoice: ${getBillVoucher(bill)}\nAmount: ₹${getBillAmount(bill).toLocaleString('en-IN')}\nInvoice Date: ${getBillDate(bill)}\nDue Date: ${getBillDue(bill)}\nOverdue: ${overdue} days\n\nPlease clear the outstanding at the earliest.`,
+        });
+      } catch { Alert.alert('Error', 'Failed to send reminder.'); }
+    };
+
+    const Row = ({ label, value }: { label: string; value: string }) => (
+      <View style={styles.detailRowItem}>
+        <Text style={styles.detailRowLabel}>{label}</Text>
+        <Text style={styles.detailRowValue}>{value}</Text>
+      </View>
+    );
+
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.7}>
+              <Text style={styles.backIcon}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Invoice Details</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Amount hero card */}
+          <View style={styles.billDetailHero}>
+            <View style={styles.voucherBadge}>
+              <Text style={styles.voucherBadgeText}>INVOICE</Text>
+            </View>
+            <Text style={styles.billDetailVoucher}>{getBillVoucher(bill)}</Text>
+            <Text style={styles.billDetailAmount}>₹{getBillAmount(bill).toLocaleString('en-IN')}</Text>
+            <Text style={styles.billDetailParty}>{getName(selectedLedger)}</Text>
+            {overdue > 0 && (
+              <View style={[styles.overdueBadge, { marginTop: 12, alignSelf: 'center' }]}>
+                <Text style={styles.overdueIcon}>⏰</Text>
+                <Text style={styles.overdueText}>Overdue by {overdue} days</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Details card */}
+          <View style={styles.billDetailCard}>
+            <Text style={styles.billDetailSectionTitle}>Invoice Information</Text>
+            <Row label="Voucher No." value={getBillVoucher(bill)} />
+            <View style={styles.detailDivider} />
+            <Row label="Invoice Date" value={getBillDate(bill)} />
+            <View style={styles.detailDivider} />
+            <Row label="Due Date" value={getBillDue(bill)} />
+            <View style={styles.detailDivider} />
+            <Row label="Outstanding Amount" value={`₹${getBillAmount(bill).toLocaleString('en-IN')}`} />
+            {getBillItems(bill) !== '—' && (
+              <>
+                <View style={styles.detailDivider} />
+                <Row label="Description" value={getBillItems(bill)} />
+              </>
+            )}
+            {overdue > 0 && (
+              <>
+                <View style={styles.detailDivider} />
+                <Row label="Days Overdue" value={`${overdue} days`} />
+              </>
+            )}
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity style={styles.shareBtn} onPress={onSendReminder} activeOpacity={0.7}>
+            <Text style={styles.shareIcon}>🔔</Text>
+            <Text style={styles.shareBtnText}>Send Reminder</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  };
+
+  if (currentScreen === 'billDetail') return <BillDetailScreen />;
+  if (currentScreen === 'details') return <DetailsScreen />;
+  return <GroupsListScreen />;
 };
 
 const styles = StyleSheet.create({
@@ -490,6 +571,18 @@ const styles = StyleSheet.create({
   shareBtnDisabled: { opacity: 0.6 },
   shareIcon: { fontSize: 16 },
   shareBtnText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+
+  // ── NEW styles for BillDetailScreen ──
+  billDetailHero: { backgroundColor: '#4F46E5', marginHorizontal: 16, marginTop: 16, marginBottom: 12, borderRadius: 16, padding: 24, alignItems: 'flex-start' },
+  billDetailVoucher: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 8, marginTop: 8 },
+  billDetailAmount: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5, marginBottom: 4 },
+  billDetailParty: { fontSize: 14, color: '#C7D2FE', fontWeight: '500' },
+  billDetailCard: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginBottom: 12, borderRadius: 14, padding: 20, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, borderWidth: 1, borderColor: '#E8ECF1' },
+  billDetailSectionTitle: { fontSize: 12, fontWeight: '700', color: '#6B7280', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 16 },
+  detailRowItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
+  detailRowLabel: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  detailRowValue: { fontSize: 14, color: '#1A1D1F', fontWeight: '600', textAlign: 'right', flex: 1, marginLeft: 16 },
+  detailDivider: { height: 1, backgroundColor: '#F0F2F5' },
 });
 
 export default OutstandingApp;
