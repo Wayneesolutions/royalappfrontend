@@ -1,232 +1,92 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  SafeAreaView, TextInput, Modal
+  SafeAreaView, TextInput, Modal, ActivityIndicator, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import apiService from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 const SalesSummaryScreen = () => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showTransactionDetails, setShowTransactionDetails] = useState(false);
-  const [selectedStock, setSelectedStock] = useState(null);
+  const [selectedStock, setSelectedStock] = useState<any>(null);
   const [viewAllTransactions, setViewAllTransactions] = useState(false);
 
-  // Sales Summary Data - Grouped by Stock/Product
-  const SALES_SUMMARY = [
-    {
-      id: '1',
-      stockName: 'Samsung 12 Laptop',
-      sku: 'SAM-LP-12',
-      category: 'Laptops',
-      totalQuantitySold: 40,
-      totalAmount: 2200000,
-      averageRate: 55000,
-      transactionCount: 2,
-      lastSaleDate: '02 Jan 26',
-      trend: 'up',
-      status: 'Top Seller'
-    },
-    {
-      id: '2',
-      stockName: 'Lenovo Tab M10',
-      sku: 'LEN-TB-M10',
-      category: 'Tablets',
-      totalQuantitySold: 55,
-      totalAmount: 770000,
-      averageRate: 14000,
-      transactionCount: 2,
-      lastSaleDate: '04 Jan 26',
-      trend: 'up',
-      status: 'Good'
-    },
-    {
-      id: '3',
-      stockName: 'HP LaserJet Pro',
-      sku: 'HP-LJ-P11',
-      category: 'Printers',
-      totalQuantitySold: 90,
-      totalAmount: 2250000,
-      averageRate: 25000,
-      transactionCount: 2,
-      lastSaleDate: '05 Jan 26',
-      trend: 'up',
-      status: 'Top Seller'
-    },
-    {
-      id: '4',
-      stockName: 'Dell 24" Monitor',
-      sku: 'DELL-MON-24',
-      category: 'Peripherals',
-      totalQuantitySold: 15,
-      totalAmount: 225000,
-      averageRate: 15000,
-      transactionCount: 2,
-      lastSaleDate: '30 Dec 25',
-      trend: 'down',
-      status: 'Slow Mover'
-    },
-    {
-      id: '5',
-      stockName: 'Logitech Wireless Mouse',
-      sku: 'LOGI-WM-X2',
-      category: 'Accessories',
-      totalQuantitySold: 220,
-      totalAmount: 330000,
-      averageRate: 1500,
-      transactionCount: 2,
-      lastSaleDate: '05 Jan 26',
-      trend: 'up',
-      status: 'Top Seller'
-    }
-  ];
+  // --- API state ---
+  const [salesSummary, setSalesSummary] = useState<any[]>([]);
+  const [transactionRegister, setTransactionRegister] = useState<Record<string, any[]>>({});
+  const [summaryData, setSummaryData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Detailed Transaction Register
-  const TRANSACTION_REGISTER = {
-    '1': [
-      {
-        id: 'TXN-001',
-        date: '02 Jan 26',
-        subDealer: 'Sharma Electronics',
-        location: 'Delhi NCR',
-        quantity: 15,
-        rate: 55000,
-        amount: 825000,
-        status: 'Completed',
-        invoiceNo: 'INV-2026-001',
-        paymentMode: 'Credit'
-      },
-      {
-        id: 'TXN-002',
-        date: '28 Dec 25',
-        subDealer: 'Tech Hub Store',
-        location: 'Noida',
-        quantity: 25,
-        rate: 55000,
-        amount: 1375000,
-        status: 'Completed',
-        invoiceNo: 'INV-2025-998',
-        paymentMode: 'Cash'
-      }
-    ],
-    '2': [
-      {
-        id: 'TXN-005',
-        date: '04 Jan 26',
-        subDealer: 'Mobile Plus',
-        location: 'Mumbai',
-        quantity: 20,
-        rate: 14000,
-        amount: 280000,
-        status: 'Completed',
-        invoiceNo: 'INV-2026-005',
-        paymentMode: 'Credit'
-      },
-      {
-        id: 'TXN-006',
-        date: '30 Dec 25',
-        subDealer: 'Gadget Zone',
-        location: 'Pune',
-        quantity: 35,
-        rate: 14000,
-        amount: 490000,
-        status: 'Completed',
-        invoiceNo: 'INV-2025-999',
-        paymentMode: 'UPI'
-      }
-    ],
-    '3': [
-      {
-        id: 'TXN-008',
-        date: '05 Jan 26',
-        subDealer: 'Office Solutions',
-        location: 'Bangalore',
-        quantity: 50,
-        rate: 25000,
-        amount: 1250000,
-        status: 'Completed',
-        invoiceNo: 'INV-2026-008',
-        paymentMode: 'Credit'
-      },
-      {
-        id: 'TXN-009',
-        date: '03 Jan 26',
-        subDealer: 'Print World',
-        location: 'Mysore',
-        quantity: 40,
-        rate: 25000,
-        amount: 1000000,
-        status: 'Completed',
-        invoiceNo: 'INV-2026-003',
-        paymentMode: 'Cash'
-      }
-    ],
-    '4': [
-      {
-        id: 'TXN-012',
-        date: '30 Dec 25',
-        subDealer: 'Display Pro',
-        location: 'Hyderabad',
-        quantity: 10,
-        rate: 15000,
-        amount: 150000,
-        status: 'Completed',
-        invoiceNo: 'INV-2025-1000',
-        paymentMode: 'Credit'
-      },
-      {
-        id: 'TXN-013',
-        date: '10 Dec 25',
-        subDealer: 'Vision Electronics',
-        location: 'Warangal',
-        quantity: 5,
-        rate: 15000,
-        amount: 75000,
-        status: 'Completed',
-        invoiceNo: 'INV-2025-965',
-        paymentMode: 'Cash'
-      }
-    ],
-    '5': [
-      {
-        id: 'TXN-014',
-        date: '05 Jan 26',
-        subDealer: 'Accessories Hub',
-        location: 'Chennai',
-        quantity: 100,
-        rate: 1500,
-        amount: 150000,
-        status: 'Completed',
-        invoiceNo: 'INV-2026-010',
-        paymentMode: 'UPI'
-      },
-      {
-        id: 'TXN-015',
-        date: '03 Jan 26',
-        subDealer: 'PC Peripherals',
-        location: 'Coimbatore',
-        quantity: 120,
-        rate: 1500,
-        amount: 180000,
-        status: 'Completed',
-        invoiceNo: 'INV-2026-004',
-        paymentMode: 'Credit'
-      }
-    ]
+  useEffect(() => {
+    fetchSalesData();
+  }, []);
+
+  const getCmpCode = () => {
+    return user?.defaultCompany?.companyCode || user?.companies?.[0]?.companyCode || '';
   };
 
+  const getUserId = () => {
+    return user?._id || user?.id || '';
+  };
+
+  const fetchSalesData = async () => {
+    const cmpcode = getCmpCode();
+    const userId = getUserId();
+    if (!cmpcode || !userId) {
+      console.log('No company code or userId available for sales fetch');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await apiService.getTallySalesForGroupUser(cmpcode, userId);
+
+      if (result?.success && result?.data) {
+        // API returns { SALES_SUMMARY: [...], TRANSACTION_REGISTER: {...}, summary: {...} }
+        const items = result.data.SALES_SUMMARY || [];
+        setSalesSummary(Array.isArray(items) ? items : []);
+        setTransactionRegister(result.data.TRANSACTION_REGISTER || {});
+        setSummaryData(result.data.summary || null);
+      } else {
+        setSalesSummary([]);
+        setTransactionRegister({});
+        setSummaryData(null);
+      }
+    } catch (e) {
+      console.error('Error fetching sales data:', e);
+      setSalesSummary([]);
+      setTransactionRegister({});
+      setSummaryData(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => { setRefreshing(true); fetchSalesData(); };
+
   // Format currency
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount: number) => {
     if (amount >= 10000000) {
       return `₹ ${(amount / 10000000).toFixed(2)} Cr`;
     }
     if (amount >= 100000) {
       return `₹ ${(amount / 100000).toFixed(2)} L`;
     }
-    return `₹ ${(amount / 1000).toFixed(0)}K`;
+    if (amount >= 1000) {
+      return `₹ ${(amount / 1000).toFixed(0)}K`;
+    }
+    return `₹ ${amount.toLocaleString('en-IN')}`;
   };
 
-  const getStatusStyle = (status) => {
+  const getStatusStyle = (status: string) => {
     switch (status) {
       case 'Top Seller':
         return { bg: '#D1FAE5', text: '#059669', icon: 'trophy' };
@@ -239,10 +99,15 @@ const SalesSummaryScreen = () => {
     }
   };
 
-  const filteredData = SALES_SUMMARY.filter(item => {
+  // Summary stats
+  const totalSales = summaryData?.totalSales ?? salesSummary.reduce((sum, item) => sum + (item.totalQuantitySold || 0), 0);
+  const totalRevenue = summaryData?.totalRevenue ?? salesSummary.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
+  const totalTransactions = summaryData?.totalTransactions ?? salesSummary.reduce((sum, item) => sum + (item.transactionCount || 0), 0);
+
+  const filteredData = salesSummary.filter(item => {
     const matchesSearch = 
-      item.stockName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      (item.stockName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.sku || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesFilter = 
       filterStatus === 'all' ||
@@ -253,11 +118,7 @@ const SalesSummaryScreen = () => {
     return matchesSearch && matchesFilter;
   });
 
-  const totalSales = SALES_SUMMARY.reduce((sum, item) => sum + item.totalQuantitySold, 0);
-  const totalRevenue = SALES_SUMMARY.reduce((sum, item) => sum + item.totalAmount, 0);
-  const totalTransactions = SALES_SUMMARY.reduce((sum, item) => sum + item.transactionCount, 0);
-
-  const openTransactionDetails = (stock) => {
+  const openTransactionDetails = (stock: any) => {
     setSelectedStock(stock);
     setViewAllTransactions(false);
     setShowTransactionDetails(true);
@@ -271,42 +132,37 @@ const SalesSummaryScreen = () => {
 
   // Get all transaction data combined with stock info
   const getAllTransactionsData = () => {
-    const allTransactions = [];
-    Object.keys(TRANSACTION_REGISTER).forEach(stockId => {
-      const stock = SALES_SUMMARY.find(s => s.id === stockId);
-      TRANSACTION_REGISTER[stockId].forEach(txn => {
+    const allTransactions: any[] = [];
+    Object.keys(transactionRegister).forEach(stockId => {
+      const stock = salesSummary.find(s => s.id === stockId);
+      (transactionRegister[stockId] || []).forEach(txn => {
         allTransactions.push({
           ...txn,
           stockId,
-          stockName: stock?.stockName || 'Unknown',
-          sku: stock?.sku || 'N/A'
+          stockName: stock?.stockName || txn.stockName || 'Unknown',
+          sku: stock?.sku || txn.sku || 'N/A'
         });
       });
     });
-    // Sort by date (most recent first)
-    return allTransactions.sort((a, b) => {
-      const dateA = new Date(a.date.replace(/(\d{2}) (\w+) (\d{2})/, '20$3-$2-$1'));
-      const dateB = new Date(b.date.replace(/(\d{2}) (\w+) (\d{2})/, '20$3-$2-$1'));
-      return dateB - dateA;
-    });
+    return allTransactions;
   };
 
   const renderTransactionModal = () => {
     const isAllTransactions = viewAllTransactions;
     const transactionData = isAllTransactions 
       ? getAllTransactionsData() 
-      : (selectedStock ? TRANSACTION_REGISTER[selectedStock.id] || [] : []);
+      : (selectedStock ? transactionRegister[selectedStock.id] || [] : []);
     
-    const totalQty = transactionData.reduce((sum, txn) => sum + txn.quantity, 0);
-    const totalAmt = transactionData.reduce((sum, txn) => sum + txn.amount, 0);
+    const totalQty = transactionData.reduce((sum: number, txn: any) => sum + (txn.quantity || 0), 0);
+    const totalAmt = transactionData.reduce((sum: number, txn: any) => sum + (txn.amount || 0), 0);
     const totalTxns = transactionData.length;
 
-    const renderTransactionItem = ({ item }) => (
+    const renderTransactionItem = ({ item }: any) => (
       <View style={styles.transactionCard}>
         <View style={styles.transactionCardHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.transactionInvoice}>#{item.invoiceNo}</Text>
-            <Text style={styles.transactionDate}>{item.date}</Text>
+            <Text style={styles.transactionInvoice}>#{item.invoiceNo || '—'}</Text>
+            <Text style={styles.transactionDate}>{item.date || '—'}</Text>
           </View>
           <View style={[
             styles.transactionStatusBadge,
@@ -316,7 +172,7 @@ const SalesSummaryScreen = () => {
               styles.transactionStatusText,
               { color: item.status === 'Completed' ? '#059669' : '#2563EB' }
             ]}>
-              {item.status}
+              {item.status || 'Completed'}
             </Text>
           </View>
         </View>
@@ -327,8 +183,8 @@ const SalesSummaryScreen = () => {
           <View style={styles.transactionStockInfo}>
             <Ionicons name="cube-outline" size={14} color="#3B82F6" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.transactionStockName}>{item.stockName}</Text>
-              <Text style={styles.transactionStockSku}>SKU: {item.sku}</Text>
+              <Text style={styles.transactionStockName}>{item.stockName || 'Unknown'}</Text>
+              <Text style={styles.transactionStockSku}>SKU: {item.sku || 'N/A'}</Text>
             </View>
           </View>
         )}
@@ -337,37 +193,37 @@ const SalesSummaryScreen = () => {
           <View style={styles.transactionDetailRow}>
             <Ionicons name="business-outline" size={14} color="#6B7280" />
             <Text style={styles.transactionDetailLabel}>Sub-Dealer:</Text>
-            <Text style={styles.transactionDetailValue}>{item.subDealer}</Text>
+            <Text style={styles.transactionDetailValue}>{item.subDealer || '—'}</Text>
           </View>
           <View style={styles.transactionDetailRow}>
             <Ionicons name="location-outline" size={14} color="#6B7280" />
             <Text style={styles.transactionDetailLabel}>Location:</Text>
-            <Text style={styles.transactionDetailValue}>{item.location}</Text>
+            <Text style={styles.transactionDetailValue}>{item.location || '—'}</Text>
           </View>
           <View style={styles.transactionDetailRow}>
             <Ionicons name="card-outline" size={14} color="#6B7280" />
             <Text style={styles.transactionDetailLabel}>Payment:</Text>
-            <Text style={styles.transactionDetailValue}>{item.paymentMode}</Text>
+            <Text style={styles.transactionDetailValue}>{item.paymentMode || 'Credit'}</Text>
           </View>
         </View>
 
         <View style={styles.transactionFooter}>
           <View style={styles.transactionFooterItem}>
             <Text style={styles.transactionFooterLabel}>Quantity</Text>
-            <Text style={styles.transactionFooterValue}>{item.quantity} units</Text>
+            <Text style={styles.transactionFooterValue}>{item.quantity || 0} units</Text>
           </View>
           <View style={styles.transactionFooterDivider} />
           <View style={styles.transactionFooterItem}>
             <Text style={styles.transactionFooterLabel}>Rate</Text>
             <Text style={[styles.transactionFooterValue, { color: '#3B82F6' }]}>
-              ₹ {item.rate.toLocaleString('en-IN')}
+              ₹ {(item.rate || 0).toLocaleString('en-IN')}
             </Text>
           </View>
           <View style={styles.transactionFooterDivider} />
           <View style={styles.transactionFooterItem}>
             <Text style={styles.transactionFooterLabel}>Amount</Text>
             <Text style={[styles.transactionFooterValue, { color: '#10B981' }]}>
-              {formatCurrency(item.amount)}
+              {formatCurrency(item.amount || 0)}
             </Text>
           </View>
         </View>
@@ -389,7 +245,7 @@ const SalesSummaryScreen = () => {
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.modalTitle}>Transaction Details</Text>
               <Text style={styles.modalSubtitle}>
-                {isAllTransactions ? 'All Products' : selectedStock?.stockName}
+                {isAllTransactions ? 'All Products' : selectedStock?.stockName || '—'}
               </Text>
             </View>
             {!isAllTransactions && (
@@ -422,7 +278,7 @@ const SalesSummaryScreen = () => {
 
           <FlatList
             data={transactionData}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, i) => item.id || String(i)}
             renderItem={renderTransactionItem}
             contentContainerStyle={styles.modalListContent}
             ListEmptyComponent={
@@ -437,24 +293,26 @@ const SalesSummaryScreen = () => {
     );
   };
 
-  const renderSalesItem = ({ item }) => {
-    const statusStyle = getStatusStyle(item.status);
+  const renderSalesItem = ({ item }: any) => {
+    const statusStyle = getStatusStyle(item.status || 'Good');
 
     return (
       <View style={styles.salesCard}>
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.stockName}>{item.stockName}</Text>
-            <Text style={styles.skuText}>SKU: {item.sku}</Text>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{item.category}</Text>
-            </View>
+            <Text style={styles.stockName}>{item.stockName || '—'}</Text>
+            <Text style={styles.skuText}>SKU: {item.sku || '—'}</Text>
+            {item.category ? (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{item.category}</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-            <Ionicons name={statusStyle.icon} size={14} color={statusStyle.text} />
+            <Ionicons name={statusStyle.icon as any} size={14} color={statusStyle.text} />
             <Text style={[styles.statusText, { color: statusStyle.text }]}>
-              {item.status}
+              {item.status || 'Good'}
             </Text>
           </View>
         </View>
@@ -462,14 +320,14 @@ const SalesSummaryScreen = () => {
         <View style={styles.statsGrid}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>QUANTITY SOLD</Text>
-            <Text style={styles.statValue}>{item.totalQuantitySold}</Text>
+            <Text style={styles.statValue}>{item.totalQuantitySold || 0}</Text>
             <Text style={styles.statUnit}>units</Text>
           </View>
 
           <View style={[styles.statBox, styles.borderLeft]}>
             <Text style={styles.statLabel}>AVG RATE</Text>
             <Text style={[styles.statValue, { color: '#3B82F6' }]}>
-              {formatCurrency(item.averageRate)}
+              {formatCurrency(item.averageRate || 0)}
             </Text>
             <Text style={styles.statUnit}>per unit</Text>
           </View>
@@ -477,7 +335,7 @@ const SalesSummaryScreen = () => {
           <View style={[styles.statBox, styles.borderLeft]}>
             <Text style={styles.statLabel}>TOTAL AMOUNT</Text>
             <Text style={[styles.statValue, { color: '#10B981' }]}>
-              {formatCurrency(item.totalAmount)}
+              {formatCurrency(item.totalAmount || 0)}
             </Text>
             <Text style={styles.statUnit}>revenue</Text>
           </View>
@@ -487,11 +345,11 @@ const SalesSummaryScreen = () => {
           <View style={styles.metaInfo}>
             <View style={styles.metaItem}>
               <Ionicons name="receipt-outline" size={14} color="#6B7280" />
-              <Text style={styles.metaText}>{item.transactionCount} transactions</Text>
+              <Text style={styles.metaText}>{item.transactionCount || 0} transactions</Text>
             </View>
             <View style={styles.metaItem}>
               <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-              <Text style={styles.metaText}>Last: {item.lastSaleDate}</Text>
+              <Text style={styles.metaText}>Last: {item.lastSaleDate || '—'}</Text>
             </View>
           </View>
         </View>
@@ -550,6 +408,11 @@ const SalesSummaryScreen = () => {
             onChangeText={setSearchQuery}
             placeholderTextColor="#9CA3AF"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -572,49 +435,44 @@ const SalesSummaryScreen = () => {
       </View>
 
       <View style={styles.filterContainer}>
-        <TouchableOpacity 
-          style={[styles.filterPill, filterStatus === 'all' && styles.filterPillActive]}
-          onPress={() => setFilterStatus('all')}
-        >
-          <Text style={[styles.filterPillText, filterStatus === 'all' && styles.filterPillTextActive]}>
-            All
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.filterPill, filterStatus === 'top' && styles.filterPillActive]}
-          onPress={() => setFilterStatus('top')}
-        >
-          <Text style={[styles.filterPillText, filterStatus === 'top' && styles.filterPillTextActive]}>
-            Top Seller
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.filterPill, filterStatus === 'good' && styles.filterPillActive]}
-          onPress={() => setFilterStatus('good')}
-        >
-          <Text style={[styles.filterPillText, filterStatus === 'good' && styles.filterPillTextActive]}>
-            Good
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.filterPill, filterStatus === 'slow' && styles.filterPillActive]}
-          onPress={() => setFilterStatus('slow')}
-        >
-          <Text style={[styles.filterPillText, filterStatus === 'slow' && styles.filterPillTextActive]}>
-            Slow Mover
-          </Text>
-        </TouchableOpacity>
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'top', label: 'Top Seller' },
+          { key: 'good', label: 'Good' },
+          { key: 'slow', label: 'Slow Mover' },
+        ].map(({ key, label }) => (
+          <TouchableOpacity 
+            key={key}
+            style={[styles.filterPill, filterStatus === key && styles.filterPillActive]}
+            onPress={() => setFilterStatus(key)}
+          >
+            <Text style={[styles.filterPillText, filterStatus === key && styles.filterPillTextActive]}>
+              {label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      <FlatList
-        data={filteredData}
-        keyExtractor={item => item.id}
-        renderItem={renderSalesItem}
-        contentContainerStyle={styles.listPadding}
-      />
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color="#10B981" />
+          <Text style={styles.loadingText}>Loading sales data...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredData}
+          keyExtractor={(item, i) => item.id || String(i)}
+          renderItem={renderSalesItem}
+          contentContainerStyle={styles.listPadding}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="trending-up-outline" size={56} color="#D1D5DB" />
+              <Text style={styles.emptyStateText}>No sales records found</Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -677,6 +535,8 @@ const styles = StyleSheet.create({
   filterPillTextActive: { color: '#fff' },
 
   listPadding: { padding: 15, paddingBottom: 50 },
+  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#6B7280', marginTop: 12, fontSize: 14 },
   salesCard: { 
     backgroundColor: '#fff', 
     borderRadius: 14, 

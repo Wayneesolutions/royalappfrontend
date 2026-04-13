@@ -2160,6 +2160,56 @@ class ApiService {
       this.handleApiError(axiosError);
     }
   }
+
+  // ==================== TALLY GROUP USER APIs ====================
+
+  /**
+   * Get stock summary for group user (all products in company)
+   * @route GET /api/v1/tally/stock/group-user?cmpcode=...
+   */
+  async getTallyStockForGroupUser(cmpcode: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/tally/stock/group-user', {
+        params: { cmpcode },
+        timeout: 60000
+      });
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return { success: false, message } as any;
+      } else if (axiosError.request) {
+        return { success: false, message: 'Network error - No response received' } as any;
+      } else {
+        return { success: false, message: axiosError.message || 'Unknown error' } as any;
+      }
+    }
+  }
+
+  /**
+   * Get sales summary for group user (own dealers + child group dealers)
+   * @route GET /api/v1/tally/sales/group-user?cmpcode=...&userId=...
+   */
+  async getTallySalesForGroupUser(cmpcode: string, userId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/tally/sales/group-user', {
+        params: { cmpcode, userId },
+        timeout: 60000
+      });
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return { success: false, message } as any;
+      } else if (axiosError.request) {
+        return { success: false, message: 'Network error - No response received' } as any;
+      } else {
+        return { success: false, message: axiosError.message || 'Unknown error' } as any;
+      }
+    }
+  }
 }
 
 // Create and export a singleton instance

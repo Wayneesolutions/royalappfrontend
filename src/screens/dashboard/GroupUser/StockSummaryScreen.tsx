@@ -5,8 +5,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import apiService from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 const StockSummaryScreen = () => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showSalesRegister, setShowSalesRegister] = useState(false);
@@ -15,65 +17,74 @@ const StockSummaryScreen = () => {
 
   // --- API state ---
   const [stocks, setStocks] = useState<any[]>([]);
+  const [salesRegister, setSalesRegister] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [summaryData, setSummaryData] = useState<any>(null);
 
   useEffect(() => {
-    fetchStocks();
-    fetchSummary();
+    fetchStockData();
   }, []);
 
-  const fetchSummary = async () => {
-    try {
-      const result = await apiService.getStockSummary();
-      if (result?.success && result?.data) setSummaryData(result.data);
-    } catch (e) {}
+  const getCmpCode = () => {
+    return user?.defaultCompany?.companyCode || user?.companies?.[0]?.companyCode || '';
   };
 
-  const fetchStocks = async () => {
+  const fetchStockData = async () => {
+    const cmpcode = getCmpCode();
+    if (!cmpcode) {
+      console.log('No company code available for stock fetch');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const result = await apiService.getStocks();
+      const result = await apiService.getTallyStockForGroupUser(cmpcode);
+      
       if (result?.success && result?.data) {
-        const data = result.data?.stocks || result.data?.items || result.data?.data || result.data || [];
-        setStocks(Array.isArray(data) ? data : []);
+        // API returns { STOCK_SUMMARY: [...], SALES_REGISTER: {...}, summary: {...} }
+        const stockItems = result.data.STOCK_SUMMARY || [];
+        setStocks(Array.isArray(stockItems) ? stockItems : []);
+        setSalesRegister(result.data.SALES_REGISTER || {});
+        setSummaryData(result.data.summary || null);
       } else {
         setStocks([]);
+        setSalesRegister({});
+        setSummaryData(null);
       }
     } catch (e) {
+      console.error('Error fetching stock data:', e);
       setStocks([]);
+      setSalesRegister({});
+      setSummaryData(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const onRefresh = () => { setRefreshing(true); fetchStocks(); fetchSummary(); };
+  const onRefresh = () => { setRefreshing(true); fetchStockData(); };
 
-  // Normalise fields
-  const getProductName = (s: any) => s.productName || s.name || s.stockName || s.product?.name || '—';
-  const getSku = (s: any) => s.sku || s.SKU || s.code || s.product?.sku || '';
-  const getCategory = (s: any) => s.category || s.productCategory || s.product?.category || '';
-  const getInHand = (s: any) => s.inHand ?? s.currentStock ?? s.quantity ?? s.stock?.current ?? 0;
-  const getSold = (s: any) => s.subDealerSold ?? s.soldQuantity ?? s.sold ?? s.totalSold ?? 0;
-  const getLastSaleDate = (s: any) => {
-    const d = s.lastSaleDate || s.lastSale || s.updatedAt;
-    if (!d) return '—';
-    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
-  };
+  // Field accessors (matching API response fields from tallyStockController)
+  const getProductName = (s: any) => s.productName || s.name || s.stockName || '—';
+  const getSku = (s: any) => s.sku || s.SKU || s.code || '';
+  const getCategory = (s: any) => s.category || '';
+  const getInHand = (s: any) => s.inHand ?? s.currentStock ?? s.quantity ?? 0;
+  const getSold = (s: any) => s.subDealerSold ?? s.soldQuantity ?? s.sold ?? 0;
+  const getLastSaleDate = (s: any) => s.lastSaleDate || '—';
   const getTrend = (s: any) => s.trend || (getSold(s) > getInHand(s) ? 'up' : 'down');
   const getStatus = (s: any): string => {
     if (s.status) return s.status;
     const inHand = getInHand(s);
-    const min = s.stock?.minimum ?? s.minStock ?? 10;
     if (inHand === 0) return 'Out of Stock';
-    if (inHand <= min) return 'Low Stock';
+    if (inHand < 10) return 'Low Stock';
     if (inHand > 100) return 'Overstocked';
     if (getSold(s) > 50) return 'Fast Mover';
     return 'Healthy';
   };
-  const getSalesHistory = (s: any): any[] => s.salesHistory || s.transactions || s.sales || [];
+  const getItemId = (s: any) => s.id || s._id || s.sku || '';
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -85,9 +96,9 @@ const StockSummaryScreen = () => {
     }
   };
 
-  // Summary stats (prefer API, fallback to computed)
-  const totalSales = summaryData?.totalSold ?? summaryData?.totalSales ?? stocks.reduce((s, i) => s + getSold(i), 0);
-  const totalStock = summaryData?.totalStock ?? summaryData?.totalInHand ?? stocks.reduce((s, i) => s + getInHand(i), 0);
+  // Summary stats (prefer API summary, fallback to computed)
+  const totalSales = summaryData?.totalSales ?? stocks.reduce((s, i) => s + getSold(i), 0);
+  const totalStock = summaryData?.totalStock ?? stocks.reduce((s, i) => s + getInHand(i), 0);
   const lowStockCount = summaryData?.lowStockCount ?? stocks.filter(i => getStatus(i) === 'Low Stock' || getStatus(i) === 'Out of Stock').length;
 
   const filteredData = stocks.filter(item => {
@@ -111,31 +122,43 @@ const StockSummaryScreen = () => {
     setSelectedProduct(null); setViewAllProducts(true); setShowSalesRegister(true);
   };
 
+  // Get sales data for selected product from SALES_REGISTER
+  const getSalesDataForProduct = (product: any): any[] => {
+    if (!product) return [];
+    const itemId = getItemId(product);
+    return salesRegister[itemId] || [];
+  };
+
   // Get all sales for all stocks
   const getAllSalesData = () => {
     const all: any[] = [];
-    stocks.forEach(s => {
-      getSalesHistory(s).forEach((sale: any) => {
-        all.push({ ...sale, productId: s._id || s.id, productName: getProductName(s), sku: getSku(s) });
+    Object.keys(salesRegister).forEach(itemKey => {
+      const product = stocks.find(s => getItemId(s) === itemKey);
+      (salesRegister[itemKey] || []).forEach((sale: any) => {
+        all.push({
+          ...sale,
+          productName: product ? getProductName(product) : sale.productName || 'Unknown',
+          sku: product ? getSku(product) : sale.sku || ''
+        });
       });
     });
-    return all.sort((a, b) => new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime());
+    return all;
   };
 
-  const getSaleInvoice = (s: any) => s.invoiceNo || s.voucherNo || s._id?.slice(-6).toUpperCase() || '—';
-  const getSaleDate = (s: any) => {
-    const d = s.date || s.createdAt;
-    if (!d) return '—';
-    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
-  };
+  const getSaleInvoice = (s: any) => s.invoiceNo || s.voucherNo || '—';
+  const getSaleDate = (s: any) => s.date || '—';
   const getSaleDealer = (s: any) => s.subDealer || s.dealerName || s.customer || s.party || '—';
   const getSaleLocation = (s: any) => s.location || s.city || s.state || '—';
   const getSaleQty = (s: any) => s.quantity || s.qty || 0;
-  const getSaleAmount = (s: any) => s.amount ? `₹ ${Number(s.amount).toLocaleString('en-IN')}` : '—';
+  const getSaleAmount = (s: any) => {
+    if (typeof s.amount === 'string') return s.amount;
+    if (typeof s.amount === 'number') return `₹ ${Number(s.amount).toLocaleString('en-IN')}`;
+    return '—';
+  };
   const getSaleStatus = (s: any) => s.status || 'Delivered';
 
   const renderSalesRegisterModal = () => {
-    const salesData = viewAllProducts ? getAllSalesData() : getSalesHistory(selectedProduct || {});
+    const salesData = viewAllProducts ? getAllSalesData() : getSalesDataForProduct(selectedProduct);
     const totalQty = salesData.reduce((s: number, sale: any) => s + getSaleQty(sale), 0);
 
     const renderSaleItem = ({ item }: any) => (
