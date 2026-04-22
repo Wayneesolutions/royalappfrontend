@@ -65,7 +65,7 @@ interface Company {
   gstNumber: string;
   status: 'active' | 'inactive';
   createdAt: string;
-  maxUsers?: number;
+  maxUser?: number;
   guid?: string;
   tallySerialId?: string;
   admin: {
@@ -244,13 +244,13 @@ const CompaniesListScreen = ({
                   <View style={styles.companyIcon}>
                     <Building2 size={28} color="#2563eb" />
                   </View>
-                  <View>
-                    <Text style={styles.companyName}>{company.name}</Text>
-                    <Text style={styles.companyCode}>Code: {company.code}</Text>
-                    <Text style={styles.companyGuid}>
+                  <View style={styles.companyTextGroup}>
+                    <Text style={styles.companyName} numberOfLines={2}>{company.name}</Text>
+                    <Text style={styles.companyCode} numberOfLines={1}>{company.code}</Text>
+                    <Text style={styles.companyGuid} numberOfLines={1}>
                       GUID: {company.guid ? company.guid : 'Not assigned'}
                     </Text>
-                    <Text style={styles.companyGuid}>
+                    <Text style={styles.companyGuid} numberOfLines={1}>
                       Tally Serial: {company.tallySerialId ? company.tallySerialId : 'Not assigned'}
                     </Text>
                   </View>
@@ -395,8 +395,8 @@ const CompanyDetailsScreen = ({
             </View>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>{company.name}</Text>
-            <Text style={styles.headerSubtitle}>{company.code}</Text>
+            <Text style={styles.headerTitle} numberOfLines={2}>{company.name}</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">{company.code}</Text>
           </View>
         </View>
         <View style={styles.headerActions}>
@@ -771,7 +771,7 @@ const CompanyFormScreen = ({
     if (isEdit && company) {
       setStreet(company.address || '');
       setPincode(company.pincode || '');
-      setMaxUsers(company.maxUsers?.toString() || '100');
+      setMaxUsers(company.maxUser?.toString() || '100');
       setGuid(company.guid?.toString() || '');
       setTallySerialId(company.tallySerialId || '');
     }
@@ -1217,6 +1217,7 @@ const CompanyManagementSystem = () => {
           name: c.companyName || company.name,
           code: c.companyCode || company.code,
           guid: c.guid ? String(c.guid) : company.guid || '',
+          maxUser: c.maxUser ?? company.maxUser,
           tallySerialId: c.tallySerialId || company.tallySerialId || '',
           address: c.contactDetails?.address?.street || company.address || '',
           city: c.contactDetails?.address?.city || company.city || '',
@@ -1644,6 +1645,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     flex: 1,
+    minWidth: 0,
+    marginRight: 12,
   },
   backButton: {
     paddingHorizontal: 16,
@@ -1682,10 +1685,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     flex: 1,
+    minWidth: 0,
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -1702,14 +1705,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#111827',
+    flexShrink: 1,
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#6b7280',
     marginTop: 2,
+    flexShrink: 1,
   },
   headerTextGroup: {
     flex: 1,
@@ -1816,6 +1821,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  companyTextGroup: {
+    flex: 1,
+    minWidth: 0,
   },
   companyIcon: {
     width: 56,
@@ -1847,6 +1858,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
+    flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   statusActive: {
     backgroundColor: '#dcfce7',

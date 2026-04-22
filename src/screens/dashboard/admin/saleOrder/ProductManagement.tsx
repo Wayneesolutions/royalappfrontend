@@ -298,8 +298,8 @@ const toTrimmed = (value: string) => {
       return;
     }
 
-    if (resolvedPrice === undefined || resolvedPrice <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price greater than 0.');
+    if (resolvedPrice === undefined || resolvedPrice < 0) {
+      Alert.alert('Validation Error', 'Please enter a valid price (0 or greater).');
       return;
     }
 
@@ -393,8 +393,8 @@ const toTrimmed = (value: string) => {
       return;
     }
 
-    if (resolvedPrice === undefined || resolvedPrice <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price greater than 0.');
+    if (resolvedPrice === undefined || resolvedPrice < 0) {
+      Alert.alert('Validation Error', 'Please enter a valid price (0 or greater).');
       return;
     }
 

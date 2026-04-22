@@ -128,9 +128,12 @@ const authSlice = createSlice({
         state.roleSpecificData = null;
         state.error = null;
       })
-      .addCase(logoutUser.rejected, (state, action) => {
+      .addCase(logoutUser.rejected, (state) => {
         state.isLoading = false;
-        state.error = action.payload as string;
+        state.isAuthenticated = false;
+        state.user = null;
+        state.roleSpecificData = null;
+        state.error = null;
       });
 
     // Check auth status

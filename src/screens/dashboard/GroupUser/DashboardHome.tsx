@@ -98,13 +98,34 @@ const actionCards = [
 ];
 
 const DashboardHome = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, switchCompany } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [loadingDealers, setLoadingDealers] = useState(false);
   const [showHierarchy, setShowHierarchy] = useState(false);
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [switchingCompany, setSwitchingCompany] = useState(false);
+
+  const activeCompanies = (user?.companies || []).filter((c: any) => c.isActive);
+  const hasMultipleCompanies = activeCompanies.length > 1;
+
+  const handleSwitchCompany = async (companyId: string) => {
+    if (companyId === user?.defaultCompany?._id) {
+      setShowCompanyDropdown(false);
+      return;
+    }
+    try {
+      setSwitchingCompany(true);
+      setShowCompanyDropdown(false);
+      await switchCompany(companyId);
+    } catch {
+      Alert.alert('Error', 'Failed to switch company. Please try again.');
+    } finally {
+      setSwitchingCompany(false);
+    }
+  };
 
   useEffect(() => {
     fetchDealers();
@@ -159,9 +180,18 @@ const DashboardHome = () => {
           </View>
           <View>
             <Text style={styles.headerName}>{user?.name || 'User'}</Text>
-            <Text style={styles.headerCompany} numberOfLines={1}>
-              {user?.defaultCompany?.companyName || ''}
-            </Text>
+            <TouchableOpacity
+              onPress={() => hasMultipleCompanies && setShowCompanyDropdown(true)}
+              activeOpacity={hasMultipleCompanies ? 0.7 : 1}
+              style={styles.companyNameRow}
+            >
+              <Text style={styles.headerCompany} numberOfLines={1}>
+                {user?.defaultCompany?.companyName || ''}
+              </Text>
+              {hasMultipleCompanies && (
+                <Ionicons name="chevron-down" size={13} color="#6B7280" style={{ marginLeft: 3, marginTop: 2 }} />
+              )}
+            </TouchableOpacity>
           </View>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn} activeOpacity={0.7}>
@@ -272,6 +302,53 @@ const DashboardHome = () => {
       >
         <GroupHierarchy onClose={() => setShowHierarchy(false)} />
       </Modal>
+
+      {/* Company Switcher Modal */}
+      <Modal
+        visible={showCompanyDropdown}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowCompanyDropdown(false)}
+      >
+        <TouchableOpacity
+          style={styles.dropdownOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCompanyDropdown(false)}
+        >
+          <View style={styles.dropdownBox}>
+            <Text style={styles.dropdownTitle}>Switch Company</Text>
+            {activeCompanies.map((c: any) => {
+              const cId = c.companyId?._id;
+              const cName = c.companyId?.companyName || '';
+              const isActive = cId === user?.defaultCompany?._id;
+              return (
+                <TouchableOpacity
+                  key={cId}
+                  style={[styles.dropdownItem, isActive && styles.dropdownItemActive]}
+                  onPress={() => handleSwitchCompany(cId)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.dropdownItemLeft}>
+                    <View style={[styles.dropdownDot, isActive && styles.dropdownDotActive]} />
+                    <Text style={[styles.dropdownItemText, isActive && styles.dropdownItemTextActive]} numberOfLines={2}>
+                      {cName}
+                    </Text>
+                  </View>
+                  {isActive && <Ionicons name="checkmark-circle" size={18} color="#486CD6" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Switching overlay */}
+      {switchingCompany && (
+        <View style={styles.switchingOverlay}>
+          <ActivityIndicator size="large" color="#486CD6" />
+          <Text style={styles.switchingText}>Switching company...</Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -339,6 +416,85 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  companyNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-start',
+    paddingTop: 80,
+    paddingHorizontal: 16,
+  },
+  dropdownBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dropdownTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  dropdownItemActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  dropdownItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  dropdownDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+    marginRight: 10,
+  },
+  dropdownDotActive: {
+    backgroundColor: '#486CD6',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: '#374151',
+    flex: 1,
+  },
+  dropdownItemTextActive: {
+    fontWeight: '600',
+    color: '#1D4ED8',
+  },
+  switchingOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  switchingText: {
+    fontSize: 15,
+    color: '#486CD6',
+    fontWeight: '500',
   },
   // Scroll
   scroll: {

@@ -9,6 +9,7 @@ import {
   FlatList,
   RefreshControl,
   TextInput,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -71,6 +72,8 @@ const DealersListScreen = () => {
   const [editingDealer, setEditingDealer] = useState<Dealer | null>(null);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [totalDealers, setTotalDealers] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<Dealer | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchDealers();
@@ -105,40 +108,30 @@ const DealersListScreen = () => {
 
   const handleDelete = (dealer: Dealer) => {
     const isCreatedByUser = dealer.createdBy && user?._id && dealer.createdBy.toString() === user._id.toString();
-
     if (!isCreatedByUser) {
       Alert.alert('Access Denied', 'You can only delete dealers you created');
       return;
     }
+    setDeleteTarget(dealer);
+  };
 
-    Alert.alert(
-      'Delete Dealer',
-      `Are you sure you want to ${dealer.isActive ? 'deactivate' : 'permanently delete'} "${dealer.LedgerName}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: dealer.isActive ? 'Deactivate' : 'Delete Permanently',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const result = await apiService.adminDeleteDealer(dealer._id);
-              if (result?.success) {
-                Alert.alert('Success', result.message || 'Dealer deleted successfully');
-                fetchDealers();
-              } else {
-                Alert.alert('Error', result?.message || 'Failed to delete dealer');
-              }
-            } catch (error) {
-              console.error('Error deleting dealer:', error);
-              Alert.alert('Error', 'Failed to delete dealer');
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      const result = await apiService.adminDeleteDealer(deleteTarget._id);
+      if (result?.success) {
+        setDeleteTarget(null);
+        fetchDealers();
+      } else {
+        Alert.alert('Error', result?.message || 'Failed to delete dealer');
+      }
+    } catch (error) {
+      console.error('Error deleting dealer:', error);
+      Alert.alert('Error', 'Failed to delete dealer');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleCreateSuccess = () => {
@@ -387,6 +380,45 @@ const DealersListScreen = () => {
           dealer={editingDealer}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteModal}>
+            <View style={styles.deleteIconBox}>
+              <Ionicons name="trash-outline" size={28} color="#EF4444" />
+            </View>
+            <Text style={styles.deleteTitle}>
+              {deleteTarget?.isActive ? 'Deactivate Dealer' : 'Delete Dealer'}
+            </Text>
+            <Text style={styles.deleteMessage}>
+              Are you sure you want to {deleteTarget?.isActive ? 'deactivate' : 'permanently delete'}{' '}
+              <Text style={styles.deleteDealerName}>"{deleteTarget?.LedgerName}"</Text>?
+              {deleteTarget?.isActive ? ' This dealer will be made inactive.' : ' This action cannot be undone.'}
+            </Text>
+            <View style={styles.deleteActions}>
+              <TouchableOpacity
+                style={styles.deleteCancelBtn}
+                onPress={() => setDeleteTarget(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.deleteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmBtn}
+                onPress={confirmDelete}
+                activeOpacity={0.7}
+                disabled={deleting}
+              >
+                {deleting
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.deleteConfirmText}>{deleteTarget?.isActive ? 'Deactivate' : 'Delete'}</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -563,6 +595,82 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  deleteModal: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  deleteIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 10,
+  },
+  deleteMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  deleteDealerName: {
+    fontWeight: '600',
+    color: '#374151',
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  deleteCancelBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
   },
   cardDivider: { height: 1, backgroundColor: '#F9FAFB', marginVertical: 12 },
 
