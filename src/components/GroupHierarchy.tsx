@@ -69,6 +69,19 @@ interface InventoryEntry {
   other4?: string;
 }
 
+interface SubDealerItem {
+  _id: string;
+  SDName?: string;
+  name?: string;
+  SDMobileNo?: string;
+  mobile?: string;
+  SDEmail?: string;
+  email?: string;
+  SDAddress1?: string;
+  SDAddress2?: string;
+  SDState?: string;
+}
+
 interface GroupNode {
   groupGUID: string;
   groupName: string;
@@ -106,6 +119,14 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
   const [inventoryEntries, setInventoryEntries] = useState<InventoryEntry[]>([]);
   const [loadingLedgerEntries, setLoadingLedgerEntries] = useState(false);
   const [loadingInventoryEntries, setLoadingInventoryEntries] = useState(false);
+
+  // Sub dealer inline expand state
+  const [expandedDealerIds, setExpandedDealerIds] = useState<Set<string>>(new Set());
+  const [subDealerMap, setSubDealerMap] = useState<Record<string, SubDealerItem[]>>({});
+  const [loadingDealerIds, setLoadingDealerIds] = useState<Set<string>>(new Set());
+  // kept for subdealers modal view (backward compat with voucher flow)
+  const [selectedDealerSubDealers, setSelectedDealerSubDealers] = useState<SubDealerItem[]>([]);
+  const [loadingSubDealers, setLoadingSubDealers] = useState(false);
 
   // Get current company code from Redux
   const currentCompany = useSelector((state: any) => state.auth.user?.defaultCompany);
@@ -212,6 +233,30 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
     }
   };
 
+  const toggleDealerSubDealers = async (dealer: User) => {
+    const id = dealer._id;
+    // If already expanded, collapse it
+    if (expandedDealerIds.has(id)) {
+      setExpandedDealerIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+      return;
+    }
+    // Expand: mark loading
+    setExpandedDealerIds(prev => new Set(prev).add(id));
+    if (subDealerMap[id]) return; // already fetched
+    setLoadingDealerIds(prev => new Set(prev).add(id));
+    try {
+      const result = await apiService.getSubDealersByDealer(id, { limit: 100 });
+      const list: SubDealerItem[] = result?.success && result.data?.subdealers
+        ? result.data.subdealers
+        : [];
+      setSubDealerMap(prev => ({ ...prev, [id]: list }));
+    } catch {
+      setSubDealerMap(prev => ({ ...prev, [id]: [] }));
+    } finally {
+      setLoadingDealerIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+    }
+  };
+
   const viewVoucherDetails = async (voucher: Voucher) => {
     try {
       console.log('🔄 Fetching voucher details:', voucher.vchguid);
@@ -309,125 +354,96 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
     return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const getGroupLevel = (level: number): string => {
+  const getLevelColor = (level: number): string => {
+    const colors = ['#3B82F6', '#10B981', '#8B5CF6', '#F97316', '#EF4444'];
+    return colors[level] || colors[colors.length - 1];
+  };
+
+  const getLevelLabel = (level: number): string => {
     if (level === 0) return 'Parent';
     if (level === 1) return 'Child';
     if (level === 2) return 'Sub-Child';
     return `Level ${level}`;
   };
 
-  const renderUser = (user: User, type: 'user' | 'dealer') => (
-    <View key={user._id} style={styles.userItem}>
-      <Ionicons 
-        name={type === 'dealer' ? 'storefront' : 'person'} 
-        size={16} 
-        color={type === 'dealer' ? '#10B981' : '#3B82F6'} 
-      />
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{user.name}</Text>
-        {!!user.mobile && (
-          <Text style={styles.userDetail}>📱 {user.mobile}</Text>
-        )}
-        {!!user.email && (
-          <Text style={styles.userDetail}>✉️ {user.email}</Text>
-        )}
-        {user.role && type === 'user' && (
-          <Text style={styles.userRole}>Role: {user.role}</Text>
-        )}
-      </View>
-    </View>
-  );
-
   const renderGroupNode = (group: GroupNode) => {
     const isExpanded = expandedGroups.has(group.groupGUID);
     const hasChildren = group.childGroups.length > 0;
     const usersCount = group.users.length;
     const dealersCount = group.dealers.length;
-    const childrenCount = group.childGroups.length;
-    const levelLabel = getGroupLevel(group.level);
+    const levelColor = getLevelColor(group.level);
+    const levelLabel = getLevelLabel(group.level);
 
     return (
       <View key={group.groupGUID} style={styles.groupNode}>
-        <View style={styles.groupNodeContent}>
+        <View style={[styles.groupCard, { borderLeftColor: levelColor }]}>
+          {/* Header row */}
           <TouchableOpacity
-            style={styles.groupCard}
+            style={styles.groupCardHeader}
             onPress={() => toggleGroup(group.groupGUID)}
             activeOpacity={0.7}
           >
-            {/* Expand/Collapse Icon */}
-            <View style={styles.expandIcon}>
-              {hasChildren ? (
-                <Ionicons
-                  name={isExpanded ? 'chevron-down-circle' : 'chevron-forward-circle'}
-                  size={22}
-                  color="#3B82F6"
-                />
-              ) : (
-                <View style={styles.dotIcon} />
-              )}
-            </View>
-
-            {/* Group Info */}
-            <View style={styles.groupInfo}>
-              <View style={styles.groupTitleRow}>
-                <Ionicons name="folder" size={18} color="#F59E0B" />
-                <Text style={styles.groupName} numberOfLines={1}>{group.groupName}</Text>
-              </View>
-              
-              <View style={styles.levelBadgeContainer}>
-                <View style={styles.levelBadge}>
-                  <Text style={styles.levelBadgeText}>{levelLabel}</Text>
-                </View>
-              </View>
-              
-              <View style={styles.groupStats}>
-                <View style={styles.statItem}>
-                  <Ionicons name="people" size={12} color="#3B82F6" />
-                  <Text style={styles.statText}>{usersCount}</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Ionicons name="storefront" size={12} color="#10B981" />
-                  <Text style={styles.statText}>{dealersCount}</Text>
-                </View>
-                {childrenCount > 0 && (
-                  <View style={styles.statItem}>
-                    <Ionicons name="git-branch" size={12} color="#F59E0B" />
-                    <Text style={styles.statText}>{childrenCount}</Text>
-                  </View>
-                )}
+            <View style={[styles.levelDot, { backgroundColor: levelColor }]} />
+            <View style={styles.groupTitleBlock}>
+              <Text style={styles.groupName} numberOfLines={1}>{group.groupName}</Text>
+              <View style={[styles.levelBadge, { backgroundColor: levelColor + '18', borderColor: levelColor + '40' }]}>
+                <Text style={[styles.levelBadgeText, { color: levelColor }]}>{levelLabel}</Text>
               </View>
             </View>
+            <Ionicons
+              name={hasChildren ? (isExpanded ? 'chevron-up' : 'chevron-down') : 'remove'}
+              size={18}
+              color={hasChildren ? levelColor : '#D1D5DB'}
+            />
           </TouchableOpacity>
 
-          {/* Action Buttons */}
+          {/* Stats row */}
+          <View style={styles.statsRow}>
+            <View style={styles.statChip}>
+              <Ionicons name="people-outline" size={13} color="#3B82F6" />
+              <Text style={styles.statChipText}>{usersCount} Users</Text>
+            </View>
+            <View style={styles.statChip}>
+              <Ionicons name="storefront-outline" size={13} color="#10B981" />
+              <Text style={styles.statChipText}>{dealersCount} Dealers</Text>
+            </View>
+            {hasChildren && (
+              <View style={styles.statChip}>
+                <Ionicons name="git-branch-outline" size={13} color="#F97316" />
+                <Text style={styles.statChipText}>{group.childGroups.length} Sub-groups</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Action buttons */}
           {(usersCount > 0 || dealersCount > 0) && (
-            <View style={styles.actionButtons}>
+            <View style={styles.actionRow}>
               {usersCount > 0 && (
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.actionButtonUsers]}
+                  style={[styles.actionBtn, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}
                   onPress={() => openGroupDetail(group, 'users')}
                 >
-                  <Ionicons name="people-outline" size={12} color="#3B82F6" />
-                  <Text style={[styles.actionButtonText, { color: '#3B82F6' }]}>Users ({usersCount})</Text>
+                  <Ionicons name="people" size={14} color="#3B82F6" />
+                  <Text style={[styles.actionBtnText, { color: '#2563EB' }]}>Users ({usersCount})</Text>
                 </TouchableOpacity>
               )}
               {dealersCount > 0 && (
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.actionButtonDealers]}
+                  style={[styles.actionBtn, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}
                   onPress={() => openGroupDetail(group, 'dealers')}
                 >
-                  <Ionicons name="storefront-outline" size={12} color="#10B981" />
-                  <Text style={[styles.actionButtonText, { color: '#10B981' }]}>Dealers ({dealersCount})</Text>
+                  <Ionicons name="storefront" size={14} color="#10B981" />
+                  <Text style={[styles.actionBtnText, { color: '#059669' }]}>Dealers ({dealersCount})</Text>
                 </TouchableOpacity>
               )}
             </View>
           )}
         </View>
 
-        {/* Expanded Child Groups */}
+        {/* Children */}
         {isExpanded && hasChildren && (
-          <View style={styles.childGroupsContainer}>
-            {group.childGroups.map(childGroup => renderGroupNode(childGroup))}
+          <View style={[styles.childrenContainer, { borderLeftColor: levelColor + '50' }]}>
+            {group.childGroups.map(child => renderGroupNode(child))}
           </View>
         )}
       </View>
@@ -457,30 +473,30 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
                   onPress={() => setViewMode('dealers')}
                   style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}
                 >
-                  <Ionicons name="arrow-back" size={20} color="#fff" />
-                  <Text style={{ color: '#fff', marginLeft: 8, fontSize: 14 }}>Back to Dealers</Text>
+                  <Ionicons name="arrow-back" size={18} color="#3B82F6" />
+                  <Text style={styles.backBtnText}>Back to Dealers</Text>
                 </TouchableOpacity>
-                <Text style={styles.modalTitle}>Vouchers - {selectedDealer?.name}</Text>
-                <Text style={styles.modalSubtitle}>{vouchers.length} vouchers found</Text>
+                <Text style={styles.modalTitle}>Vouchers</Text>
+                <Text style={styles.modalSubtitle}>{selectedDealer?.name} · {vouchers.length} found</Text>
               </View>
               <TouchableOpacity onPress={() => {
                 setShowDetailModal(false);
                 setViewMode('dealers');
                 setVouchers([]);
               }}>
-                <Ionicons name="close-circle" size={32} color="#fff" />
+                <Ionicons name="close" size={22} color="#374151" />
               </TouchableOpacity>
             </View>
 
             {loadingVouchers ? (
-              <View style={styles.loadingContainer}>
+              <View style={styles.centered}>
                 <ActivityIndicator size="large" color="#3B82F6" />
                 <Text style={styles.loadingText}>Loading vouchers...</Text>
               </View>
             ) : vouchers.length === 0 ? (
-              <View style={styles.emptyContainer}>
+              <View style={styles.centered}>
                 <Ionicons name="receipt-outline" size={64} color="#9CA3AF" />
-                <Text style={styles.emptyText}>No vouchers found</Text>
+                <Text style={styles.emptyTitle}>No vouchers found</Text>
                 <Text style={styles.emptySubtext}>This dealer has no vouchers yet</Text>
               </View>
             ) : (
@@ -524,7 +540,7 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
                     </TouchableOpacity>
                   </View>
                 )}
-                contentContainerStyle={styles.detailList}
+                contentContainerStyle={styles.memberList}
               />
             )}
           </View>
@@ -548,14 +564,14 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
                   onPress={() => setViewMode('vouchers')}
                   style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}
                 >
-                  <Ionicons name="arrow-back" size={20} color="#fff" />
-                  <Text style={{ color: '#fff', marginLeft: 8, fontSize: 14 }}>Back to Vouchers</Text>
+                  <Ionicons name="arrow-back" size={18} color="#3B82F6" />
+                  <Text style={styles.backBtnText}>Back to Vouchers</Text>
                 </TouchableOpacity>
                 <Text style={styles.modalTitle}>Voucher Details</Text>
                 <Text style={styles.modalSubtitle}>{selectedVoucher.vchnumber}</Text>
               </View>
               <TouchableOpacity onPress={() => setViewMode('vouchers')}>
-                <Ionicons name="close-circle" size={32} color="#fff" />
+                <Ionicons name="close" size={22} color="#374151" />
               </TouchableOpacity>
             </View>
 
@@ -623,14 +639,14 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
               {selectedTab === 'ledger' && (
                 <>
                   {loadingLedgerEntries ? (
-                    <View style={styles.loadingContainer}>
+                    <View style={styles.centered}>
                       <ActivityIndicator size="large" color="#3B82F6" />
                       <Text style={styles.loadingText}>Loading ledger entries...</Text>
                     </View>
                   ) : ledgerEntries.length === 0 ? (
-                    <View style={styles.emptyContainer}>
+                    <View style={styles.centered}>
                       <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
-                      <Text style={styles.emptyText}>No ledger entries found</Text>
+                      <Text style={styles.emptyTitle}>No ledger entries found</Text>
                     </View>
                   ) : (
                     ledgerEntries.map((entry, index) => (
@@ -707,14 +723,14 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
               {selectedTab === 'inventory' && (
                 <>
                   {loadingInventoryEntries ? (
-                    <View style={styles.loadingContainer}>
+                    <View style={styles.centered}>
                       <ActivityIndicator size="large" color="#3B82F6" />
                       <Text style={styles.loadingText}>Loading inventory entries...</Text>
                     </View>
                   ) : inventoryEntries.length === 0 ? (
-                    <View style={styles.emptyContainer}>
+                    <View style={styles.centered}>
                       <Ionicons name="cube-outline" size={64} color="#D1D5DB" />
-                      <Text style={styles.emptyText}>No inventory entries found</Text>
+                      <Text style={styles.emptyTitle}>No inventory entries found</Text>
                     </View>
                   ) : (
                     inventoryEntries.map((entry, index) => (
@@ -809,67 +825,170 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
     }
 
     // Handle users/dealers list view
-    const dataToShow = viewMode === 'users' ? selectedGroup.users : selectedGroup.dealers;
-    const title = viewMode === 'users' ? 'Users' : 'Dealers';
-    const icon = viewMode === 'users' ? 'people' : 'storefront';
+    const isUsers = viewMode === 'users';
+    const dataToShow = isUsers ? selectedGroup.users : selectedGroup.dealers;
+    const title = isUsers ? 'Users' : 'Dealers';
+
+    const renderDealerRow = (item: User) => {
+      const isExpanded = expandedDealerIds.has(item._id);
+      const isLoading = loadingDealerIds.has(item._id);
+      const subDealers = subDealerMap[item._id] || [];
+
+      return (
+        <View key={item._id} style={styles.dealerRow}>
+          {/* Dealer card */}
+          <View style={styles.memberCard}>
+            <View style={[styles.memberAvatar, styles.memberAvatarDealer]}>
+              <Ionicons name="storefront" size={20} color="#10B981" />
+            </View>
+            <View style={styles.memberInfo}>
+              <Text style={styles.memberName}>{item.name}</Text>
+              {!!item.mobile && (
+                <View style={styles.memberDetailRow}>
+                  <Ionicons name="call-outline" size={12} color="#9CA3AF" />
+                  <Text style={styles.memberDetailText}>{item.mobile}</Text>
+                </View>
+              )}
+              {!!item.email && (
+                <View style={styles.memberDetailRow}>
+                  <Ionicons name="mail-outline" size={12} color="#9CA3AF" />
+                  <Text style={styles.memberDetailText}>{item.email}</Text>
+                </View>
+              )}
+              <View style={styles.dealerBtnRow}>
+                {!!item.LedgerGUID && (
+                  <TouchableOpacity style={styles.outlineBtn} onPress={() => fetchDealerVouchers(item)}>
+                    <Ionicons name="receipt-outline" size={13} color="#3B82F6" />
+                    <Text style={[styles.outlineBtnText, { color: '#3B82F6' }]}>Vouchers</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.outlineBtn, { borderColor: isExpanded ? '#8B5CF6' : '#C4B5FD', backgroundColor: isExpanded ? '#F5F3FF' : '#F8FAFF' }]}
+                  onPress={() => toggleDealerSubDealers(item)}
+                >
+                  <Ionicons name={isExpanded ? 'chevron-up' : 'people-outline'} size={13} color="#8B5CF6" />
+                  <Text style={[styles.outlineBtnText, { color: '#8B5CF6' }]}>
+                    {isLoading ? 'Loading...' : isExpanded ? 'Hide Sub Dealers' : 'Sub Dealers'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* Inline sub dealers */}
+          {isExpanded && (
+            <View style={styles.subDealerSection}>
+              <View style={styles.subDealerSectionHeader}>
+                <View style={styles.subDealerConnector} />
+                <Text style={styles.subDealerSectionTitle}>Sub Dealers</Text>
+              </View>
+              {isLoading ? (
+                <View style={styles.subDealerLoading}>
+                  <ActivityIndicator size="small" color="#8B5CF6" />
+                  <Text style={styles.subDealerLoadingText}>Loading...</Text>
+                </View>
+              ) : subDealers.length === 0 ? (
+                <View style={styles.subDealerEmpty}>
+                  <Text style={styles.subDealerEmptyText}>No sub dealers found</Text>
+                </View>
+              ) : (
+                subDealers.map(sd => (
+                  <View key={sd._id} style={styles.subDealerCard}>
+                    <View style={styles.subDealerLine} />
+                    <View style={[styles.memberAvatar, styles.memberAvatarSubDealer, { width: 34, height: 34, borderRadius: 17 }]}>
+                      <Ionicons name="person-outline" size={16} color="#8B5CF6" />
+                    </View>
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.subDealerName}>{sd.SDName || sd.name || 'N/A'}</Text>
+                      {!!(sd.SDMobileNo || sd.mobile) && (
+                        <View style={styles.memberDetailRow}>
+                          <Ionicons name="call-outline" size={11} color="#C4B5FD" />
+                          <Text style={styles.subDealerDetail}>{sd.SDMobileNo || sd.mobile}</Text>
+                        </View>
+                      )}
+                      {!!(sd.SDEmail || sd.email) && (
+                        <View style={styles.memberDetailRow}>
+                          <Ionicons name="mail-outline" size={11} color="#C4B5FD" />
+                          <Text style={styles.subDealerDetail}>{sd.SDEmail || sd.email}</Text>
+                        </View>
+                      )}
+                      {!!sd.SDAddress1 && (
+                        <View style={styles.memberDetailRow}>
+                          <Ionicons name="location-outline" size={11} color="#C4B5FD" />
+                          <Text style={styles.subDealerDetail}>{[sd.SDAddress1, sd.SDAddress2, sd.SDState].filter(Boolean).join(', ')}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+        </View>
+      );
+    };
 
     return (
       <Modal
         visible={showDetailModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowDetailModal(false)}
+        onRequestClose={() => { setShowDetailModal(false); setExpandedDealerIds(new Set()); }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <View>
-              <Text style={styles.modalTitle}>{title + ' in ' + selectedGroup.groupName}</Text>
-              <Text style={styles.modalSubtitle}>{dataToShow.length + ' ' + title.toLowerCase()}</Text>
+              <Text style={styles.modalTitle}>{title} in {selectedGroup.groupName}</Text>
+              <Text style={styles.modalSubtitle}>{dataToShow.length} {title.toLowerCase()}</Text>
             </View>
-            <TouchableOpacity onPress={() => setShowDetailModal(false)}>
-              <Ionicons name="close-circle" size={32} color="#fff" />
+            <TouchableOpacity onPress={() => { setShowDetailModal(false); setExpandedDealerIds(new Set()); }}>
+              <Ionicons name="close" size={22} color="#374151" />
             </TouchableOpacity>
           </View>
 
-          <FlatList
-            data={dataToShow}
-            keyExtractor={(item) => item._id}
-            renderItem={({ item }) => (
-              <View style={styles.detailUserCard}>
-                <View style={styles.detailUserIcon}>
-                  <Ionicons 
-                    name={icon} 
-                    size={24} 
-                    color={viewMode === 'users' ? '#3B82F6' : '#10B981'} 
-                  />
+          {dataToShow.length === 0 ? (
+            <View style={styles.centered}>
+              <Ionicons name={isUsers ? 'people-outline' : 'storefront-outline'} size={52} color="#D1D5DB" />
+              <Text style={styles.emptyTitle}>No {title.toLowerCase()} found</Text>
+            </View>
+          ) : isUsers ? (
+            <FlatList
+              data={dataToShow}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={styles.memberList}
+              renderItem={({ item }) => (
+                <View style={styles.memberCard}>
+                  <View style={[styles.memberAvatar, styles.memberAvatarUser]}>
+                    <Ionicons name="person" size={20} color="#3B82F6" />
+                  </View>
+                  <View style={styles.memberInfo}>
+                    <Text style={styles.memberName}>{item.name}</Text>
+                    {!!item.mobile && (
+                      <View style={styles.memberDetailRow}>
+                        <Ionicons name="call-outline" size={12} color="#9CA3AF" />
+                        <Text style={styles.memberDetailText}>{item.mobile}</Text>
+                      </View>
+                    )}
+                    {!!item.email && (
+                      <View style={styles.memberDetailRow}>
+                        <Ionicons name="mail-outline" size={12} color="#9CA3AF" />
+                        <Text style={styles.memberDetailText}>{item.email}</Text>
+                      </View>
+                    )}
+                    {!!item.role && (
+                      <View style={styles.rolePill}>
+                        <Text style={styles.rolePillText}>{item.role}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.detailUserInfo}>
-                  <Text style={styles.detailUserName}>{item.name}</Text>
-                  {!!item.mobile && (
-                    <Text style={styles.detailUserDetail}>📱 {item.mobile}</Text>
-                  )}
-                  {!!item.email && (
-                    <Text style={styles.detailUserDetail}>✉️ {item.email}</Text>
-                  )}
-                  {!!(item.role && viewMode === 'users') && (
-                    <View style={styles.roleBadge}>
-                      <Text style={styles.roleBadgeText}>{item.role}</Text>
-                    </View>
-                  )}
-                  {!!(viewMode === 'dealers' && item.LedgerGUID) && (
-                    <TouchableOpacity 
-                      style={styles.viewVouchersButton}
-                      onPress={() => fetchDealerVouchers(item)}
-                    >
-                      <Ionicons name="receipt-outline" size={14} color="#fff" />
-                      <Text style={styles.viewVouchersButtonText}>View Vouchers</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            )}
-            contentContainerStyle={styles.detailList}
-          />
+              )}
+            />
+          ) : (
+            <ScrollView contentContainerStyle={styles.memberList}>
+              {(dataToShow as User[]).map(dealer => renderDealerRow(dealer))}
+            </ScrollView>
+          )}
         </View>
       </Modal>
     );
@@ -878,7 +997,7 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
+        <View style={styles.centered}>
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text style={styles.loadingText}>Loading group hierarchy...</Text>
         </View>
@@ -889,17 +1008,17 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
   if (hierarchy.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Group Hierarchy</Text>
+        <View style={styles.pageHeader}>
+          <Text style={styles.pageTitle}>Group Hierarchy</Text>
           {onClose && (
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close-circle" size={32} color="#6B7280" />
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color="#374151" />
             </TouchableOpacity>
           )}
         </View>
-        <View style={styles.emptyContainer}>
-          <Ionicons name="file-tray-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.emptyText}>No group hierarchy found</Text>
+        <View style={styles.centered}>
+          <Ionicons name="git-network-outline" size={56} color="#D1D5DB" />
+          <Text style={styles.emptyTitle}>No groups found</Text>
           <Text style={styles.emptySubtext}>Groups will appear here once assigned</Text>
         </View>
       </SafeAreaView>
@@ -909,41 +1028,23 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.headerIconContainer}>
-            <Ionicons name="git-network" size={24} color="#fff" />
-          </View>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>Group Hierarchy</Text>
-            <Text style={styles.subtitle}>
-              {totalGroups} Groups • {totalUsers} Users • {totalDealers} Dealers
-            </Text>
-          </View>
+      <View style={styles.pageHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pageTitle}>Group Hierarchy</Text>
+          <Text style={styles.pageSubtitle}>{totalGroups} Groups · {totalUsers} Users · {totalDealers} Dealers</Text>
         </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={fetchHierarchy} style={styles.refreshButton}>
-            <Ionicons name="refresh" size={24} color="#fff" />
+        <TouchableOpacity onPress={fetchHierarchy} style={styles.refreshBtn}>
+          <Ionicons name="refresh-outline" size={20} color="#6B7280" />
+        </TouchableOpacity>
+        {onClose && (
+          <TouchableOpacity onPress={onClose} style={styles.refreshBtn}>
+            <Ionicons name="close" size={22} color="#6B7280" />
           </TouchableOpacity>
-          {onClose && (
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={28} color="#fff" />
-            </TouchableOpacity>
-          )}
-        </View>
+        )}
       </View>
 
-      {/* Info Card */}
-      <View style={styles.infoCard}>
-        <Ionicons name="information-circle" size={18} color="#3B82F6" />
-        <Text style={styles.infoText}>
-          Tap groups to expand/collapse. Use buttons to view details.
-        </Text>
-      </View>
-
-      {/* Content */}
-      <ScrollView 
-        style={styles.scrollView} 
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -956,352 +1057,236 @@ const GroupHierarchy: React.FC<GroupHierarchyProps> = ({ onClose }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 15,
-    color: '#6B7280',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  emptySubtext: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
-  header: {
+  // ── Layout ────────────────────────────────────────────────────────────────
+  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  loadingText: { marginTop: 12, fontSize: 14, color: '#6B7280' },
+  emptyTitle: { marginTop: 14, fontSize: 16, fontWeight: '600', color: '#374151' },
+  emptySubtext: { marginTop: 6, fontSize: 13, color: '#9CA3AF', textAlign: 'center' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 14, paddingBottom: 32 },
+
+  // ── Page header ───────────────────────────────────────────────────────────
+  pageHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#2563EB',
+    borderBottomColor: '#E5E7EB',
   },
-  headerLeft: {
+  pageTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  pageSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  refreshBtn: { padding: 6, marginLeft: 8 },
+
+  // ── Group card ────────────────────────────────────────────────────────────
+  groupNode: { marginBottom: 10 },
+  groupCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3B82F6',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  groupCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    marginBottom: 10,
   },
-  headerIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  levelDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  groupTitleBlock: { flex: 1 },
+  groupName: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 4 },
+  levelBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  levelBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  statsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  statChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statChipText: { fontSize: 12, color: '#374151', fontWeight: '500' },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 10,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  actionBtnText: { fontSize: 12, fontWeight: '600' },
+  childrenContainer: {
+    marginTop: 4,
+    marginLeft: 18,
+    borderLeftWidth: 2,
+    borderLeftColor: '#E5E7EB',
+    paddingLeft: 12,
+  },
+
+  // ── Modal shared ──────────────────────────────────────────────────────────
+  modalContainer: { flex: 1, backgroundColor: '#F3F4F6' },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingTop: 52,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
+  modalSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+  backBtnText: { fontSize: 13, color: '#3B82F6', fontWeight: '500' },
+
+  // ── Members list (users / dealers / sub dealers) ───────────────────────────
+  memberList: { padding: 14, paddingBottom: 32 },
+  memberCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  memberAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  headerText: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  refreshButton: {
-    padding: 4,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    borderRadius: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3B82F6',
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#1E40AF',
-    marginLeft: 8,
-    lineHeight: 16,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  groupNode: {
-    marginBottom: 8,
-  },
-  groupNodeContent: {
-    flex: 1,
-  },
-  groupCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  expandIcon: {
-    marginRight: 10,
-    width: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dotIcon: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#9CA3AF',
-  },
-  groupInfo: {
-    flex: 1,
-  },
-  groupTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  groupName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginLeft: 6,
-    flex: 1,
-  },
-  levelBadgeContainer: {
-    marginBottom: 6,
-  },
-  levelBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+  memberAvatarUser: { backgroundColor: '#EFF6FF' },
+  memberAvatarDealer: { backgroundColor: '#F0FDF4' },
+  memberAvatarSubDealer: { backgroundColor: '#F5F3FF' },
+  memberInfo: { flex: 1 },
+  memberName: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 5 },
+  memberDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 3 },
+  memberDetailText: { fontSize: 13, color: '#6B7280' },
+  rolePill: {
     alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-  },
-  levelBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
-    textTransform: 'uppercase',
-  },
-  groupStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 12,
-    color: '#4B5563',
-    fontWeight: '600',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
-    paddingLeft: 0,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 20,
     paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  rolePillText: { fontSize: 11, fontWeight: '600', color: '#3B82F6', textTransform: 'capitalize' },
+  dealerBtnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  outlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    gap: 4,
-  },
-  actionButtonUsers: {
-    backgroundColor: '#EFF6FF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
+    backgroundColor: '#F8FAFF',
   },
-  actionButtonDealers: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
+  outlineBtnText: { fontSize: 12, fontWeight: '600' },
+
+  // ── Inline sub dealers ────────────────────────────────────────────────────
+  dealerRow: { marginBottom: 4 },
+  subDealerSection: {
+    marginLeft: 20,
+    borderLeftWidth: 2,
+    borderLeftColor: '#DDD6FE',
+    paddingLeft: 12,
+    marginBottom: 8,
   },
-  actionButtonText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  childGroupsContainer: {
-    marginTop: 2,
-  },
-  userItem: {
+  subDealerSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 6,
+    paddingVertical: 6,
     marginBottom: 4,
   },
-  userInfo: {
-    marginLeft: 8,
-    flex: 1,
+  subDealerConnector: {
+    width: 8,
+    height: 2,
+    backgroundColor: '#DDD6FE',
+    marginRight: 6,
   },
-  userName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  userDetail: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  userRole: {
+  subDealerSectionTitle: {
     fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 2,
-    textTransform: 'capitalize',
+    fontWeight: '700',
+    color: '#8B5CF6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  modalHeader: {
+  subDealerCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: 50,
-    backgroundColor: '#3B82F6',
-    borderBottomWidth: 1,
-    borderBottomColor: '#2563EB',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 4,
-  },
-  detailList: {
-    padding: 16,
-    paddingBottom: 24,
-  },
-  detailUserCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  detailUserIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  detailUserInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  detailUserName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
+    alignItems: 'flex-start',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 10,
+    padding: 10,
     marginBottom: 6,
-  },
-  detailUserDetail: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 3,
-    lineHeight: 18,
-  },
-  roleBadge: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: 8,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#EDE9FE',
   },
-  roleBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#3B82F6',
-    textTransform: 'capitalize',
+  subDealerLine: {
+    width: 12,
+    height: 2,
+    backgroundColor: '#DDD6FE',
+    alignSelf: 'center',
+    marginRight: 8,
   },
-  viewVouchersButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 10,
-    gap: 6,
-  },
-  viewVouchersButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-  },
+  subDealerName: { fontSize: 14, fontWeight: '600', color: '#4C1D95', marginBottom: 3 },
+  subDealerDetail: { fontSize: 12, color: '#7C3AED' },
+  subDealerLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10 },
+  subDealerLoadingText: { fontSize: 13, color: '#8B5CF6' },
+  subDealerEmpty: { padding: 12 },
+  subDealerEmptyText: { fontSize: 13, color: '#A78BFA', fontStyle: 'italic' },
+
+  // ── Vouchers ──────────────────────────────────────────────────────────────
   voucherCard: {
     backgroundColor: '#fff',
     borderRadius: 14,

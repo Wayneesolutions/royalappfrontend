@@ -312,6 +312,7 @@ const AdminCreateOrder = () => {
   const [subDealers, setSubDealers] = useState<SubDealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [dealerSearchQuery, setDealerSearchQuery] = useState('');
 
   // State for selected values
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
@@ -334,6 +335,11 @@ const AdminCreateOrder = () => {
   // Success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<{ orderNumber: string; totalAmount: number } | null>(null);
+
+  // Add Sub Dealer modal
+  const [showAddSubDealerModal, setShowAddSubDealerModal] = useState(false);
+  const [addSubDealerForm, setAddSubDealerForm] = useState({ SDName: '', SDMobileNo: '', SDEmail: '', SDAddress1: '', SDAddress2: '', SDState: '' });
+  const [addingSubDealer, setAddingSubDealer] = useState(false);
   
   // State for order details
   const [orderNotes, setOrderNotes] = useState('');
@@ -639,6 +645,96 @@ const AdminCreateOrder = () => {
     setSelectedSubDealer(customEntry);
     setSubDealerInput(trimmed);
     setShowSubDealerDropdown(false);
+  };
+
+  const handleAddSubDealer = async () => {
+    const { SDName, SDMobileNo, SDEmail, SDAddress1, SDAddress2, SDState } = addSubDealerForm;
+    if (!SDName.trim()) {
+      Alert.alert('Required', 'Sub dealer name is required');
+      return;
+    }
+    if (!SDMobileNo.trim()) {
+      Alert.alert('Required', 'Mobile number is required');
+      return;
+    }
+    try {
+      setAddingSubDealer(true);
+      const data = {
+        SDName: SDName.trim(),
+        SDMobileNo: SDMobileNo.trim(),
+        SDEmail: SDEmail.trim() || '',
+        SDContactPerson: SDName.trim(),
+        SDAddress1: SDAddress1.trim() || '',
+        SDAddress2: SDAddress2.trim() || '',
+        SDState: SDState.trim() || '',
+        SDType: 'Sub Dealer' as const,
+        dealerId: selectedDealer?._id,
+      };
+      const result = await apiService.adminCreateSubDealer(data);
+      if (result?.success) {
+        setShowAddSubDealerModal(false);
+        setAddSubDealerForm({ SDName: '', SDMobileNo: '', SDEmail: '', SDAddress1: '', SDAddress2: '', SDState: '' });
+
+        // Re-fetch the full list from the server so the new entry (with real _id) appears
+        if (selectedDealer) {
+          try {
+            const refreshed = await apiService.getSubDealersByDealer(selectedDealer._id);
+            if (refreshed?.success && refreshed.data?.subdealers) {
+              const mapped: SubDealer[] = refreshed.data.subdealers.map((sd: any) => ({
+                _id: sd._id,
+                SDName: sd.SDName,
+                name: sd.SDName,
+                SDMobileNo: sd.SDMobileNo,
+                mobile: sd.SDMobileNo,
+                SDEmail: sd.SDEmail,
+                email: sd.SDEmail,
+                SDAddress1: sd.SDAddress1,
+                SDAddress2: sd.SDAddress2,
+                SDAddress3: sd.SDAddress3,
+                SDState: sd.SDState,
+                address: {
+                  street: sd.SDAddress1 || '',
+                  city: sd.SDAddress2 || '',
+                  state: sd.SDState || '',
+                  pincode: sd.SDPincode || '',
+                  country: sd.SDCountry || 'India',
+                },
+              }));
+              setSubDealers(mapped);
+              const newEntry = mapped.find(sd => sd.SDName === data.SDName) || mapped[mapped.length - 1];
+              if (newEntry) {
+                setSelectedSubDealer(newEntry);
+                setSubDealerInput(newEntry.SDName || newEntry.name || '');
+              }
+            }
+          } catch {
+            // Fallback: keep local state with temp entry
+            const tempEntry: SubDealer = {
+              _id: `new_${Date.now()}`,
+              SDName: data.SDName,
+              name: data.SDName,
+              SDMobileNo: data.SDMobileNo,
+              mobile: data.SDMobileNo,
+              SDEmail: data.SDEmail,
+              email: data.SDEmail,
+              SDAddress1: data.SDAddress1,
+              SDAddress2: data.SDAddress2,
+              SDState: data.SDState,
+              address: { street: data.SDAddress1, city: data.SDAddress2, state: data.SDState, country: 'India' },
+            };
+            setSubDealers(prev => [...prev, tempEntry]);
+            setSelectedSubDealer(tempEntry);
+            setSubDealerInput(data.SDName);
+          }
+        }
+      } else {
+        Alert.alert('Error', result?.message || 'Failed to add sub dealer');
+      }
+    } catch (error) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add sub dealer');
+    } finally {
+      setAddingSubDealer(false);
+    }
   };
 
   const createSelectionState = (): ProductSelectionState => ({
@@ -1411,6 +1507,17 @@ const AdminCreateOrder = () => {
     );
   }, [products, productSearchQuery]);
 
+  const filteredDealers = useMemo(() => {
+    const q = dealerSearchQuery.trim().toLowerCase();
+    if (!q) return dealers;
+    return dealers.filter(d => {
+      const name = (d.LedgerName || d.name || '').toLowerCase();
+      const email = (d.Email || d.email || '').toLowerCase();
+      const mobile = (d.LedgerMobile || d.mobile || '').toLowerCase();
+      return name.includes(q) || email.includes(q) || mobile.includes(q);
+    });
+  }, [dealers, dealerSearchQuery]);
+
   const productSelectionEntries = products.map((product) => {
     const selection = getSelectionState(product);
     const quantity = parseFloat(selection.quantity) || 0;
@@ -1552,7 +1659,21 @@ const AdminCreateOrder = () => {
 
         {/* Shipping Address Selection */}
         <View style={[styles.section, { zIndex: 10 }]}>
-          <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) - Optional</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) - Optional</Text>
+            {selectedDealer && (
+              <TouchableOpacity
+                style={styles.addSubDealerBtn}
+                onPress={() => {
+                  setAddSubDealerForm({ SDName: '', SDMobileNo: '', SDEmail: '', SDAddress1: '', SDAddress2: '', SDState: '' });
+                  setShowAddSubDealerModal(true);
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#3B82F6" />
+                <Text style={styles.addSubDealerBtnText}>Add New</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.inlineComboBox}>
             <View style={styles.inlineComboBoxInputRow}>
               <Ionicons name="search-outline" size={16} color="#6B7280" />
@@ -1613,42 +1734,49 @@ const AdminCreateOrder = () => {
 
             {showSubDealerDropdown && (
               <View style={styles.inlineDropdownList}>
-                {filteredSubDealers.length === 0 && !subDealerInput.trim() && (
-                  <View style={styles.inlineDropdownEmpty}>
-                    <Text style={styles.inlineDropdownEmptyText}>No sub dealers available</Text>
-                  </View>
-                )}
-                {filteredSubDealers.map((item) => (
-                  <TouchableOpacity
-                    key={item._id}
-                    style={styles.inlineDropdownItem}
-                    onPress={() => handleSubDealerSelect(item)}
-                  >
-                    <Text style={styles.inlineDropdownItemName}>{item.SDName || item.name}</Text>
-                    {item.address && formatAddress(item.address) !== 'Address not specified' && (
-                      <Text style={styles.inlineDropdownItemAddress}>{formatAddress(item.address)}</Text>
-                    )}
-                  </TouchableOpacity>
-                ))}
-                {subDealerInput.trim().length > 0 &&
-                  !filteredSubDealers.some(
-                    (sd) =>
-                      (sd.SDName || sd.name || '').toLowerCase() ===
-                      subDealerInput.trim().toLowerCase()
-                  ) && (
-                    <TouchableOpacity
-                      style={styles.inlineDropdownSaveCustom}
-                      onPress={() => {
-                        handleSaveCustomSubDealer(subDealerInput);
-                        setShowSubDealerDropdown(false);
-                      }}
-                    >
-                      <Ionicons name="add-circle-outline" size={16} color="#3B82F6" />
-                      <Text style={styles.inlineDropdownSaveCustomText}>
-                        Use "{subDealerInput.trim()}" as sub dealer name
-                      </Text>
-                    </TouchableOpacity>
+                <ScrollView
+                  style={styles.inlineDropdownScroll}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                  nestedScrollEnabled={true}
+                >
+                  {filteredSubDealers.length === 0 && !subDealerInput.trim() && (
+                    <View style={styles.inlineDropdownEmpty}>
+                      <Text style={styles.inlineDropdownEmptyText}>No sub dealers available</Text>
+                    </View>
                   )}
+                  {filteredSubDealers.map((item) => (
+                    <TouchableOpacity
+                      key={item._id}
+                      style={styles.inlineDropdownItem}
+                      onPress={() => handleSubDealerSelect(item)}
+                    >
+                      <Text style={styles.inlineDropdownItemName}>{item.SDName || item.name}</Text>
+                      {item.address && formatAddress(item.address) !== 'Address not specified' && (
+                        <Text style={styles.inlineDropdownItemAddress}>{formatAddress(item.address)}</Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                  {subDealerInput.trim().length > 0 &&
+                    !filteredSubDealers.some(
+                      (sd) =>
+                        (sd.SDName || sd.name || '').toLowerCase() ===
+                        subDealerInput.trim().toLowerCase()
+                    ) && (
+                      <TouchableOpacity
+                        style={styles.inlineDropdownSaveCustom}
+                        onPress={() => {
+                          handleSaveCustomSubDealer(subDealerInput);
+                          setShowSubDealerDropdown(false);
+                        }}
+                      >
+                        <Ionicons name="add-circle-outline" size={16} color="#3B82F6" />
+                        <Text style={styles.inlineDropdownSaveCustomText}>
+                          Use "{subDealerInput.trim()}" as sub dealer name
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                </ScrollView>
               </View>
             )}
           </View>
@@ -1665,7 +1793,7 @@ const AdminCreateOrder = () => {
             <Text style={styles.addressText}>{formatAddress(selectedSubDealer.address)}</Text>
           )}
           {!selectedSubDealer && subDealers.length === 0 && !loading && (
-            <Text style={styles.infoText}>No sub dealers found — type a name above or leave blank to ship to dealer address</Text>
+            <Text style={styles.infoText}>Choose a dealer to enable sub-dealer selection, or leave blank to ship to the dealer.</Text>
           )}
         </View>
 
@@ -1874,27 +2002,156 @@ const AdminCreateOrder = () => {
         visible={showDealerDropdown}
         animationType="slide"
         presentationStyle="formSheet"
-        onRequestClose={() => setShowDealerDropdown(false)}
+        onRequestClose={() => { setShowDealerDropdown(false); setDealerSearchQuery(''); }}
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalHeader}>
             <TouchableOpacity
               style={styles.modalCloseButton}
-              onPress={() => setShowDealerDropdown(false)}
+              onPress={() => { setShowDealerDropdown(false); setDealerSearchQuery(''); }}
             >
               <Ionicons name="close" size={24} color="#374151" />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Select Dealer</Text>
             <View style={styles.placeholder} />
           </View>
-          
+
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={18} color="#6B7280" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search dealers..."
+              value={dealerSearchQuery}
+              onChangeText={setDealerSearchQuery}
+              placeholderTextColor="#9CA3AF"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+          </View>
+
           <FlatList
-            data={dealers}
+            data={filteredDealers}
             renderItem={renderDealerItem}
             keyExtractor={(item) => item._id}
             style={styles.dropdownList}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateText}>No dealers found</Text>
+              </View>
+            }
           />
-        </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Add Sub Dealer Modal */}
+      <Modal
+        visible={showAddSubDealerModal}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowAddSubDealerModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowAddSubDealerModal(false)}
+            >
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Add Sub Dealer</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.addSDFormContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Name <Text style={{ color: '#EF4444' }}>*</Text></Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDName}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDName: t }))}
+                placeholder="Sub dealer name"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Mobile <Text style={{ color: '#EF4444' }}>*</Text></Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDMobileNo}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDMobileNo: t }))}
+                placeholder="Mobile number"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Email</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDEmail}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDEmail: t }))}
+                placeholder="Email address (optional)"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Address Line 1</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDAddress1}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDAddress1: t }))}
+                placeholder="Street / locality (optional)"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Address Line 2</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDAddress2}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDAddress2: t }))}
+                placeholder="City / area (optional)"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>State</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDState}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDState: t }))}
+                placeholder="State (optional)"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.addSDSaveBtn, addingSubDealer && styles.addSDSaveBtnDisabled]}
+              onPress={handleAddSubDealer}
+              disabled={addingSubDealer}
+            >
+              {addingSubDealer ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.addSDSaveBtnText}>Save Sub Dealer</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Product Dropdown Modal */}
@@ -2548,12 +2805,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 4,
     maxHeight: 220,
-    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 4,
+  },
+  inlineDropdownScroll: {
+    maxHeight: 220,
   },
   inlineDropdownItem: {
     paddingHorizontal: 14,
@@ -2698,6 +2957,66 @@ const styles = StyleSheet.create({
   successSecondaryBtnText: {
     color: '#374151',
     fontSize: 15,
+    fontWeight: '600',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  addSubDealerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  addSubDealerBtnText: {
+    fontSize: 13,
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  addSDFormContent: {
+    padding: 16,
+    gap: 4,
+  },
+  addSDField: {
+    marginBottom: 16,
+  },
+  addSDLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  addSDInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+  },
+  addSDSaveBtn: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  addSDSaveBtnDisabled: {
+    opacity: 0.6,
+  },
+  addSDSaveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

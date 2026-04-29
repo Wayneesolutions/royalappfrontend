@@ -741,6 +741,7 @@ class ApiService {
     SDEmail?: string;
     SDGSTNType?: string;
     SDGSTNNumber?: string;
+    dealerId?: string;
     groupId?: string;
     isActive?: boolean;
   }): Promise<ApiResponse<any>> {
@@ -1618,9 +1619,16 @@ class ApiService {
   }
 
   // Get subdealers by dealer ID (for order creation/editing)
-  async getSubDealersByDealer(dealerId: string): Promise<ApiResponse<any>> {
+  async getSubDealersByDealer(dealerId: string, params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }): Promise<ApiResponse<any>> {
     try {
-      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/user/subdealers/by-dealer/${dealerId}`);
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(
+        `/user/subdealers/by-dealer/${dealerId}`,
+        { params }
+      );
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);

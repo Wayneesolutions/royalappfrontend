@@ -437,6 +437,11 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
   const [dealerSearchQuery, setDealerSearchQuery] = useState('');
   const [subDealerSearchQuery, setSubDealerSearchQuery] = useState('');
 
+  // Add Sub Dealer modal
+  const [showAddSubDealerModal, setShowAddSubDealerModal] = useState(false);
+  const [addSubDealerForm, setAddSubDealerForm] = useState({ SDName: '', SDMobileNo: '', SDEmail: '', SDAddress1: '', SDAddress2: '', SDState: '' });
+  const [addingSubDealer, setAddingSubDealer] = useState(false);
+
   const deriveSellerState = useCallback(() => {
     if ((order as any)?.sellerState) {
       return extractState((order as any).sellerState);
@@ -1707,6 +1712,80 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
     </View>
   );
 
+  const fetchSubDealersForDealer = async (dealerId: string) => {
+    try {
+      const response = await apiService.getSubDealersByDealer(dealerId);
+      if (response?.success && response.data?.subdealers) {
+        const mapped: SubDealer[] = response.data.subdealers.map((sd: any) => ({
+          _id: sd._id,
+          SDName: sd.SDName,
+          name: sd.SDName,
+          SDMobileNo: sd.SDMobileNo,
+          mobile: sd.SDMobileNo,
+          SDEmail: sd.SDEmail,
+          email: sd.SDEmail,
+          SDAddress1: sd.SDAddress1,
+          SDAddress2: sd.SDAddress2,
+          SDAddress3: sd.SDAddress3,
+          SDState: sd.SDState,
+          address: {
+            street: sd.SDAddress1 || '',
+            city: sd.SDAddress2 || '',
+            state: sd.SDState || '',
+            pincode: sd.SDPincode || '',
+            country: sd.SDCountry || 'India',
+          },
+        }));
+        setSubDealers(mapped);
+      } else {
+        setSubDealers([]);
+      }
+    } catch {
+      setSubDealers([]);
+    }
+  };
+
+  const handleAddSubDealer = async () => {
+    const { SDName, SDMobileNo, SDEmail, SDAddress1, SDAddress2, SDState } = addSubDealerForm;
+    if (!SDName.trim()) {
+      Alert.alert('Required', 'Sub dealer name is required');
+      return;
+    }
+    if (!SDMobileNo.trim()) {
+      Alert.alert('Required', 'Mobile number is required');
+      return;
+    }
+    try {
+      setAddingSubDealer(true);
+      const data = {
+        SDName: SDName.trim(),
+        SDMobileNo: SDMobileNo.trim(),
+        SDEmail: SDEmail.trim() || '',
+        SDContactPerson: SDName.trim(),
+        SDAddress1: SDAddress1.trim() || '',
+        SDAddress2: SDAddress2.trim() || '',
+        SDState: SDState.trim() || '',
+        SDType: 'Sub Dealer' as const,
+        dealerId: selectedDealer?._id,
+      };
+      const result = await apiService.adminCreateSubDealer(data);
+      if (result?.success) {
+        setShowAddSubDealerModal(false);
+        setAddSubDealerForm({ SDName: '', SDMobileNo: '', SDEmail: '', SDAddress1: '', SDAddress2: '', SDState: '' });
+        if (selectedDealer) {
+          await fetchSubDealersForDealer(selectedDealer._id);
+          setSubDealerSearchQuery('');
+        }
+      } else {
+        Alert.alert('Error', result?.message || 'Failed to add sub dealer');
+      }
+    } catch (error) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add sub dealer');
+    } finally {
+      setAddingSubDealer(false);
+    }
+  };
+
   const renderDealerItem = ({ item }: { item: Dealer }) => {
     const isSelected = selectedDealer && selectedDealer._id?.toString() === item._id?.toString();
     return (
@@ -1720,6 +1799,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
           setSelectedSubDealer(null);
           setShowDealerDropdown(false);
           setDealerSearchQuery('');
+          fetchSubDealersForDealer(item._id);
         }}
       >
         <View style={styles.productInfo}>
@@ -1976,7 +2056,21 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
 
         {/* Sub Dealer Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) (Optional)</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) (Optional)</Text>
+            {selectedDealer && (
+              <TouchableOpacity
+                style={styles.addSubDealerBtn}
+                onPress={() => {
+                  setAddSubDealerForm({ SDName: '', SDMobileNo: '', SDEmail: '', SDAddress1: '', SDAddress2: '', SDState: '' });
+                  setShowAddSubDealerModal(true);
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#3B82F6" />
+                <Text style={styles.addSubDealerBtnText}>Add New</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.selectionRow}>
             <TouchableOpacity
               style={[
@@ -2337,6 +2431,113 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
             }
           />
         </View>
+      </Modal>
+
+      {/* Add Sub Dealer Modal */}
+      <Modal
+        visible={showAddSubDealerModal}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowAddSubDealerModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowAddSubDealerModal(false)}
+            >
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Add Sub Dealer</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.addSDFormContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Name <Text style={{ color: '#EF4444' }}>*</Text></Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDName}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDName: t }))}
+                placeholder="Sub dealer name"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Mobile <Text style={{ color: '#EF4444' }}>*</Text></Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDMobileNo}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDMobileNo: t }))}
+                placeholder="Mobile number"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Email</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDEmail}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDEmail: t }))}
+                placeholder="Email address (optional)"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Address Line 1</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDAddress1}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDAddress1: t }))}
+                placeholder="Street / locality (optional)"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>Address Line 2</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDAddress2}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDAddress2: t }))}
+                placeholder="City / area (optional)"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.addSDField}>
+              <Text style={styles.addSDLabel}>State</Text>
+              <TextInput
+                style={styles.addSDInput}
+                value={addSubDealerForm.SDState}
+                onChangeText={(t) => setAddSubDealerForm(f => ({ ...f, SDState: t }))}
+                placeholder="State (optional)"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.addSDSaveBtn, addingSubDealer && styles.addSDSaveBtnDisabled]}
+              onPress={handleAddSubDealer}
+              disabled={addingSubDealer}
+            >
+              {addingSubDealer ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.addSDSaveBtnText}>Save Sub Dealer</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Product Selection Modal */}
@@ -2930,6 +3131,66 @@ const styles = StyleSheet.create({
   disabledInput: {
     opacity: 0.5,
     backgroundColor: '#F3F4F6',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  addSubDealerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  addSubDealerBtnText: {
+    fontSize: 13,
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  addSDFormContent: {
+    padding: 16,
+    gap: 4,
+  },
+  addSDField: {
+    marginBottom: 16,
+  },
+  addSDLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  addSDInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+  },
+  addSDSaveBtn: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  addSDSaveBtnDisabled: {
+    opacity: 0.6,
+  },
+  addSDSaveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
