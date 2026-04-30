@@ -478,7 +478,7 @@ const SalesmanCreateOrder = () => {
       
       // Fetch products
       console.log('🔍 Fetching products...');
-      const productsResponse = await getProducts();
+      const productsResponse = await getProducts({ limit: 100, isActive: true });
       console.log('📡 Products response:', productsResponse);
 
       let productList: any[] = [];
