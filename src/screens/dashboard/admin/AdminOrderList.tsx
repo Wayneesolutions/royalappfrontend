@@ -31,6 +31,7 @@ interface Order {
   orderNumber: string;
   customerName: string;
   shippingName: string;
+  subDealerName?: string;
   items: OrderItem[];
   totalQuantity: number;
   totalAmount: number;
@@ -98,6 +99,7 @@ const AdminOrderList = () => {
         orderNumber: order.orderNumber || order._id,
         customerName: order.customerName || 'N/A',
         shippingName: order.shippingAddress?.city || order.shippingAddress?.street || 'N/A',
+        subDealerName: order.subDealerName || order.shippingAddress?.name || undefined,
         items: (order.items || []).map((item: any) => ({
           productId: item.productId || '',
           productCode: item.productCode || '',
@@ -171,6 +173,7 @@ const AdminOrderList = () => {
           orderNumber: order.orderNumber || order._id,
           customerName: order.customerName || 'N/A',
           shippingName: order.shippingAddress?.city || order.shippingAddress?.street || 'N/A',
+          subDealerName: order.subDealerName || order.shippingAddress?.name || undefined,
           items: (order.items || []).map((item: any) => ({
             productId: item.productId || '',
             productCode: item.productCode || '',
@@ -404,6 +407,12 @@ const AdminOrderList = () => {
           <Ionicons name="person-outline" size={14} color="#6B7280" />
           <Text style={styles.orderInfoText}>{order.customerName}</Text>
         </View>
+        {order.subDealerName ? (
+          <View style={styles.orderInfoRow}>
+            <Ionicons name="storefront-outline" size={14} color="#6B7280" />
+            <Text style={styles.orderInfoText}>{order.subDealerName}</Text>
+          </View>
+        ) : null}
         <View style={styles.orderInfoRow}>
           <Ionicons name="location-outline" size={14} color="#6B7280" />
           <Text style={styles.orderInfoText}>{order.shippingName}</Text>

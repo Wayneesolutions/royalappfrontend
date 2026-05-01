@@ -2057,7 +2057,7 @@ const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
         {/* Sub Dealer Selection */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Shipping Address (Sub Dealer) (Optional)</Text>
+            <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>Shipping Address (Sub Dealer) (Optional)</Text>
             {selectedDealer && (
               <TouchableOpacity
                 style={styles.addSubDealerBtn}
