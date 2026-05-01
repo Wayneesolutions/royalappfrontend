@@ -570,6 +570,12 @@ const AdminOrderList = () => {
                 <Text style={styles.detailLabel}>Customer</Text>
                 <Text style={styles.detailValue}>{selectedOrder.customerName}</Text>
               </View>
+              {selectedOrder.subDealerName ? (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Sub Dealer</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.subDealerName}</Text>
+                </View>
+              ) : null}
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Shipping To</Text>
                 <Text style={styles.detailValue}>{selectedOrder.shippingName}</Text>
