@@ -56,7 +56,7 @@ interface UserNode {
 }
 
 const AdminOrderList = () => {
-  const { getOrders, approveRejectOrder, submitOrderForApproval, user } = useAuth();
+  const { getOrders, approveRejectOrder, submitOrderForApproval, deleteOrder, user } = useAuth();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
 
@@ -72,6 +72,8 @@ const AdminOrderList = () => {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [approveNotes, setApproveNotes] = useState('');
   const [approving, setApproving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // ── My Orders tab state ────────────────────────────────────────────────────
   const [myOrders, setMyOrders] = useState<Order[]>([]);
@@ -327,6 +329,32 @@ const AdminOrderList = () => {
   const canApprove = (status: string) =>
     ['draft', 'pending_approval'].includes(status);
 
+  // canDelete: only draft orders can be deleted
+  const canDelete = (status: string) => status === 'draft';
+
+  const handleDeleteOrder = () => {
+    if (!selectedOrder) return;
+    setShowActionSheet(false);
+    setShowOrderDetails(false);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteOrder = async () => {
+    if (!selectedOrder) return;
+    try {
+      setDeleting(true);
+      setShowDeleteConfirm(false);
+      await deleteOrder(selectedOrder._id);
+      fetchMyOrders();
+      fetchOrders();
+      Alert.alert('Deleted', 'Order deleted successfully.');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to delete order');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return '#F59E0B';
@@ -419,7 +447,7 @@ const AdminOrderList = () => {
         </View>
         <View style={styles.orderInfoRow}>
           <Ionicons name="cube-outline" size={14} color="#6B7280" />
-          <Text style={styles.orderInfoText}>{order.totalQuantity} items</Text>
+          <Text style={styles.orderInfoText}>{order.totalQuantity} quantity</Text>
         </View>
       </View>
 
@@ -590,7 +618,7 @@ const AdminOrderList = () => {
 
             {/* Items */}
             <View style={styles.detailsCard}>
-              <Text style={styles.detailsCardTitle}>Order Items ({selectedOrder.items.length})</Text>
+              <Text style={styles.detailsCardTitle}>Order Quantity ({selectedOrder.items.length})</Text>
               {selectedOrder.items.map((item, index) => (
                 <View key={index} style={styles.itemCard}>
                   <View style={styles.itemHeader}>
@@ -639,6 +667,16 @@ const AdminOrderList = () => {
                   >
                     <Ionicons name="checkmark-circle-outline" size={18} color="#10B981" />
                     <Text style={[styles.detailActionText, { color: '#10B981' }]}>Approve</Text>
+                  </TouchableOpacity>
+                )}
+                {canDelete(selectedOrder.status) && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]}
+                    onPress={handleDeleteOrder}
+                    disabled={deleting}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Text style={[styles.detailActionText, { color: '#EF4444' }]}>Delete</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -728,6 +766,19 @@ const AdminOrderList = () => {
             </TouchableOpacity>
           )}
 
+          {canDelete(selectedOrder.status) && (
+            <TouchableOpacity style={styles.sheetAction} onPress={handleDeleteOrder} disabled={deleting}>
+              <View style={[styles.sheetActionIcon, { backgroundColor: '#FEF2F2' }]}>
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+              </View>
+              <View style={styles.sheetActionInfo}>
+                <Text style={[styles.sheetActionTitle, { color: '#EF4444' }]}>Delete Order</Text>
+                <Text style={styles.sheetActionSub}>Permanently remove this draft</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[styles.sheetAction, styles.sheetCancelAction]}
             onPress={() => setShowActionSheet(false)}
@@ -791,6 +842,50 @@ const AdminOrderList = () => {
                 {approving
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Text style={styles.approveConfirmText}>Approve</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderDeleteConfirmModal = () => {
+    if (!selectedOrder) return null;
+    return (
+      <Modal
+        visible={showDeleteConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowDeleteConfirm(false)}
+      >
+        <View style={styles.approveOverlay}>
+          <View style={styles.approveCard}>
+            <View style={[styles.approveIconCircle, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons name="trash" size={44} color="#EF4444" />
+            </View>
+            <Text style={styles.approveTitle}>Delete Order</Text>
+            <Text style={styles.approveSub}>#{selectedOrder.orderNumber}</Text>
+            <Text style={[styles.approveSub, { marginTop: 8, color: '#374151' }]}>
+              This action cannot be undone. Are you sure?
+            </Text>
+            <View style={[styles.approveButtons, { marginTop: 24 }]}>
+              <TouchableOpacity
+                style={styles.approveCancelBtn}
+                onPress={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+              >
+                <Text style={styles.approveCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.approveConfirmBtn, { backgroundColor: '#EF4444' }]}
+                onPress={confirmDeleteOrder}
+                disabled={deleting}
+              >
+                {deleting
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.approveConfirmText}>Delete</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -903,6 +998,7 @@ const AdminOrderList = () => {
       {renderOrderDetailsModal()}
       {renderActionSheet()}
       {renderApproveModal()}
+      {renderDeleteConfirmModal()}
 
       {/* Header */}
       <View style={styles.header}>
