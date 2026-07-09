@@ -30,6 +30,9 @@
         "image": "./assets/splash-logo.png",
         "resizeMode": "contain",
         "backgroundColor": "#077BC3"
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "web": {
@@ -46,6 +49,9 @@
         "projectId": "6957d73a-221c-41a6-8d7e-a75d0af06188"
       }
     },
-    "owner": "royaltally"
+    "owner": "royaltally",
+    "updates": {
+      "url": "https://u.expo.dev/6957d73a-221c-41a6-8d7e-a75d0af06188"
+    }
   }
 }
