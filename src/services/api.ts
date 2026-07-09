@@ -398,13 +398,12 @@ class ApiService {
 
   // Super Admin Outstanding Management
   async superadminGetOutstandingSummary(params?: {
-    companyId?: string;
     status?: string;
     riskLevel?: string;
     daysOverdue?: number;
   }): Promise<ApiResponse<any>> {
     try {
-      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/superadmin/outstanding-summary', { params });
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/outstanding/summary', { params });
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -414,7 +413,6 @@ class ApiService {
   async superadminGetOutstandingList(params?: {
     page?: number;
     limit?: number;
-    companyId?: string;
     status?: string;
     riskLevel?: string;
     search?: string;
@@ -422,7 +420,7 @@ class ApiService {
     sortOrder?: string;
   }): Promise<ApiResponse<any>> {
     try {
-      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/superadmin/outstanding-list', { params });
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/outstanding/list', { params });
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -431,7 +429,7 @@ class ApiService {
 
   async superadminGetOutstandingDetails(outstandingId: string): Promise<ApiResponse<any>> {
     try {
-      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/superadmin/outstanding/${outstandingId}`);
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/outstanding/${outstandingId}`);
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -440,7 +438,7 @@ class ApiService {
 
   async superadminUpdateOutstanding(outstandingId: string, data: any): Promise<ApiResponse<any>> {
     try {
-      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.patch(`/superadmin/outstanding/${outstandingId}/update`, data);
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.put(`/outstanding/${outstandingId}`, data);
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
@@ -449,7 +447,7 @@ class ApiService {
 
   async superadminAddCollectionNote(outstandingId: string, note: string): Promise<ApiResponse<any>> {
     try {
-      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/superadmin/outstanding/${outstandingId}/add-note`, { note });
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/outstanding/${outstandingId}/notes`, { note });
       return response.data;
     } catch (error) {
       this.handleApiError(error as AxiosError);
