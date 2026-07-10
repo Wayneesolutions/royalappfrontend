@@ -1113,6 +1113,21 @@ class ApiService {
     }
   }
 
+  async getTallyDispatch(params: {
+    cmpcode: string;
+    userId: string;
+    dispatchStatus?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/tally/dispatch/group-user', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   async getOrderById(orderId: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/orders/${orderId}`);

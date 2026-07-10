@@ -4,39 +4,42 @@ import {
   SafeAreaView, StatusBar, TextInput, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
 import apiService from '../../../services/api';
 import OrderDetailsModal from '../../../components/OrderDetailsModal';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-  draft:            '#6B7280',
-  pending:          '#F59E0B',
-  pending_approval: '#F59E0B',
-  confirmed:        '#3B82F6',
-  processing:       '#3B82F6',
-  approved:         '#10B981',
-  sent_to_tally:    '#8B5CF6',
-  dispatched:       '#8B5CF6',
-  shipped:          '#8B5CF6',
-  delivered:        '#059669',
-  cancelled:        '#EF4444',
-  returned:         '#6B7280',
+  draft:              '#6B7280',
+  pending:            '#F59E0B',
+  pending_approval:   '#F59E0B',
+  confirmed:          '#3B82F6',
+  processing:         '#3B82F6',
+  approved:           '#10B981',
+  sent_to_tally:      '#8B5CF6',
+  dispatched:         '#8B5CF6',
+  fully_dispatched:   '#059669',
+  shipped:            '#8B5CF6',
+  delivered:          '#059669',
+  cancelled:          '#EF4444',
+  returned:           '#6B7280',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  draft:            'Draft',
-  pending:          'Pending',
-  pending_approval: 'Pending Approval',
-  confirmed:        'Confirmed',
-  processing:       'Processing',
-  approved:         'Approved',
-  sent_to_tally:    'Sent to Tally',
-  dispatched:       'Dispatched',
-  shipped:          'In Transit',
-  delivered:        'Delivered',
-  cancelled:        'Cancelled',
-  returned:         'Returned',
+  draft:              'Draft',
+  pending:            'Pending',
+  pending_approval:   'Pending Approval',
+  confirmed:          'Confirmed',
+  processing:         'Processing',
+  approved:           'Approved',
+  sent_to_tally:      'Sent to Tally',
+  dispatched:         'Dispatched',
+  fully_dispatched:   'Fully Dispatched',
+  shipped:            'In Transit',
+  delivered:          'Delivered',
+  cancelled:          'Cancelled',
+  returned:           'Returned',
 };
 
 // Role display labels for hierarchy
@@ -91,12 +94,16 @@ interface Order {
   dealerName?: string;
   items: Array<{ productName?: string; name?: string; quantity?: number }>;
   createdBy?: { name?: string; role?: string } | null;
-  orderCategory?: 'sale' | 'purchase';
+  orderCategory?: 'sale' | 'purchase'; // set directly on Tally dispatch orders
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const PendingOrdersScreen = () => {
+  const authUser = useSelector((state: any) => state.auth.user);
+  const cmpcode = authUser?.defaultCompany?.companyCode || '';
+  const userId = authUser?._id || '';
+
   const [activeTab, setActiveTab] = useState<'sales' | 'purchase'>('sales');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -116,10 +123,12 @@ const PendingOrdersScreen = () => {
   ]);
 
   // Classify an order as sale or purchase based on who created it.
+  // Tally dispatch orders have orderCategory set directly → always 'sale'.
   // Orders created by admin/groupuser/etc = sale (company selling to dealer).
   // Orders created by dealer/distributor = purchase (dealer buying from company).
   // Legacy orders with no createdBy default to 'sale'.
   const getOrderCategory = (o: Order): 'sale' | 'purchase' => {
+    if (o.orderCategory) return o.orderCategory;
     const role = o.createdBy?.role?.toLowerCase() || '';
     if (!role) return 'sale';
     return SALE_ROLES.has(role) ? 'sale' : 'purchase';
@@ -136,13 +145,26 @@ const PendingOrdersScreen = () => {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
+  // Map a TallyDispatch record into the Order shape used by this screen
+  const mapDispatchToOrder = (d: any): Order => ({
+    _id: d._id,
+    orderNumber: d.orderNumber || d.orderguid?.slice(-6).toUpperCase() || '',
+    orderDate: d.orderDate || d.tallySyncAt || '',
+    finalAmount: d.totalAmount || 0,
+    status: d.dispatchStatus === 'fully_dispatched' ? 'fully_dispatched' : 'pending',
+    priority: '',
+    customerName: d.partyName || '',
+    dealerName: d.partyName || '',
+    items: (d.items || []).map((it: any) => ({ productName: it.itemName, quantity: it.pendingQty || it.orderedQty })),
+    createdBy: null, // Tally orders → classified as 'sale'
+    orderCategory: 'sale',
+  });
+
   const fetchOrders = async (reset = false) => {
     try {
       if (reset) setLoading(true);
       const currentPage = reset ? 1 : page;
 
-      // Do NOT send orderCategory — existing DB orders lack that field.
-      // We classify sale vs purchase client-side from createdBy.role.
       const params: any = {
         page: currentPage,
         limit: 50,
@@ -157,23 +179,31 @@ const PendingOrdersScreen = () => {
         params.search = searchQuery.trim();
       }
 
-      const result = await apiService.getOrders(params);
+      // Fetch regular orders and Tally dispatches in parallel
+      const [ordersResult, dispatchResult] = await Promise.all([
+        apiService.getOrders(params),
+        cmpcode && userId
+          ? apiService.getTallyDispatch({ cmpcode, userId, page: currentPage, limit: 50 })
+          : Promise.resolve(null),
+      ]);
 
-      if (result?.success) {
-        const newOrders: Order[] = result.orders || [];
+      const newOrders: Order[] = ordersResult?.success ? (ordersResult.orders || []) : [];
+      const tallyOrders: Order[] = dispatchResult?.success
+        ? (dispatchResult.data?.dispatches || []).map(mapDispatchToOrder)
+        : [];
 
-        if (reset) {
-          setAllOrders(newOrders);
-          setPage(2);
-        } else {
-          setAllOrders(prev => [...prev, ...newOrders]);
-          setPage(p => p + 1);
-        }
+      // Merge: Tally orders first, then regular orders
+      const merged = [...tallyOrders, ...newOrders];
 
-        setHasMore(newOrders.length === 50);
+      if (reset) {
+        setAllOrders(merged);
+        setPage(2);
       } else {
-        if (reset) setAllOrders([]);
+        setAllOrders(prev => [...prev, ...merged]);
+        setPage(p => p + 1);
       }
+
+      setHasMore(newOrders.length === 50 || tallyOrders.length === 50);
     } catch {
       if (reset) setAllOrders([]);
     } finally {
