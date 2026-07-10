@@ -1,874 +1,334 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  FlatList,
-  RefreshControl,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  TextInput
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  RefreshControl, ActivityIndicator, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../../context/AuthContext';
-import OrderDetailsModal from '../../../components/OrderDetailsModal';
+import { useSelector } from 'react-redux';
+import apiService from '../../../services/api';
 
-interface Order {
+type DispatchStatus = 'all' | 'pending' | 'fully_dispatched';
+
+interface DispatchItem {
   _id: string;
+  orderguid: string;
   orderNumber: string;
   orderDate: string;
-  finalAmount: number;
-  status: string;
-  priority: string;
-  paymentMethod: string;
-  deliveryDate: string;
-  createdBy: {
-    _id: string;
-    name: string;
-    email: string;
-    role: string;
-  };
-  orderItems: Array<{
-    product: {
-      _id: string;
-      name: string;
-      price: number;
-    };
-    quantity: number;
-    totalPrice: number;
-  }>;
-  items?: Array<{
-    productId: string;
-    productName: string;
-    productCode: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-    discount: number;
-    tax: number;
-    _id: string;
-  }>;
-  approvalHistory: Array<{
-    approverName: string;
-    approverRole: string;
-    action: string;
-    notes: string;
-    timestamp: string;
-  }>;
-  nextApprover?: {
-    _id: string;
-    name: string;
-    role: string;
-  };
-  notes: string;
-  shippingAddress: string;
+  partyName: string;
+  totalAmount: number;
+  dispatchStatus: string;
+  items: Array<{ itemName: string; orderedQty: number; dispatchedQty: number; pendingQty: number }>;
+  tallySyncAt: string;
 }
 
-interface OrderSummary {
-  totalPendingOrders: number;
-  totalAmount: number;
-  averageOrderValue: number;
-  ordersByStatus: Record<string, number>;
-  ordersByPriority: Record<string, number>;
-  ordersByPaymentMethod: Record<string, number>;
-  ordersByRole: Record<string, number>;
-}
+const STATUS_COLOR: Record<string, string> = {
+  pending:          '#F59E0B',
+  fully_dispatched: '#10B981',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pending:          'Pending',
+  fully_dispatched: 'Fully Dispatched',
+};
+
+const FILTERS: { key: DispatchStatus; label: string }[] = [
+  { key: 'all',              label: 'All' },
+  { key: 'pending',          label: 'Pending' },
+  { key: 'fully_dispatched', label: 'Fully Dispatched' },
+];
 
 const PendingOrdersManagementScreen = () => {
-  const { getOrders, getOrderStats, getOrderById, updateOrderStatus } = useAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [summary, setSummary] = useState<OrderSummary | null>(null);
+  const authUser = useSelector((state: any) => state.auth.user);
+  const cmpcode = authUser?.defaultCompany?.companyCode || '';
+
+  const [dispatches, setDispatches] = useState<DispatchItem[]>([]);
+  const [filter, setFilter] = useState<DispatchStatus>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [loadingOrderDetails, setLoadingOrderDetails] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'draft' | 'pending_approval' | 'pending' | 'confirmed'>('all');
-  const [sortBy, setSortBy] = useState<'orderDate' | 'finalAmount' | 'orderNumber'>('orderDate');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    fetchOrders();
-  }, [filter, sortBy, searchQuery]);
+    fetchDispatches(true);
+  }, [filter, cmpcode]);
 
-  // Temporary test data to verify rendering works
   useEffect(() => {
-    console.log('🧪 Testing with hardcoded data...');
-    const testOrders = [
-      {
-        _id: 'test1',
-        orderNumber: 'TEST-001',
-        orderDate: new Date().toISOString(),
-        finalAmount: 100,
-        status: 'draft',
-        priority: 'medium',
-        paymentMethod: 'cash',
-        deliveryDate: new Date().toISOString(),
-        createdBy: {
-          _id: 'user1',
-          name: 'Test User',
-          email: 'test@example.com',
-          role: 'dealer'
-        },
-        orderItems: [
-          {
-            product: {
-              _id: 'prod1',
-              name: 'Test Product',
-              price: 100
-            },
-            quantity: 1,
-            totalPrice: 100
-          }
-        ],
-        approvalHistory: [],
-        notes: 'Test order',
-        shippingAddress: 'Test Address'
-      }
-    ];
-    console.log('🧪 Setting test orders:', testOrders);
-    // Uncomment the line below to test with hardcoded data
-    // setOrders(testOrders);
-  }, []);
+    const t = setTimeout(() => fetchDispatches(true), 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
-  const fetchOrders = async () => {
+  const fetchDispatches = async (reset = false) => {
+    if (!cmpcode) return;
     try {
-      setLoading(true);
-      console.log('🔄 Fetching orders with filter:', filter);
-      
-      // Fetch pending orders
-      const result = await getOrders({
-        status: filter === 'all' ? undefined : filter,
-        sortBy,
-        search: searchQuery || undefined,
-        limit: 50
+      if (reset) setLoading(true);
+      const currentPage = reset ? 1 : page;
+
+      const result = await apiService.getTallyDispatchAdmin({
+        cmpcode,
+        dispatchStatus: filter === 'all' ? undefined : filter,
+        page: currentPage,
+        limit: 50,
       });
-      
-      if (result?.success) {
-        // Map API response to expected format - using result.orders directly like Sales screen
-        const mappedOrders = (result.orders || []).map((order: any) => ({
-          ...order,
-          orderItems: order.items?.map((item: any) => ({
-            product: {
-              _id: item.productId,
-              name: item.productName,
-              price: item.unitPrice
-            },
-            quantity: item.quantity,
-            totalPrice: item.totalPrice
-          })) || []
-        }));
-        setOrders(mappedOrders);
-      }
 
-      // Fetch order statistics
-      const statsResult = await getOrderStats();
-      if (statsResult?.success) {
-        const stats = statsResult.stats;
-        setSummary({
-          totalPendingOrders: stats.pendingOrders || 0,
-          totalAmount: stats.pendingAmount || 0,
-          averageOrderValue: stats.averageOrderValue || 0,
-          ordersByStatus: stats.ordersByStatus || {},
-          ordersByPriority: stats.ordersByPriority || {},
-          ordersByPaymentMethod: stats.ordersByPaymentMethod || {},
-          ordersByRole: stats.ordersByRole || {}
-        });
-      }
+      const list: DispatchItem[] = result?.success ? (result.data?.dispatches || []) : [];
 
-    } catch (error) {
-      console.error('Error fetching pending orders:', error);
-      Alert.alert('Error', 'Failed to fetch pending orders');
+      // Client-side search filter
+      const filtered = searchQuery.trim()
+        ? list.filter(d =>
+            d.partyName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            d.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : list;
+
+      if (reset) {
+        setDispatches(filtered);
+        setPage(2);
+      } else {
+        setDispatches(prev => [...prev, ...filtered]);
+        setPage(p => p + 1);
+      }
+      setHasMore(list.length === 50);
+    } catch {
+      if (reset) setDispatches([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const onRefresh = async () => {
+  const onRefresh = () => {
     setRefreshing(true);
-    await fetchOrders();
-    setRefreshing(false);
+    fetchDispatches(true);
   };
 
-  const handleViewDetails = async (order: Order) => {
-    try {
-      setLoadingOrderDetails(order._id);
-      const response = await getOrderById(order._id);
-      if (response?.success && response?.order) {
-        setSelectedOrder(response.order);
-        setShowDetailsModal(true);
-      } else {
-        Alert.alert('Error', 'Failed to load order details');
-      }
-    } catch (error) {
-      console.error('Error fetching order details:', error);
-      Alert.alert('Error', 'Failed to load order details');
-    } finally {
-      setLoadingOrderDetails(null);
-    }
+  const totalAmount = dispatches.reduce((s, d) => s + (d.totalAmount || 0), 0);
+  const pendingCount = dispatches.filter(d => d.dispatchStatus === 'pending').length;
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: '2-digit',
+    });
   };
 
-  const handleOrderStatusUpdate = async (orderId: string, newStatus: string) => {
-    try {
-      const response = await updateOrderStatus(orderId, {
-        status: newStatus,
-        notes: ''
-      });
-      if (response?.success) {
-        Alert.alert('Success', 'Order status updated successfully');
-        fetchOrders(); // Refresh orders
-      } else {
-        Alert.alert('Error', response?.message || 'Failed to update order status');
-      }
-    } catch (error) {
-      console.error('Error updating order status:', error);
-      Alert.alert('Error', 'Failed to update order status');
-    }
-  };
+  const renderCard = ({ item }: { item: DispatchItem }) => {
+    const color = STATUS_COLOR[item.dispatchStatus] || '#6B7280';
+    const label = STATUS_LABEL[item.dispatchStatus] || item.dispatchStatus;
+    const firstItem = item.items?.[0];
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'draft': return '#6B7280';
-      case 'pending': return '#F59E0B';
-      case 'pending_approval': return '#F59E0B';
-      case 'confirmed': return '#3B82F6';
-      case 'approved': return '#10B981';
-      case 'rejected': return '#EF4444';
-      default: return '#6B7280';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return '#EF4444';
-      case 'medium': return '#F59E0B';
-      case 'low': return '#10B981';
-      default: return '#6B7280';
-    }
-  };
-
-  const getPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case 'cash': return 'cash';
-      case 'credit': return 'card';
-      case 'cheque': return 'document-text';
-      case 'online': return 'globe';
-      case 'card': return 'card';
-      default: return 'card';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'draft': return 'create-outline';
-      case 'pending': return 'time-outline';
-      case 'pending_approval': return 'time-outline';
-      case 'confirmed': return 'checkmark-circle-outline';
-      case 'approved': return 'checkmark-circle-outline';
-      case 'rejected': return 'close-circle-outline';
-      default: return 'document-outline';
-    }
-  };
-
-  const renderOrderItem = ({ item }: { item: Order }) => {
     return (
-    <TouchableOpacity style={styles.orderCard} onPress={() => handleViewDetails(item)}>
-      <View style={styles.cardHeader}>
-        <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>{item.orderNumber}</Text>
-          <Text style={styles.orderDate}>
-            {new Date(item.orderDate).toLocaleDateString()}
-          </Text>
-        </View>
-        <View style={styles.statusContainer}>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-            <Ionicons name={getStatusIcon(item.status)} size={12} color="#fff" />
-            <Text style={styles.statusText}>{item.status.replace('_', ' ')}</Text>
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.orderNumber}>
+              #{item.orderNumber || item.orderguid?.slice(-8).toUpperCase() || '—'}
+            </Text>
+            <Text style={styles.dateText}>{formatDate(item.orderDate || item.tallySyncAt)}</Text>
           </View>
-          <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
-            <Text style={styles.priorityText}>{item.priority}</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.cardContent}>
-        <View style={styles.amountRow}>
-          <Text style={styles.amountLabel}>Amount:</Text>
-          <Text style={styles.amountValue}>₹{item.finalAmount.toLocaleString()}</Text>
-        </View>
-        
-        <View style={styles.detailsRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Customer:</Text>
-            <Text style={styles.detailValue}>{item.createdBy?.name ?? 'Unknown'}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Role:</Text>
-            <Text style={styles.detailValue}>{item.createdBy?.role ?? 'Unknown'}</Text>
+          <View style={[styles.badge, { backgroundColor: color + '22' }]}>
+            <Text style={[styles.badgeText, { color }]}>{label}</Text>
           </View>
         </View>
 
-        <View style={styles.paymentRow}>
-          <Ionicons 
-            name={getPaymentMethodIcon(item.paymentMethod)} 
-            size={16} 
-            color="#6B7280" 
-          />
-          <Text style={styles.paymentText}>{item.paymentMethod}</Text>
-          {item.deliveryDate && (
-            <>
-              <Ionicons name="calendar" size={16} color="#6B7280" style={styles.paymentIcon} />
-              <Text style={styles.paymentText}>
-                {new Date(item.deliveryDate).toLocaleDateString()}
-              </Text>
-            </>
-          )}
+        <View style={styles.divider} />
+
+        <View style={styles.row}>
+          <Ionicons name="person-outline" size={13} color="#6B7280" />
+          <Text style={styles.partyName} numberOfLines={1}>{item.partyName || '—'}</Text>
         </View>
 
-        <View style={styles.itemsRow}>
-          <Text style={styles.itemsLabel}>
-            {item.orderItems.length} item{item.orderItems.length !== 1 ? 's' : ''}
-          </Text>
-          {item.nextApprover && (
-            <View style={styles.nextApproverRow}>
-              <Ionicons name="person" size={14} color="#6B7280" />
-              <Text style={styles.nextApproverText}>
-                Next: {item.nextApprover.name} ({item.nextApprover.role})
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.cardFooter}>
-        <TouchableOpacity 
-          style={styles.viewButton}
-          onPress={() => handleViewDetails(item)}
-          disabled={loadingOrderDetails === item._id}
-        >
-          {loadingOrderDetails === item._id ? (
-            <ActivityIndicator size="small" color="#077BC3" />
-          ) : (
-            <Ionicons name="eye" size={16} color="#077BC3" />
-          )}
-          <Text style={styles.viewButtonText}>
-            {loadingOrderDetails === item._id ? 'Loading...' : 'View Details'}
-          </Text>
-        </TouchableOpacity>
-        {item.status === 'draft' && (
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="send" size={16} color="#10B981" />
-            <Text style={styles.actionButtonText}>Submit</Text>
-          </TouchableOpacity>
+        {firstItem && (
+          <View style={styles.row}>
+            <Ionicons name="cube-outline" size={13} color="#6B7280" />
+            <Text style={styles.itemText} numberOfLines={1}>
+              {firstItem.itemName}
+              {item.items.length > 1 ? ` +${item.items.length - 1} more` : ''}
+            </Text>
+          </View>
         )}
+
+        <View style={styles.cardFooter}>
+          <View>
+            <Text style={styles.amtLabel}>Order Value</Text>
+            <Text style={styles.amtValue}>₹{(item.totalAmount || 0).toLocaleString('en-IN')}</Text>
+          </View>
+          <View style={styles.itemsCountBox}>
+            <Text style={styles.itemsCount}>{item.items?.length || 0} item{item.items?.length !== 1 ? 's' : ''}</Text>
+          </View>
+        </View>
       </View>
-    </TouchableOpacity>
     );
   };
 
-  const renderFilterButton = (filterType: typeof filter, label: string) => (
-    <TouchableOpacity
-      style={[styles.filterButton, filter === filterType && styles.activeFilterButton]}
-      onPress={() => setFilter(filterType)}
-    >
-      <Text style={[styles.filterButtonText, filter === filterType && styles.activeFilterButtonText]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.center}>
         <ActivityIndicator size="large" color="#077BC3" />
-        <Text style={styles.loadingText}>Loading pending orders...</Text>
+        <Text style={styles.loadingText}>Loading dispatch orders...</Text>
       </View>
     );
   }
 
-  console.log('🎯 Component render - orders length:', orders.length, 'loading:', loading);
-  
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Pending Orders</Text>
         <Text style={styles.headerSubtitle}>
-          {orders.length} orders • ₹{summary?.totalAmount?.toLocaleString() || '0'} total value
+          {dispatches.length} orders · ₹{totalAmount.toLocaleString('en-IN')} total
         </Text>
       </View>
 
-      {/* Summary Cards */}
-      {summary && (
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{summary.totalPendingOrders}</Text>
-            <Text style={styles.summaryLabel}>Pending Orders</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>₹{summary.totalAmount.toLocaleString()}</Text>
-            <Text style={styles.summaryLabel}>Total Value</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>₹{summary.averageOrderValue.toLocaleString()}</Text>
-            <Text style={styles.summaryLabel}>Avg. Value</Text>
-          </View>
+      {/* Summary */}
+      <View style={styles.summaryRow}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryVal}>{dispatches.length}</Text>
+          <Text style={styles.summaryLab}>Total</Text>
         </View>
-      )}
+        <View style={styles.summaryCard}>
+          <Text style={[styles.summaryVal, { color: '#F59E0B' }]}>{pendingCount}</Text>
+          <Text style={styles.summaryLab}>Pending</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={[styles.summaryVal, { color: '#10B981' }]}>{dispatches.length - pendingCount}</Text>
+          <Text style={styles.summaryLab}>Dispatched</Text>
+        </View>
+      </View>
 
       {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.filtersRow}>
-            {renderFilterButton('all', 'All')}
-            {renderFilterButton('draft', 'Draft')}
-            {renderFilterButton('pending', 'Pending')}
-            {renderFilterButton('pending_approval', 'Pending Approval')}
-            {renderFilterButton('confirmed', 'Confirmed')}
-          </View>
-        </ScrollView>
+      <View style={styles.filterRow}>
+        {FILTERS.map(f => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.filterPill, filter === f.key && styles.filterPillActive]}
+            onPress={() => setFilter(f.key)}
+          >
+            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* Search */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#6B7280" />
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={16} color="#9CA3AF" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by order number or customer name..."
+          placeholder="Search by party or order number..."
+          placeholderTextColor="#9CA3AF"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Orders List */}
       <FlatList
-        data={orders}
-        renderItem={renderOrderItem}
-        keyExtractor={(item) => item._id}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={styles.ordersList}
+        data={dispatches}
+        keyExtractor={item => item._id || item.orderguid}
+        renderItem={renderCard}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onEndReached={() => hasMore && !loading && fetchDispatches(false)}
+        onEndReachedThreshold={0.4}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="document-text" size={48} color="#9CA3AF" />
-            <Text style={styles.emptyStateText}>No pending orders found</Text>
-            <Text style={styles.emptyStateSubtext}>
-              {filter === 'all' ? 'No orders found' : `No ${filter} orders found`}
-            </Text>
+          <View style={styles.empty}>
+            <Ionicons name="document-text-outline" size={56} color="#D1D5DB" />
+            <Text style={styles.emptyText}>No dispatch orders found</Text>
+            <Text style={styles.emptySubText}>Pull down to refresh</Text>
           </View>
         }
-      />
-
-      {/* Order Details Modal */}
-      <OrderDetailsModal
-        visible={showDetailsModal}
-        order={selectedOrder}
-        onClose={() => {
-          setShowDetailsModal(false);
-          setSelectedOrder(null);
-        }}
-        onStatusUpdate={handleOrderStatusUpdate}
-        canUpdateStatus={true}
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
+  container:   { flex: 1, backgroundColor: '#F9FAFB' },
+  center:      { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 12, color: '#6B7280', fontSize: 14 },
+
   header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#fff', padding: 16,
+    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  summaryContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    gap: 12,
+  headerTitle:    { fontSize: 22, fontWeight: 'bold', color: '#111827' },
+  headerSubtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
+
+  summaryRow: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#E5E7EB', gap: 12,
   },
   summaryCard: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    flex: 1, backgroundColor: '#F9FAFB',
+    borderRadius: 10, padding: 12, alignItems: 'center',
   },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
+  summaryVal: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
+  summaryLab: { fontSize: 11, color: '#6B7280', marginTop: 2 },
+
+  filterRow: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#E5E7EB', gap: 8,
   },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#6B7280',
+  filterPill: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 20, backgroundColor: '#F3F4F6',
   },
-  filtersContainer: {
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  filterPillActive: { backgroundColor: '#077BC3' },
+  filterText:       { fontSize: 12, fontWeight: '600', color: '#6B7280' },
+  filterTextActive: { color: '#fff' },
+
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', marginHorizontal: 16, marginVertical: 10,
+    paddingHorizontal: 12, height: 44,
+    borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB',
   },
-  filtersRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#111827' },
+
+  list: { padding: 16, paddingBottom: 40 },
+
+  card: {
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    elevation: 2,
   },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  activeFilterButton: {
-    backgroundColor: '#077BC3',
-  },
-  filterButtonText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  activeFilterButtonText: {
-    color: '#fff',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#111827',
-  },
-  ordersList: {
-    padding: 16,
-  },
-  orderCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  orderInfo: {
-    flex: 1,
-  },
-  orderNumber: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  orderDate: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  statusContainer: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  priorityBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  priorityText: {
-    fontSize: 10,
-    color: '#fff',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  cardContent: {
-    marginBottom: 12,
-  },
-  amountRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  amountLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  amountValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#F59E0B',
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailItem: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  paymentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  paymentText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  paymentIcon: {
-    marginLeft: 12,
-  },
-  itemsRow: {
-    marginBottom: 8,
-  },
-  itemsLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  nextApproverRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  nextApproverText: {
-    fontSize: 12,
-    color: '#077BC3',
-    marginLeft: 4,
-    fontWeight: '500',
-  },
+  cardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  orderNumber: { fontSize: 14, fontWeight: 'bold', color: '#111827' },
+  dateText:    { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  badgeText: { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
+
+  divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 10 },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  partyName: { fontSize: 13, fontWeight: '600', color: '#374151', flex: 1 },
+  itemText:  { fontSize: 12, color: '#6B7280', flex: 1 },
+
   cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginTop: 10,
+    paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F3F4F6',
   },
-  viewButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#EFF6FF',
-    gap: 4,
+  amtLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '600' },
+  amtValue: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  itemsCountBox: {
+    backgroundColor: '#F3F4F6', paddingHorizontal: 10,
+    paddingVertical: 4, borderRadius: 8,
   },
-  viewButtonText: {
-    fontSize: 12,
-    color: '#077BC3',
-    fontWeight: '500',
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#ECFDF5',
-    gap: 4,
-  },
-  actionButtonText: {
-    fontSize: 12,
-    color: '#10B981',
-    fontWeight: '500',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginTop: 16,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalContent: {
-    flex: 1,
-    padding: 16,
-  },
-  detailSection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  orderItem: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  itemName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    flex: 1,
-  },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#10B981',
-  },
-  itemDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  itemQuantity: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  itemUnitPrice: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  approvalItem: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  approvalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  approverName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  approvalDate: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  approvalAction: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  approvalNotes: {
-    fontSize: 12,
-    color: '#111827',
-    fontStyle: 'italic',
-  },
+  itemsCount: { fontSize: 12, color: '#6B7280', fontWeight: '600' },
+
+  empty:        { alignItems: 'center', marginTop: 80 },
+  emptyText:    { fontSize: 16, fontWeight: '600', color: '#6B7280', marginTop: 12 },
+  emptySubText: { fontSize: 13, color: '#9CA3AF', marginTop: 6 },
 });
 
 export default PendingOrdersManagementScreen;
