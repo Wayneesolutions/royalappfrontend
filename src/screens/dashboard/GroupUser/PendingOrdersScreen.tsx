@@ -165,45 +165,23 @@ const PendingOrdersScreen = () => {
       if (reset) setLoading(true);
       const currentPage = reset ? 1 : page;
 
-      const params: any = {
-        page: currentPage,
-        limit: 50,
-        sortBy: 'orderDate',
-      };
+      const dispatchResult = cmpcode && userId
+        ? await apiService.getTallyDispatch({ cmpcode, userId, page: currentPage, limit: 50 })
+        : null;
 
-      if (filterStatus !== 'all') {
-        params.status = filterStatus;
-      }
-
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
-      }
-
-      // Fetch regular orders and Tally dispatches in parallel
-      const [ordersResult, dispatchResult] = await Promise.all([
-        apiService.getOrders(params),
-        cmpcode && userId
-          ? apiService.getTallyDispatch({ cmpcode, userId, page: currentPage, limit: 50 })
-          : Promise.resolve(null),
-      ]);
-
-      const newOrders: Order[] = ordersResult?.success ? (ordersResult.orders || []) : [];
       const tallyOrders: Order[] = dispatchResult?.success
         ? (dispatchResult.data?.dispatches || []).map(mapDispatchToOrder)
         : [];
 
-      // Merge: Tally orders first, then regular orders
-      const merged = [...tallyOrders, ...newOrders];
-
       if (reset) {
-        setAllOrders(merged);
+        setAllOrders(tallyOrders);
         setPage(2);
       } else {
-        setAllOrders(prev => [...prev, ...merged]);
+        setAllOrders(prev => [...prev, ...tallyOrders]);
         setPage(p => p + 1);
       }
 
-      setHasMore(newOrders.length === 50 || tallyOrders.length === 50);
+      setHasMore(tallyOrders.length === 50);
     } catch {
       if (reset) setAllOrders([]);
     } finally {
