@@ -212,8 +212,8 @@ const PendingOrdersScreen = () => {
     try {
       setLoadingDetail(order._id);
       const result = await apiService.getOrderById(order._id);
-      if (result?.success && result?.order) {
-        setSelectedOrder(result.order);
+      if (result?.success && (result as any)?.order) {
+        setSelectedOrder((result as any).order);
         setShowDetails(true);
       } else {
         // Fallback: show the list-level data we already have
