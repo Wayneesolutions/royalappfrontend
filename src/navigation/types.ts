@@ -85,6 +85,7 @@ type AdminStackParamList = {
   InvoiceScreen: undefined;
   TargetScreen: undefined;
   PendingOrdersScreen: undefined;
+  PendingOrderDetailScreen: { order: any };
   ApprovedOrdersScreen: undefined;
   ClearOrdersScreen: undefined;
   OutstandingScreen: undefined;

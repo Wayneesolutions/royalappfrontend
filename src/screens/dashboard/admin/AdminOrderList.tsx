@@ -87,49 +87,62 @@ const AdminOrderList = () => {
   const [totalOrders, setTotalOrders] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
 
+  // ── Day filters (separate per tab) ───────────────────────────────────────
+  const [myOrdersDayFilter, setMyOrdersDayFilter] = useState<'5' | '10' | '15' | '25' | '30'>('5');
+  const [hierDayFilter, setHierDayFilter] = useState<'all' | '5' | '10' | '15' | '25' | '30'>('all');
+
+  const mapOrder = (order: any): Order => ({
+    _id: order._id,
+    orderNumber: order.orderNumber || order._id,
+    customerName: order.customerName || 'N/A',
+    shippingName: order.shippingAddress?.city || order.shippingAddress?.street || 'N/A',
+    subDealerName: order.subDealerName || order.shippingAddress?.name || undefined,
+    items: (order.items || []).map((item: any) => ({
+      productId: item.productId || '',
+      productCode: item.productCode || '',
+      productName: item.productName || '',
+      unit: item.unit || 'pcs',
+      unitPrice: item.unitPrice || 0,
+      quantity: item.quantity || 0,
+      totalAmount: item.totalPrice || item.totalAmount || 0,
+    })),
+    totalQuantity: (order.items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
+    totalAmount: order.finalAmount || order.totalAmount || 0,
+    status: order.status || 'draft',
+    createdAt: order.orderDate || order.createdAt || new Date().toISOString(),
+    paymentMethod: order.paymentMethod,
+    _raw: order,
+  });
+
   const buildUserHierarchy = (orders: any[]): UserNode[] => {
-    const userMap = new Map<string, UserNode>();
+    // groupKey → { groupName, dealerMap }
+    const groupMap = new Map<string, { name: string; dealerMap: Map<string, UserNode> }>();
 
     orders.forEach((order: any) => {
       const creator = order.createdBy || {};
-      const userId = creator._id || 'unknown';
-      const userName = creator.name || 'Unknown User';
-      const userRole = creator.role || 'Unknown';
+      const dealerId = creator._id || 'unknown';
+      const dealerName = creator.name || 'Unknown User';
+      const dealerRole = creator.role || 'Unknown';
+      const groupKey = creator.groupName || creator.companyName || 'Unassigned';
 
-      const mappedOrder: Order = {
-        _id: order._id,
-        orderNumber: order.orderNumber || order._id,
-        customerName: order.customerName || 'N/A',
-        shippingName: order.shippingAddress?.city || order.shippingAddress?.street || 'N/A',
-        subDealerName: order.subDealerName || order.shippingAddress?.name || undefined,
-        items: (order.items || []).map((item: any) => ({
-          productId: item.productId || '',
-          productCode: item.productCode || '',
-          productName: item.productName || '',
-          unit: item.unit || 'pcs',
-          unitPrice: item.unitPrice || 0,
-          quantity: item.quantity || 0,
-          totalAmount: item.totalPrice || item.totalAmount || 0,
-        })),
-        totalQuantity: (order.items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
-        totalAmount: order.finalAmount || order.totalAmount || 0,
-        status: order.status || 'draft',
-        createdAt: order.orderDate || order.createdAt || new Date().toISOString(),
-        paymentMethod: order.paymentMethod,
-        _raw: order, // keep full API object for edit navigation
-      };
+      const mappedOrder = mapOrder(order);
 
-      if (userMap.has(userId)) {
-        const node = userMap.get(userId)!;
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, { name: groupKey, dealerMap: new Map() });
+      }
+      const groupEntry = groupMap.get(groupKey)!;
+
+      if (groupEntry.dealerMap.has(dealerId)) {
+        const node = groupEntry.dealerMap.get(dealerId)!;
         node.orders.push(mappedOrder);
         node.totalOrders += 1;
         node.totalValue += mappedOrder.totalAmount;
       } else {
-        userMap.set(userId, {
-          id: userId,
-          name: userName,
-          role: userRole,
-          groupName: creator.groupName || creator.companyName || userRole,
+        groupEntry.dealerMap.set(dealerId, {
+          id: dealerId,
+          name: dealerName,
+          role: dealerRole,
+          groupName: groupKey,
           email: creator.email || '',
           mobile: creator.mobile || '',
           totalOrders: 1,
@@ -140,7 +153,22 @@ const AdminOrderList = () => {
       }
     });
 
-    return Array.from(userMap.values());
+    // Build 2-level tree: Group Node → Dealer children
+    return Array.from(groupMap.entries()).map(([groupKey, { name, dealerMap }]) => {
+      const dealers = Array.from(dealerMap.values());
+      return {
+        id: `group__${groupKey}`,
+        name,
+        role: 'Group',
+        groupName: '',
+        email: '',
+        mobile: '',
+        totalOrders: dealers.reduce((s, d) => s + d.totalOrders, 0),
+        totalValue: dealers.reduce((s, d) => s + d.totalValue, 0),
+        orders: [],
+        children: dealers,
+      };
+    });
   };
 
   const fetchOrders = useCallback(async () => {
@@ -170,29 +198,7 @@ const AdminOrderList = () => {
       const response = await getOrders({ limit: 100, page: 1, createdBy: user?._id });
       if (response?.success) {
         const raw = response.orders || [];
-        const mapped: Order[] = raw.map((order: any) => ({
-          _id: order._id,
-          orderNumber: order.orderNumber || order._id,
-          customerName: order.customerName || 'N/A',
-          shippingName: order.shippingAddress?.city || order.shippingAddress?.street || 'N/A',
-          subDealerName: order.subDealerName || order.shippingAddress?.name || undefined,
-          items: (order.items || []).map((item: any) => ({
-            productId: item.productId || '',
-            productCode: item.productCode || '',
-            productName: item.productName || '',
-            unit: item.unit || 'pcs',
-            unitPrice: item.unitPrice || 0,
-            quantity: item.quantity || 0,
-            totalAmount: item.totalPrice || item.totalAmount || 0,
-          })),
-          totalQuantity: (order.items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
-          totalAmount: order.finalAmount || order.totalAmount || 0,
-          status: order.status || 'draft',
-          createdAt: order.orderDate || order.createdAt || new Date().toISOString(),
-          paymentMethod: order.paymentMethod,
-          _raw: order,
-        }));
-        setMyOrders(mapped);
+        setMyOrders(raw.map(mapOrder));
         setMyOrdersTotalValue(raw.reduce((sum: number, o: any) => sum + (o.finalAmount || o.totalAmount || 0), 0));
       } else {
         Alert.alert('Error', 'Failed to load your orders');
@@ -400,6 +406,89 @@ const AdminOrderList = () => {
     return `₹${value.toFixed(0)}`;
   };
 
+  const MY_ORDER_FILTERS = [
+    { key: '5',  label: 'Last 5 Days' },
+    { key: '10', label: 'Last 10 Days' },
+    { key: '15', label: 'Last 15 Days' },
+    { key: '25', label: 'Last 25 Days' },
+    { key: '30', label: '1 Month' },
+  ] as const;
+
+  const HIER_FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: '5',  label: 'Last 5 Days' },
+    { key: '10', label: 'Last 10 Days' },
+    { key: '15', label: 'Last 15 Days' },
+    { key: '25', label: 'Last 25 Days' },
+    { key: '30', label: '1 Month' },
+  ] as const;
+
+  const applyDayRange = (dateStr: string, filter: string): boolean => {
+    if (filter === 'all') return true;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - parseInt(filter));
+    return new Date(dateStr) >= cutoff;
+  };
+
+  const filteredMyOrders = myOrders.filter(o => applyDayRange(o.createdAt, myOrdersDayFilter));
+
+  const filteredHierarchy: UserNode[] = hierDayFilter === 'all'
+    ? userHierarchy
+    : userHierarchy
+        .map(groupNode => {
+          const filteredDealers = groupNode.children
+            .map(dealer => {
+              const fOrders = dealer.orders.filter(o => applyDayRange(o.createdAt, hierDayFilter));
+              return {
+                ...dealer,
+                orders: fOrders,
+                totalOrders: fOrders.length,
+                totalValue: fOrders.reduce((s, o) => s + o.totalAmount, 0),
+              };
+            })
+            .filter(d => d.totalOrders > 0);
+          const totalOrders = filteredDealers.reduce((s, d) => s + d.totalOrders, 0);
+          const totalValue = filteredDealers.reduce((s, d) => s + d.totalValue, 0);
+          return { ...groupNode, children: filteredDealers, totalOrders, totalValue };
+        })
+        .filter(g => g.totalOrders > 0);
+
+  const renderMyOrdersFilter = () => (
+    <View style={styles.dayFilterContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayFilterScroll}>
+        {MY_ORDER_FILTERS.map(f => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.dayFilterPill, myOrdersDayFilter === f.key && styles.dayFilterPillActive]}
+            onPress={() => setMyOrdersDayFilter(f.key as any)}
+          >
+            <Text style={[styles.dayFilterText, myOrdersDayFilter === f.key && styles.dayFilterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderHierFilter = () => (
+    <View style={styles.dayFilterContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayFilterScroll}>
+        {HIER_FILTERS.map(f => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.dayFilterPill, hierDayFilter === f.key && styles.dayFilterPillActive]}
+            onPress={() => setHierDayFilter(f.key as any)}
+          >
+            <Text style={[styles.dayFilterText, hierDayFilter === f.key && styles.dayFilterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
   const renderOrderCard = (order: Order, viewOnly = false) => (
     <TouchableOpacity
       key={order._id}
@@ -463,8 +552,17 @@ const AdminOrderList = () => {
     const isExpanded = expandedUsers[user.id];
     const isSelected = selectedUser?.id === user.id;
     const hasOrders = user.orders && user.orders.length > 0;
+    const isGroupNode = level === 0 && hasChildren;
     const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     const avatarColor = level === 0 ? '#3B82F6' : level === 1 ? '#10B981' : '#F59E0B';
+
+    const handleCardPress = () => {
+      if (isGroupNode) {
+        toggleUserExpansion(user.id);
+      } else {
+        handleUserClick(user);
+      }
+    };
 
     return (
       <View key={user.id} style={[styles.userNodeContainer, { marginLeft: level * 16 }]}>
@@ -475,7 +573,7 @@ const AdminOrderList = () => {
             isSelected && styles.userCardSelected,
             level === 0 && styles.userCardTopLevel
           ]}
-          onPress={() => handleUserClick(user)}
+          onPress={handleCardPress}
           activeOpacity={0.85}
         >
           {/* Left: avatar + info */}
@@ -905,43 +1003,50 @@ const AdminOrderList = () => {
       );
     }
 
-    return (
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {/* My Orders Summary */}
-        <View style={styles.summaryStrip}>
-          <View style={styles.summaryItem}>
-            <Ionicons name="document-text" size={20} color="#fff" />
-            <Text style={styles.summaryVal}>{myOrders.length}</Text>
-            <Text style={styles.summaryLab}>My Orders</Text>
-          </View>
-          <View style={[styles.summaryItem, styles.summaryDivider]}>
-            <Ionicons name="cash" size={20} color="#fff" />
-            <Text style={styles.summaryVal}>₹{(myOrdersTotalValue / 100000).toFixed(1)}L</Text>
-            <Text style={styles.summaryLab}>Total Value</Text>
-          </View>
-          <View style={[styles.summaryItem, styles.summaryDivider]}>
-            <Ionicons name="time" size={20} color="#fff" />
-            <Text style={styles.summaryVal}>
-              {myOrders.filter(o => o.status === 'pending_approval').length}
-            </Text>
-            <Text style={styles.summaryLab}>Pending</Text>
-          </View>
-        </View>
+    const filteredValue = filteredMyOrders.reduce((s, o) => s + o.totalAmount, 0);
 
-        {myOrders.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="document-outline" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyStateText}>No orders created by you</Text>
+    return (
+      <>
+        {renderMyOrdersFilter()}
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {/* My Orders Summary */}
+          <View style={styles.summaryStrip}>
+            <View style={styles.summaryItem}>
+              <Ionicons name="document-text" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>{filteredMyOrders.length}</Text>
+              <Text style={styles.summaryLab}>My Orders</Text>
+            </View>
+            <View style={[styles.summaryItem, styles.summaryDivider]}>
+              <Ionicons name="cash" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>₹{(filteredValue / 100000).toFixed(1)}L</Text>
+              <Text style={styles.summaryLab}>Total Value</Text>
+            </View>
+            <View style={[styles.summaryItem, styles.summaryDivider]}>
+              <Ionicons name="time" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>
+                {filteredMyOrders.filter(o => o.status === 'pending_approval').length}
+              </Text>
+              <Text style={styles.summaryLab}>Pending</Text>
+            </View>
           </View>
-        ) : (
-          myOrders.map((order) => renderOrderCard(order, false))
-        )}
-      </ScrollView>
+
+          {filteredMyOrders.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="document-outline" size={64} color="#9CA3AF" />
+              <Text style={styles.emptyStateText}>
+                {`No orders in the last ${myOrdersDayFilter === '30' ? '1 month' : myOrdersDayFilter + ' days'}`}
+              </Text>
+            </View>
+          ) : (
+            filteredMyOrders.map((order) => renderOrderCard(order, false))
+          )}
+        </ScrollView>
+      </>
     );
   };
 
@@ -955,41 +1060,50 @@ const AdminOrderList = () => {
       );
     }
 
-    return (
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {/* Hierarchy Summary */}
-        <View style={styles.summaryStrip}>
-          <View style={styles.summaryItem}>
-            <Ionicons name="document-text" size={20} color="#fff" />
-            <Text style={styles.summaryVal}>{totalOrders}</Text>
-            <Text style={styles.summaryLab}>Total Orders</Text>
-          </View>
-          <View style={[styles.summaryItem, styles.summaryDivider]}>
-            <Ionicons name="people" size={20} color="#fff" />
-            <Text style={styles.summaryVal}>{userHierarchy.length}</Text>
-            <Text style={styles.summaryLab}>Active Users</Text>
-          </View>
-          <View style={[styles.summaryItem, styles.summaryDivider]}>
-            <Ionicons name="cash" size={20} color="#fff" />
-            <Text style={styles.summaryVal}>₹{(totalValue / 100000).toFixed(1)}L</Text>
-            <Text style={styles.summaryLab}>Total Value</Text>
-          </View>
-        </View>
+    const hierTotalOrders = filteredHierarchy.reduce((s, g) => s + g.totalOrders, 0);
+    const hierTotalValue  = filteredHierarchy.reduce((s, g) => s + g.totalValue, 0);
+    const hierTotalDealers = filteredHierarchy.reduce((s, g) => s + g.children.length, 0);
 
-        {userHierarchy.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="document-outline" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyStateText}>No orders found</Text>
+    return (
+      <>
+        {renderHierFilter()}
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {/* Hierarchy Summary */}
+          <View style={styles.summaryStrip}>
+            <View style={styles.summaryItem}>
+              <Ionicons name="document-text" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>{hierTotalOrders}</Text>
+              <Text style={styles.summaryLab}>Total Orders</Text>
+            </View>
+            <View style={[styles.summaryItem, styles.summaryDivider]}>
+              <Ionicons name="git-network" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>{filteredHierarchy.length}</Text>
+              <Text style={styles.summaryLab}>Groups</Text>
+            </View>
+            <View style={[styles.summaryItem, styles.summaryDivider]}>
+              <Ionicons name="people" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>{hierTotalDealers}</Text>
+              <Text style={styles.summaryLab}>Dealers</Text>
+            </View>
           </View>
-        ) : (
-          userHierarchy.map((u: UserNode) => renderUserNode(u, 0))
-        )}
-      </ScrollView>
+
+          {filteredHierarchy.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="git-network-outline" size={64} color="#9CA3AF" />
+              <Text style={styles.emptyStateText}>
+                {hierDayFilter === 'all' ? 'No orders found' : `No orders in the last ${hierDayFilter === '30' ? '1 month' : hierDayFilter + ' days'}`}
+              </Text>
+            </View>
+          ) : (
+            filteredHierarchy.map((groupNode: UserNode) => renderUserNode(groupNode, 0))
+          )}
+        </ScrollView>
+      </>
     );
   };
 
@@ -1667,6 +1781,39 @@ const styles = StyleSheet.create({
   approveConfirmText: {
     fontSize: 15,
     fontWeight: '700',
+    color: '#fff',
+  },
+
+  // ── Day Filter Pills ─────────────────────────────────────────────────────
+  dayFilterContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  dayFilterScroll: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    gap: 8,
+    flexDirection: 'row',
+  },
+  dayFilterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dayFilterPillActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  dayFilterText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  dayFilterTextActive: {
     color: '#fff',
   },
 

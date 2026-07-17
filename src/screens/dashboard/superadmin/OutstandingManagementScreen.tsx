@@ -52,6 +52,15 @@ interface OutstandingRecord {
   partyName: string;
   orderNumber: string;
   orderDate: string;
+  // Tally-mapped fields
+  vchnumber?: string;
+  vchdate?: string;
+  paymentTerms?: string;
+  partyContact?: {
+    mobile: string;
+    email: string;
+    address: string;
+  };
   totalAmount: number;
   paidAmount: number;
   outstandingAmount: number;
@@ -114,6 +123,10 @@ export const OutstandingManagementScreen = () => {
   
   // Note modal
   const [newNote, setNewNote] = useState('');
+
+  // Hierarchy tab
+  const [activeTab, setActiveTab] = useState<'list' | 'hierarchy'>('list');
+  const [expandedParties, setExpandedParties] = useState<Record<string, boolean>>({});
 
   const fetchOutstandingData = async () => {
     try {
@@ -285,7 +298,9 @@ export const OutstandingManagementScreen = () => {
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderLeft}>
           <Text style={styles.outstandingId}>{outstanding.outstandingId}</Text>
-          <Text style={styles.companyName}>{outstanding.companyId.companyName}</Text>
+          {outstanding.companyId?.companyName ? (
+            <Text style={styles.companyName}>{outstanding.companyId.companyName}</Text>
+          ) : null}
         </View>
         <View style={styles.cardHeaderRight}>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(outstanding.status) }]}>
@@ -300,7 +315,9 @@ export const OutstandingManagementScreen = () => {
       <View style={styles.cardContent}>
         <View style={styles.partyInfo}>
           <Text style={styles.partyName}>{outstanding.partyName}</Text>
-          <Text style={styles.orderNumber}>Order: {outstanding.orderNumber}</Text>
+          {outstanding.orderNumber ? (
+            <Text style={styles.orderNumber}>Order: {outstanding.orderNumber}</Text>
+          ) : null}
         </View>
         <View style={styles.amountInfo}>
           <Text style={styles.outstandingAmount}>{formatCurrency(outstanding.outstandingAmount)}</Text>
@@ -330,6 +347,192 @@ export const OutstandingManagementScreen = () => {
       </View>
     </TouchableOpacity>
   );
+
+  interface PartyNode {
+    partyName: string;
+    companyName: string;
+    count: number;
+    totalOutstanding: number;
+    overdueCount: number;
+    items: OutstandingRecord[];
+  }
+
+  const buildPartyHierarchy = (): PartyNode[] => {
+    const map = new Map<string, PartyNode>();
+    outstandingList.forEach(o => {
+      const key = o.partyName || 'Unknown';
+      if (map.has(key)) {
+        const node = map.get(key)!;
+        node.count += 1;
+        node.totalOutstanding += o.outstandingAmount || 0;
+        if (o.daysOverdue > 0) node.overdueCount += 1;
+        node.items.push(o);
+      } else {
+        map.set(key, {
+          partyName: key,
+          companyName: o.companyId?.companyName || '',
+          count: 1,
+          totalOutstanding: o.outstandingAmount || 0,
+          overdueCount: o.daysOverdue > 0 ? 1 : 0,
+          items: [o],
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+  };
+
+  const toggleParty = (name: string) =>
+    setExpandedParties(prev => ({ ...prev, [name]: !prev[name] }));
+
+  const renderHierarchyTab = () => {
+    const partyNodes = buildPartyHierarchy();
+    return (
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 15, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {/* Summary Strip */}
+        <View style={styles.hierStrip}>
+          <View style={styles.hierStripItem}>
+            <Ionicons name="document-text" size={20} color="#fff" />
+            <Text style={styles.hierStripVal}>{totalCount}</Text>
+            <Text style={styles.hierStripLab}>Total Bills</Text>
+          </View>
+          <View style={[styles.hierStripItem, styles.hierStripDivider]}>
+            <Ionicons name="people" size={20} color="#fff" />
+            <Text style={styles.hierStripVal}>{partyNodes.length}</Text>
+            <Text style={styles.hierStripLab}>Parties</Text>
+          </View>
+          <View style={[styles.hierStripItem, styles.hierStripDivider]}>
+            <Ionicons name="cash" size={20} color="#fff" />
+            <Text style={styles.hierStripVal}>
+              {summary ? formatCurrency(summary.totalOutstanding) : '—'}
+            </Text>
+            <Text style={styles.hierStripLab}>Outstanding</Text>
+          </View>
+        </View>
+
+        {partyNodes.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="receipt-outline" size={48} color="#9CA3AF" />
+            <Text style={styles.emptyTitle}>No outstanding data</Text>
+          </View>
+        ) : partyNodes.map(node => {
+          const initials = node.partyName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+          const isExpanded = expandedParties[node.partyName];
+          return (
+            <View key={node.partyName} style={{ marginBottom: 12 }}>
+              <TouchableOpacity
+                style={styles.partyCard}
+                onPress={() => toggleParty(node.partyName)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.partyCardLeft}>
+                  <View style={styles.partyAvatar}>
+                    <Text style={styles.partyAvatarText}>{initials}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.partyCardName} numberOfLines={1}>{node.partyName}</Text>
+                    {node.companyName ? <Text style={styles.partyCardCompany} numberOfLines={1}>{node.companyName}</Text> : null}
+                    {node.overdueCount > 0 && (
+                      <View style={styles.overdueBadge}>
+                        <Text style={styles.overdueBadgeText}>{node.overdueCount} overdue</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.partyCardRight}>
+                  <View style={styles.partyStatItem}>
+                    <Text style={styles.partyStatVal}>{node.count}</Text>
+                    <Text style={styles.partyStatLab}>BILLS</Text>
+                  </View>
+                  <View style={styles.partyStatDivider} />
+                  <View style={styles.partyStatItem}>
+                    <Text style={[styles.partyStatVal, { color: '#EF4444' }]}>
+                      {formatCurrency(node.totalOutstanding)}
+                    </Text>
+                    <Text style={styles.partyStatLab}>DUE</Text>
+                  </View>
+                  <Ionicons
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16} color="#9CA3AF"
+                    style={{ marginLeft: 8 }}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {isExpanded && (
+                <View style={styles.expandedItems}>
+                  {node.items.map(item => {
+                    const billDate = item.vchdate || item.orderDate;
+                    return (
+                      <TouchableOpacity
+                        key={item._id}
+                        style={styles.expandedCard}
+                        onPress={() => handleViewDetails(item)}
+                      >
+                        {/* Top row: voucher number + status */}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <Text style={styles.expandedOrderNum}>
+                            {item.vchnumber || item.orderNumber || item.outstandingId}
+                          </Text>
+                          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                            <Text style={styles.statusText}>{item.status.replace(/_/g, ' ').toUpperCase()}</Text>
+                          </View>
+                        </View>
+
+                        {/* Bill date */}
+                        {billDate ? (
+                          <Text style={styles.expandedBillDate}>
+                            Bill: {new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                          </Text>
+                        ) : null}
+
+                        {/* Amount breakdown: total / paid / outstanding */}
+                        <View style={styles.expandedAmtRow}>
+                          <View style={styles.expandedAmtItem}>
+                            <Text style={styles.expandedAmtLab}>TOTAL</Text>
+                            <Text style={styles.expandedAmtVal}>{formatCurrency(item.totalAmount)}</Text>
+                          </View>
+                          <View style={styles.expandedAmtDivider} />
+                          <View style={styles.expandedAmtItem}>
+                            <Text style={styles.expandedAmtLab}>PAID</Text>
+                            <Text style={[styles.expandedAmtVal, { color: '#10B981' }]}>{formatCurrency(item.paidAmount)}</Text>
+                          </View>
+                          <View style={styles.expandedAmtDivider} />
+                          <View style={styles.expandedAmtItem}>
+                            <Text style={styles.expandedAmtLab}>DUE</Text>
+                            <Text style={[styles.expandedAmtVal, { color: '#EF4444' }]}>{formatCurrency(item.outstandingAmount)}</Text>
+                          </View>
+                        </View>
+
+                        {/* Due date + payment terms */}
+                        <View style={styles.expandedFooterRow}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                            <Text style={styles.expandedLabel}>
+                              Due: {new Date(item.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                              {item.daysOverdue > 0 ? `  ·  ${item.daysOverdue}d overdue` : ''}
+                            </Text>
+                          </View>
+                          {item.paymentTerms ? (
+                            <Text style={styles.expandedTerms}>
+                              {item.paymentTerms.replace(/_/g, ' ')}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  };
 
   if (loading) {
     return (
@@ -362,7 +565,26 @@ export const OutstandingManagementScreen = () => {
         </View>
       </View>
 
-      <ScrollView 
+      {/* Tab Bar */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'list' && styles.tabItemActive]}
+          onPress={() => setActiveTab('list')}
+        >
+          <Ionicons name="list-outline" size={18} color={activeTab === 'list' ? '#3B82F6' : '#9CA3AF'} />
+          <Text style={[styles.tabLabel, activeTab === 'list' && styles.tabLabelActive]}>Outstanding</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'hierarchy' && styles.tabItemActive]}
+          onPress={() => setActiveTab('hierarchy')}
+        >
+          <Ionicons name="git-network-outline" size={18} color={activeTab === 'hierarchy' ? '#3B82F6' : '#9CA3AF'} />
+          <Text style={[styles.tabLabel, activeTab === 'hierarchy' && styles.tabLabelActive]}>Hierarchy</Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'hierarchy' ? renderHierarchyTab() : (
+      <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -491,6 +713,7 @@ export const OutstandingManagementScreen = () => {
           )}
         </View>
       </ScrollView>
+      )}
 
       {/* Filter Modal */}
       <Modal
@@ -631,18 +854,22 @@ export const OutstandingManagementScreen = () => {
                     <Text style={styles.detailsLabel}>Outstanding ID:</Text>
                     <Text style={styles.detailsValue}>{selectedOutstanding.outstandingId}</Text>
                   </View>
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Company:</Text>
-                    <Text style={styles.detailsValue}>{selectedOutstanding.companyId.companyName}</Text>
-                  </View>
+                  {selectedOutstanding.companyId?.companyName ? (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Company:</Text>
+                      <Text style={styles.detailsValue}>{selectedOutstanding.companyId.companyName}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.detailsRow}>
                     <Text style={styles.detailsLabel}>Party:</Text>
                     <Text style={styles.detailsValue}>{selectedOutstanding.partyName}</Text>
                   </View>
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailsLabel}>Order Number:</Text>
-                    <Text style={styles.detailsValue}>{selectedOutstanding.orderNumber}</Text>
-                  </View>
+                  {selectedOutstanding.orderNumber ? (
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Order Number:</Text>
+                      <Text style={styles.detailsValue}>{selectedOutstanding.orderNumber}</Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* Financial Info */}
@@ -793,6 +1020,48 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+
+  // Tab Bar
+  tabBar: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  tabItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 13, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  tabItemActive: { borderBottomColor: '#3B82F6' },
+  tabLabel: { fontSize: 14, fontWeight: '600', color: '#9CA3AF' },
+  tabLabelActive: { color: '#3B82F6' },
+
+  // Hierarchy
+  hierStrip: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 18, backgroundColor: '#3B82F6', borderRadius: 14, marginBottom: 16, elevation: 4 },
+  hierStripItem: { alignItems: 'center', flex: 1 },
+  hierStripDivider: { borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.3)' },
+  hierStripVal: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 4 },
+  hierStripLab: { color: '#DBEAFE', fontSize: 10, marginTop: 2, fontWeight: '600', textTransform: 'uppercase' },
+
+  partyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 2 },
+  partyCardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, marginRight: 8 },
+  partyAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center', marginRight: 10, flexShrink: 0 },
+  partyAvatarText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  partyCardName: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  partyCardCompany: { fontSize: 11, color: '#6B7280', marginTop: 2 },
+  overdueBadge: { backgroundColor: '#FEF2F2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, marginTop: 4, alignSelf: 'flex-start' },
+  overdueBadgeText: { fontSize: 10, color: '#EF4444', fontWeight: '600' },
+  partyCardRight: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
+  partyStatItem: { alignItems: 'center', width: 64 },
+  partyStatVal: { fontSize: 12, fontWeight: '700', color: '#111827', textAlign: 'center' },
+  partyStatLab: { fontSize: 8, color: '#9CA3AF', marginTop: 2, fontWeight: '600', letterSpacing: 0.4 },
+  partyStatDivider: { width: 1, height: 28, backgroundColor: '#E5E7EB', marginHorizontal: 4 },
+
+  expandedItems: { backgroundColor: '#F9FAFB', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#E5E7EB', marginTop: 6 },
+  expandedCard: { backgroundColor: '#fff', borderRadius: 8, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#E5E7EB' },
+  expandedOrderNum: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  expandedBillDate: { fontSize: 11, color: '#9CA3AF', marginBottom: 8 },
+  expandedAmtRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 8, padding: 10, marginBottom: 8 },
+  expandedAmtItem: { flex: 1, alignItems: 'center' },
+  expandedAmtDivider: { width: 1, height: 28, backgroundColor: '#E5E7EB' },
+  expandedAmtLab: { fontSize: 9, color: '#9CA3AF', fontWeight: '600', letterSpacing: 0.4, marginBottom: 3 },
+  expandedAmtVal: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  expandedFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  expandedLabel: { fontSize: 12, color: '#6B7280' },
+  expandedTerms: { fontSize: 11, color: '#6B7280', textTransform: 'capitalize' },
+  expandedAmount: { fontSize: 14, fontWeight: '800', color: '#EF4444' },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -152,6 +152,7 @@ const Users = () => {
   const [creatingUser, setCreatingUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -554,6 +555,11 @@ const Users = () => {
     fetchUsers();
   }, [user?.defaultCompany, selectedRole]);
 
+  // Reset password visibility whenever the modal closes
+  useEffect(() => {
+    if (!modalVisible) setShowPassword(false);
+  }, [modalVisible]);
+
   // Debug: Log users when they change
   useEffect(() => {
     if (__DEV__ && users.length > 0) {
@@ -776,6 +782,7 @@ const Users = () => {
         dealerIds: (formData.dealerIds && formData.dealerIds.length > 0) ? formData.dealerIds : undefined, // Multiple dealer assignment (optional)
         userName: formData.email || undefined,
         isActive: editingUser.isActive,
+        ...(formData.password && formData.password.trim() ? { password: formData.password.trim() } : {}),
         address: {
           street: formData.address.street || "",
           city: formData.address.city || "",
@@ -883,13 +890,18 @@ const Users = () => {
           keyboardType="phone-pad"
           style={styles.input}
         />
-        <TextInput
-          placeholder={isEditMode ? "Password (Leave blank to keep current)" : "Password *"}
-          value={formData.password}
-          onChangeText={(text) => setFormData({ ...formData, password: text })}
-          secureTextEntry
-          style={styles.input}
-        />
+        <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', paddingVertical: 0 }]}>
+          <TextInput
+            placeholder={isEditMode ? "Password (Leave blank to keep current)" : "Password *"}
+            value={formData.password}
+            onChangeText={(text) => setFormData({ ...formData, password: text })}
+            secureTextEntry={!showPassword}
+            style={{ flex: 1, paddingVertical: 12 }}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(prev => !prev)} style={{ paddingHorizontal: 8 }}>
+            <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
         
         {/* Group and Dealer Assignment Section */}
         <Text style={styles.sectionLabel}>Group & Dealer Assignment (Optional)</Text>
@@ -1240,10 +1252,11 @@ const Users = () => {
     );
   };
 
-  const filteredUsers = users.filter(user => 
+  const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchText.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchText.toLowerCase()) ||
-    user.role.toLowerCase().includes(searchText.toLowerCase())
+    (user.email || '').toLowerCase().includes(searchText.toLowerCase()) ||
+    (user.role || '').toLowerCase().includes(searchText.toLowerCase()) ||
+    (user.mobile || '').includes(searchText)
   );
 
   const getRoleColor = (role: string) => {
@@ -1480,7 +1493,7 @@ const Users = () => {
                 });
               }}
             >
-              <View style={[styles.webModalContainer, { maxWidth: Math.min(600, screenWidth - 40) }]} onStartShouldSetResponder={() => true}>
+              <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[styles.webModalContainer, { maxWidth: Math.min(600, screenWidth - 40) }]}>
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>
                       {isEditMode ? 'Edit User' : 'Add New User'}
@@ -1564,7 +1577,7 @@ const Users = () => {
                       )}
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
             </TouchableOpacity>
           </View>
         ) : (

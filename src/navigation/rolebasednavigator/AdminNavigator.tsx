@@ -15,6 +15,7 @@ import DistributorsScreen from '../../screens/dashboard/admin/DistributorsScreen
 import InvoiceScreen from '../../screens/dashboard/admin/InvoiceScreen';
 import TargetScreen from '../../screens/dashboard/admin/TargetScreen';
 import PendingOrdersScreen from '../../screens/dashboard/admin/PendingOrdersScreen';
+import PendingOrderDetailScreen from '../../screens/dashboard/admin/PendingOrderDetailScreen';
 import ClearOrdersScreen from '../../screens/dashboard/admin/ClearOrdersScreen';
 import SettingsScreen from '../../screens/dashboard/admin/SettingsScreen';
 import ProfileScreen from '../../screens/common/ProfileScreen';
@@ -66,6 +67,7 @@ export default function AdminNavigator() {
             <AdminStack.Screen name="InvoiceScreen" component={InvoiceScreen} />
             <AdminStack.Screen name="TargetScreen" component={TargetScreen} />
             <AdminStack.Screen name="PendingOrdersScreen" component={PendingOrdersScreen} />
+            <AdminStack.Screen name="PendingOrderDetailScreen" component={PendingOrderDetailScreen} />
         <AdminStack.Screen name="TargetAssignmentScreen" component={TargetAssignmentScreen} />
         <AdminStack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
         <AdminStack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
