@@ -78,14 +78,11 @@ const AdminOrderList = () => {
   // ── My Orders tab state ────────────────────────────────────────────────────
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [myOrdersLoading, setMyOrdersLoading] = useState(true);
-  const [myOrdersTotalValue, setMyOrdersTotalValue] = useState(0);
 
   // ── Hierarchy tab state ────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userHierarchy, setUserHierarchy] = useState<UserNode[]>([]);
-  const [totalOrders, setTotalOrders] = useState(0);
-  const [totalValue, setTotalValue] = useState(0);
 
   // ── Day filters (separate per tab) ───────────────────────────────────────
   const [myOrdersDayFilter, setMyOrdersDayFilter] = useState<'5' | '10' | '15' | '25' | '30'>('5');
@@ -115,72 +112,198 @@ const AdminOrderList = () => {
   });
 
   const buildUserHierarchy = (orders: any[]): UserNode[] => {
-    // groupKey → { groupName, dealerMap }
-    const groupMap = new Map<string, { name: string; dealerMap: Map<string, UserNode> }>();
+    // Pass 1: build flat userMap. Also track parentId, grandparentId (from nested populate).
+    const userMap = new Map<string, UserNode>();
+    const parentIdMap = new Map<string, string>();        // childId → parentId
+    const parentNameMap = new Map<string, string>();      // parentId → parentName
+    const parentRoleMap = new Map<string, string>();      // parentId → parentRole
+    const grandparentOfMap = new Map<string, string>();   // parentId → grandparentId
 
     orders.forEach((order: any) => {
       const creator = order.createdBy || {};
-      const dealerId = creator._id || 'unknown';
-      const dealerName = creator.name || 'Unknown User';
-      const dealerRole = creator.role || 'Unknown';
-      const groupKey = creator.groupName || creator.companyName || 'Unassigned';
+      const userId = creator._id ? String(creator._id) : 'unknown';
+      const grpName = (creator.groups || []).find((g: any) => g.isActive)?.groupName || '';
+
+      // parentUserId may be a nested-populated object (has ._id) or a plain ID string
+      const parentRef = creator.hierarchy?.parentUserId;
+      const parentId = parentRef
+        ? String((parentRef as any)._id || parentRef)
+        : null;
 
       const mappedOrder = mapOrder(order);
 
-      if (!groupMap.has(groupKey)) {
-        groupMap.set(groupKey, { name: groupKey, dealerMap: new Map() });
-      }
-      const groupEntry = groupMap.get(groupKey)!;
-
-      if (groupEntry.dealerMap.has(dealerId)) {
-        const node = groupEntry.dealerMap.get(dealerId)!;
-        node.orders.push(mappedOrder);
-        node.totalOrders += 1;
-        node.totalValue += mappedOrder.totalAmount;
+      if (userMap.has(userId)) {
+        userMap.get(userId)!.orders.push(mappedOrder);
       } else {
-        groupEntry.dealerMap.set(dealerId, {
-          id: dealerId,
-          name: dealerName,
-          role: dealerRole,
-          groupName: groupKey,
+        userMap.set(userId, {
+          id: userId,
+          name: creator.name || 'Unknown User',
+          role: creator.role || 'Unknown',
+          groupName: grpName,
           email: creator.email || '',
           mobile: creator.mobile || '',
-          totalOrders: 1,
-          totalValue: mappedOrder.totalAmount,
+          totalOrders: 0,
+          totalValue: 0,
           orders: [mappedOrder],
           children: [],
         });
       }
+
+      if (parentId && !parentIdMap.has(userId)) {
+        parentIdMap.set(userId, parentId);
+
+        if (creator.hierarchy?.parentUserName && !parentNameMap.has(parentId))
+          parentNameMap.set(parentId, creator.hierarchy.parentUserName);
+        if (creator.hierarchy?.parentUserRole && !parentRoleMap.has(parentId))
+          parentRoleMap.set(parentId, creator.hierarchy.parentUserRole);
+
+        // Grandparent — available when backend nested-populated parentUserId as an object
+        if (parentRef && typeof parentRef === 'object' && !grandparentOfMap.has(parentId)) {
+          const gpRef = (parentRef as any).hierarchy?.parentUserId;
+          if (gpRef) {
+            grandparentOfMap.set(parentId, String((gpRef as any)._id || gpRef));
+          }
+        }
+      }
     });
 
-    // Build 2-level tree: Group Node → Dealer children
-    return Array.from(groupMap.entries()).map(([groupKey, { name, dealerMap }]) => {
-      const dealers = Array.from(dealerMap.values());
-      return {
-        id: `group__${groupKey}`,
-        name,
-        role: 'Group',
-        groupName: '',
-        email: '',
-        mobile: '',
-        totalOrders: dealers.reduce((s, d) => s + d.totalOrders, 0),
-        totalValue: dealers.reduce((s, d) => s + d.totalValue, 0),
-        orders: [],
-        children: dealers,
-      };
+    // Pass 2: link children to their real parents
+    const childIds = new Set<string>();
+    parentIdMap.forEach((parentId, childId) => {
+      if (userMap.has(parentId)) {
+        userMap.get(parentId)!.children.push(userMap.get(childId)!);
+        childIds.add(childId);
+      }
     });
+
+    // Pass 2.5: create virtual nodes for intermediate users who placed no orders
+    // (e.g. ASM Kapurthala exists in hierarchy but has no orders of their own).
+    // Then link each virtual node under its real grandparent if that grandparent is in userMap.
+    const virtualMap = new Map<string, UserNode>(); // parentId → virtual UserNode
+    parentIdMap.forEach((parentId, childId) => {
+      if (!userMap.has(parentId) && !childIds.has(childId) && parentNameMap.has(parentId)) {
+        if (!virtualMap.has(parentId)) {
+          virtualMap.set(parentId, {
+            id: `virtual__${parentId}`,
+            name: parentNameMap.get(parentId)!,
+            role: parentRoleMap.get(parentId) || 'Unknown',
+            groupName: '',
+            email: '',
+            mobile: '',
+            totalOrders: 0,
+            totalValue: 0,
+            orders: [],
+            children: [],
+          });
+        }
+        virtualMap.get(parentId)!.children.push(userMap.get(childId)!);
+        childIds.add(childId);
+      }
+    });
+
+    // Add virtual nodes to userMap first so grandparent linking can find them
+    virtualMap.forEach(vNode => userMap.set(vNode.id, vNode));
+
+    // Link each virtual node under its grandparent (if the grandparent placed orders → in userMap)
+    virtualMap.forEach((vNode, parentId) => {
+      const grandparentId = grandparentOfMap.get(parentId);
+      if (grandparentId && userMap.has(grandparentId)) {
+        userMap.get(grandparentId)!.children.push(vNode);
+        childIds.add(vNode.id);
+      }
+    });
+
+    // Pass 3: group all-leaf siblings by groupName (inserts location group nodes)
+    const groupifyLeaves = (nodes: UserNode[]): UserNode[] => {
+      if (nodes.length === 0 || !nodes.every(n => n.children.length === 0)) return nodes;
+      const gMap = new Map<string, UserNode>();
+      nodes.forEach(node => {
+        const key = node.groupName || 'Unknown Group';
+        if (!gMap.has(key)) {
+          gMap.set(key, {
+            id: `grp__${key}`,
+            name: key,
+            role: 'Group',
+            groupName: '',
+            email: '',
+            mobile: '',
+            totalOrders: 0,
+            totalValue: 0,
+            orders: [],
+            children: [],
+          });
+        }
+        gMap.get(key)!.children.push(node);
+      });
+      return Array.from(gMap.values());
+    };
+
+    const applyGroupify = (node: UserNode): void => {
+      node.children.forEach(applyGroupify);
+      node.children = groupifyLeaves(node.children);
+    };
+
+    const roots = Array.from(userMap.values()).filter(n => !childIds.has(n.id));
+    roots.forEach(applyGroupify);
+    const processedRoots = groupifyLeaves(roots);
+
+    // Pass 4: for leaf user nodes with orders across multiple dealers,
+    // insert dealer sub-nodes so each dealer's orders are grouped separately.
+    const addDealerSubNodes = (node: UserNode): void => {
+      if (node.children.length > 0) {
+        node.children.forEach(addDealerSubNodes);
+        return;
+      }
+      // Only split when this is a real user (not a group/virtual placeholder) with 2+ dealers
+      if (node.role === 'Group' || node.orders.length === 0) return;
+
+      const dealerMap = new Map<string, UserNode>();
+      node.orders.forEach(order => {
+        const key = order.customerName || 'Unknown Dealer';
+        if (!dealerMap.has(key)) {
+          dealerMap.set(key, {
+            id: `dlr__${node.id}__${key}`,
+            name: key,
+            role: 'Dealer',
+            groupName: '',
+            email: '',
+            mobile: '',
+            totalOrders: 0,
+            totalValue: 0,
+            orders: [],
+            children: [],
+          });
+        }
+        dealerMap.get(key)!.orders.push(order);
+      });
+
+      if (dealerMap.size > 1) {
+        node.children = Array.from(dealerMap.values());
+        node.orders = [];
+      }
+    };
+
+    processedRoots.forEach(addDealerSubNodes);
+
+    // Pass 5: compute totals bottom-up
+    const computeTotals = (node: UserNode): void => {
+      node.children.forEach(computeTotals);
+      const ownValue = node.orders.reduce((s, o) => s + o.totalAmount, 0);
+      node.totalOrders = node.orders.length + node.children.reduce((s, c) => s + c.totalOrders, 0);
+      node.totalValue = ownValue + node.children.reduce((s, c) => s + c.totalValue, 0);
+    };
+
+    processedRoots.forEach(computeTotals);
+    return processedRoots;
   };
 
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getOrders({ limit: 100, page: 1 });
+      const response = await getOrders({ limit: 0, page: 1 });
       if (response?.success) {
         const orders = response.orders || [];
-        const hierarchy = buildUserHierarchy(orders);
-        setUserHierarchy(hierarchy);
-        setTotalOrders(orders.length);
-        setTotalValue(orders.reduce((sum: number, o: any) => sum + (o.finalAmount || o.totalAmount || 0), 0));
+        setUserHierarchy(buildUserHierarchy(orders));
       } else {
         Alert.alert('Error', 'Failed to load orders');
       }
@@ -199,7 +322,6 @@ const AdminOrderList = () => {
       if (response?.success) {
         const raw = response.orders || [];
         setMyOrders(raw.map(mapOrder));
-        setMyOrdersTotalValue(raw.reduce((sum: number, o: any) => sum + (o.finalAmount || o.totalAmount || 0), 0));
       } else {
         Alert.alert('Error', 'Failed to load your orders');
       }
@@ -432,26 +554,23 @@ const AdminOrderList = () => {
 
   const filteredMyOrders = myOrders.filter(o => applyDayRange(o.createdAt, myOrdersDayFilter));
 
+  const filterNode = (node: UserNode, filter: string): UserNode | null => {
+    const filteredOrders = node.orders.filter(o => applyDayRange(o.createdAt, filter));
+    const filteredChildren = node.children
+      .map(c => filterNode(c, filter))
+      .filter((c): c is UserNode => c !== null);
+    if (filteredOrders.length === 0 && filteredChildren.length === 0) return null;
+    const totalOrders = filteredOrders.length + filteredChildren.reduce((s, c) => s + c.totalOrders, 0);
+    const totalValue = filteredOrders.reduce((s, o) => s + o.totalAmount, 0)
+      + filteredChildren.reduce((s, c) => s + c.totalValue, 0);
+    return { ...node, orders: filteredOrders, children: filteredChildren, totalOrders, totalValue };
+  };
+
   const filteredHierarchy: UserNode[] = hierDayFilter === 'all'
     ? userHierarchy
     : userHierarchy
-        .map(groupNode => {
-          const filteredDealers = groupNode.children
-            .map(dealer => {
-              const fOrders = dealer.orders.filter(o => applyDayRange(o.createdAt, hierDayFilter));
-              return {
-                ...dealer,
-                orders: fOrders,
-                totalOrders: fOrders.length,
-                totalValue: fOrders.reduce((s, o) => s + o.totalAmount, 0),
-              };
-            })
-            .filter(d => d.totalOrders > 0);
-          const totalOrders = filteredDealers.reduce((s, d) => s + d.totalOrders, 0);
-          const totalValue = filteredDealers.reduce((s, d) => s + d.totalValue, 0);
-          return { ...groupNode, children: filteredDealers, totalOrders, totalValue };
-        })
-        .filter(g => g.totalOrders > 0);
+        .map(n => filterNode(n, hierDayFilter))
+        .filter((n): n is UserNode => n !== null);
 
   const renderMyOrdersFilter = () => (
     <View style={styles.dayFilterContainer}>
@@ -552,12 +671,11 @@ const AdminOrderList = () => {
     const isExpanded = expandedUsers[user.id];
     const isSelected = selectedUser?.id === user.id;
     const hasOrders = user.orders && user.orders.length > 0;
-    const isGroupNode = level === 0 && hasChildren;
     const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     const avatarColor = level === 0 ? '#3B82F6' : level === 1 ? '#10B981' : '#F59E0B';
 
     const handleCardPress = () => {
-      if (isGroupNode) {
+      if (hasChildren) {
         toggleUserExpansion(user.id);
       } else {
         handleUserClick(user);
@@ -565,7 +683,7 @@ const AdminOrderList = () => {
     };
 
     return (
-      <View key={user.id} style={[styles.userNodeContainer, { marginLeft: level * 16 }]}>
+      <View key={user.id} style={[styles.userNodeContainer, { marginLeft: Math.min(level * 10, 30) }]}>
         {/* User Card */}
         <TouchableOpacity
           style={[
@@ -624,8 +742,8 @@ const AdminOrderList = () => {
           </View>
         </TouchableOpacity>
 
-        {/* Show Orders if User is Selected */}
-        {isSelected && hasOrders && (
+        {/* Show own orders: on expand (parent nodes) or on select (leaf nodes) */}
+        {hasOrders && (isExpanded || isSelected) && (
           <View style={styles.ordersContainer}>
             <View style={styles.ordersHeader}>
               <Ionicons name="document-text-outline" size={16} color="#6B7280" />
@@ -1061,8 +1179,10 @@ const AdminOrderList = () => {
     }
 
     const hierTotalOrders = filteredHierarchy.reduce((s, g) => s + g.totalOrders, 0);
-    const hierTotalValue  = filteredHierarchy.reduce((s, g) => s + g.totalValue, 0);
-    const hierTotalDealers = filteredHierarchy.reduce((s, g) => s + g.children.length, 0);
+    const hierTotalValue = filteredHierarchy.reduce((s, g) => s + g.totalValue, 0);
+    const countNodes = (nodes: UserNode[]): number =>
+      nodes.reduce((s, n) => s + 1 + countNodes(n.children), 0);
+    const hierTotalMembers = countNodes(filteredHierarchy);
 
     return (
       <>
@@ -1081,14 +1201,14 @@ const AdminOrderList = () => {
               <Text style={styles.summaryLab}>Total Orders</Text>
             </View>
             <View style={[styles.summaryItem, styles.summaryDivider]}>
-              <Ionicons name="git-network" size={20} color="#fff" />
-              <Text style={styles.summaryVal}>{filteredHierarchy.length}</Text>
-              <Text style={styles.summaryLab}>Groups</Text>
+              <Ionicons name="people" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>{hierTotalMembers}</Text>
+              <Text style={styles.summaryLab}>Members</Text>
             </View>
             <View style={[styles.summaryItem, styles.summaryDivider]}>
-              <Ionicons name="people" size={20} color="#fff" />
-              <Text style={styles.summaryVal}>{hierTotalDealers}</Text>
-              <Text style={styles.summaryLab}>Dealers</Text>
+              <Ionicons name="cash" size={20} color="#fff" />
+              <Text style={styles.summaryVal}>{formatCompactCurrency(hierTotalValue)}</Text>
+              <Text style={styles.summaryLab}>Total Value</Text>
             </View>
           </View>
 
@@ -1209,7 +1329,8 @@ const styles = StyleSheet.create({
   userCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     flexDirection: 'row',
@@ -1234,23 +1355,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    minWidth: 0,          // allow flex child to shrink
-    marginRight: 8,
+    minWidth: 0,
+    marginRight: 6,
   },
-  expandButton: { marginRight: 6, padding: 4 },
+  expandButton: { marginRight: 4, padding: 2 },
 
   userAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 8,
     flexShrink: 0,
   },
   userAvatarText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
   },
 
@@ -1291,24 +1412,24 @@ const styles = StyleSheet.create({
   },
   statItem: {
     alignItems: 'center',
-    width: 56,          // fixed width so it never collapses the left side
+    width: 48,
   },
   statValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
   },
   statLabel: {
-    fontSize: 8,
+    fontSize: 7,
     color: '#9CA3AF',
-    marginTop: 2,
+    marginTop: 1,
     fontWeight: '600',
     letterSpacing: 0.4,
   },
   statDivider: {
     width: 1,
-    height: 28,
+    height: 24,
     backgroundColor: '#E5E7EB',
     marginHorizontal: 2,
   },
