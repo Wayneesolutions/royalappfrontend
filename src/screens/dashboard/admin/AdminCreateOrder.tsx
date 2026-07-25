@@ -68,6 +68,16 @@ interface SubDealer {
   };
 }
 
+interface PriceListEntry {
+  _id: string;
+  itemguid: string;
+  itemname: string;
+  plname: string;
+  plrate: number;
+  other1?: string;
+  other2?: string;
+}
+
 interface Product {
   _id: string;
   productCode: string;
@@ -139,6 +149,9 @@ interface OrderItem {
   availableStock: number;
   baseUnits?: string;
   additionalUnits?: string;
+  priceListRate: number;
+  difference: number;
+  finalRate: number;
 }
 
 interface ProductSelectionState {
@@ -349,7 +362,15 @@ const AdminCreateOrder = () => {
   const [otherReference, setOtherReference] = useState('');
   const [termsOfDelivery1, setTermsOfDelivery1] = useState('');
   const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
-  
+
+  // Price list state
+  const [priceListNames, setPriceListNames] = useState<string[]>([]);
+  const [selectedPriceListName, setSelectedPriceListName] = useState<string | null>(null);
+  const [priceListEntries, setPriceListEntries] = useState<PriceListEntry[]>([]);
+  const [priceListDifference, setPriceListDifference] = useState(0);
+  const [loadingPriceLists, setLoadingPriceLists] = useState(false);
+  const [showPriceListDropdown, setShowPriceListDropdown] = useState(false);
+
   // Date of Order Entry - set to current date
   const [orderEntryDate] = useState(() => {
     const today = new Date();
@@ -565,6 +586,16 @@ const AdminCreateOrder = () => {
       const activeProducts = normalizedProducts.filter(product => product.isActive !== false);
       setProducts(activeProducts);
       console.log('✅ Products loaded:', activeProducts.length, '(filtered', normalizedProducts.length - activeProducts.length, 'inactive)');
+
+      // Fetch price list names (non-critical)
+      try {
+        const plResponse = await apiService.getPriceListNames();
+        if (plResponse?.success && Array.isArray(plResponse.plnames)) {
+          setPriceListNames(plResponse.plnames);
+        }
+      } catch {
+        // non-critical, ignore
+      }
     } catch (error) {
       console.error('❌ Error fetching initial data:', error);
       Alert.alert('Error', 'Failed to load data: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -645,6 +676,64 @@ const AdminCreateOrder = () => {
     setSelectedSubDealer(customEntry);
     setSubDealerInput(trimmed);
     setShowSubDealerDropdown(false);
+  };
+
+  const handleSelectPriceList = async (plname: string | null) => {
+    setSelectedPriceListName(plname);
+
+    if (!plname) {
+      setPriceListEntries([]);
+      setPriceListDifference(0);
+      setOrderItems((prev) =>
+        applyGstToItems(
+          prev.map((item) => {
+            const product = products.find((p) => p._id === item.productId);
+            const originalPrice = product ? getProductPrice(product) : item.unitPrice;
+            return { ...item, priceListRate: 0, difference: 0, finalRate: 0, unitPrice: originalPrice || item.unitPrice };
+          }),
+          gstType
+        )
+      );
+      return;
+    }
+
+    try {
+      setLoadingPriceLists(true);
+      const response = await apiService.getPriceLists({ plname });
+      if (response?.success && Array.isArray(response.data)) {
+        const entries: PriceListEntry[] = response.data;
+        setPriceListEntries(entries);
+        // Global difference from first entry's other1 (same across all entries in one price list)
+        const globalDiff = entries.length > 0 ? (parseFloat(entries[0].other1 || '0') || 0) : 0;
+        setPriceListDifference(globalDiff);
+        setOrderItems((prev) =>
+          applyGstToItems(
+            prev.map((item) => {
+              const entry = entries.find(
+                (e) => e.itemname.toLowerCase() === item.productName.toLowerCase()
+              );
+              if (entry) {
+                const plrate = entry.plrate || 0;
+                const finalRate = plrate + globalDiff;
+                return {
+                  ...item,
+                  priceListRate: plrate,
+                  difference: globalDiff,
+                  finalRate,
+                  unitPrice: Math.max(0, finalRate > 0 ? finalRate : plrate),
+                };
+              }
+              return { ...item, priceListRate: 0, difference: 0, finalRate: 0 };
+            }),
+            gstType
+          )
+        );
+      }
+    } catch (err) {
+      console.error('Failed to fetch price list entries:', err);
+    } finally {
+      setLoadingPriceLists(false);
+    }
   };
 
   const handleAddSubDealer = async () => {
@@ -965,6 +1054,22 @@ const AdminCreateOrder = () => {
       const hsnCode = getProductHsn(freshProduct);
       const category = getProductCategory(freshProduct);
 
+      // Look up price list entry for this product
+      let plRate = 0;
+      let plDifference = 0;
+      let plFinalRate = 0;
+      if (selectedPriceListName && priceListEntries.length > 0) {
+        const entry = priceListEntries.find(
+          (e) => e.itemname.toLowerCase() === resolvedName.toLowerCase()
+        );
+        if (entry) {
+          plRate = entry.plrate || 0;
+          plDifference = priceListDifference; // global difference from price list
+          plFinalRate = plRate + plDifference;
+        }
+      }
+      const effectiveUnitPrice = plRate > 0 ? Math.max(0, plFinalRate) : resolvedPrice;
+
       setOrderItems((prevItems) => {
         const updatedItems = [...prevItems];
         const existingIndex = updatedItems.findIndex(
@@ -976,7 +1081,10 @@ const AdminCreateOrder = () => {
           updatedItems[existingIndex] = {
             ...previous,
             quantity,
-            unitPrice: resolvedPrice,
+            unitPrice: effectiveUnitPrice,
+            priceListRate: plRate,
+            difference: plDifference,
+            finalRate: plFinalRate,
             gstRate: previous.gstRate ?? resolvedGstRate,
             availableStock: 0,
             partNo: previous.partNo || partNumber,
@@ -1005,7 +1113,7 @@ const AdminCreateOrder = () => {
             baseUnits: freshProduct.baseUnits,
             additionalUnits: freshProduct.additionalUnits,
             unit: unitLabel,
-            unitPrice: resolvedPrice,
+            unitPrice: effectiveUnitPrice,
             quantity,
             discount: 0,
             gstRate: resolvedGstRate,
@@ -1020,6 +1128,9 @@ const AdminCreateOrder = () => {
             totalTaxAmount: 0,
             totalAmount: 0,
             availableStock: 0,
+            priceListRate: plRate,
+            difference: plDifference,
+            finalRate: plFinalRate,
           });
         }
 
@@ -1173,7 +1284,11 @@ const AdminCreateOrder = () => {
           unitPrice: item.unitPrice,
           discount: item.discount ?? 0,
           gstRate: item.gstRate ?? DEFAULT_GST_RATE,
+          priceListRate: item.priceListRate ?? 0,
+          difference: item.difference ?? 0,
+          finalRate: item.finalRate ?? item.unitPrice,
         })),
+        priceListName: selectedPriceListName || null,
         totalQuantity: finalSummary.totalQuantity,
         totalAmount: finalSummary.totalAmount,
         notes: orderNotes,
@@ -1450,6 +1565,24 @@ const AdminCreateOrder = () => {
           <Text style={styles.orderItemMeta}>Category: {item.category}</Text>
         ) : null}
         <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
+        {item.priceListRate > 0 && (
+          <View style={styles.plItemRow}>
+            <View style={styles.plItemField}>
+              <Text style={styles.plItemLabel}>List Rate</Text>
+              <Text style={styles.plItemValue}>₹{item.priceListRate.toFixed(2)}</Text>
+            </View>
+            <View style={styles.plItemField}>
+              <Text style={styles.plItemLabel}>Difference</Text>
+              <Text style={[styles.plItemValue, item.difference < 0 && styles.plItemValueAmber]}>
+                {item.difference > 0 ? '+' : ''}{item.difference}
+              </Text>
+            </View>
+            <View style={styles.plItemField}>
+              <Text style={styles.plItemLabel}>Final Rate</Text>
+              <Text style={[styles.plItemValue, styles.plFinalRateValue]}>₹{item.finalRate.toFixed(2)}</Text>
+            </View>
+          </View>
+        )}
       </View>
 
       <View style={styles.orderItemSummary}>
@@ -1796,6 +1929,47 @@ const AdminCreateOrder = () => {
             <Text style={styles.infoText}>Choose a dealer to enable sub-dealer selection, or leave blank to ship to the dealer.</Text>
           )}
         </View>
+
+        {/* Price List Selection */}
+        {priceListNames.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Price List (Optional)</Text>
+            <View style={styles.selectionRow}>
+              <TouchableOpacity
+                style={[styles.dropdownButton, styles.selectionButton]}
+                onPress={() => setShowPriceListDropdown(true)}
+                disabled={loadingPriceLists}
+              >
+                {loadingPriceLists ? (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                ) : (
+                  <>
+                    <Text style={[styles.dropdownButtonText, !selectedPriceListName && styles.placeholderText]}>
+                      {selectedPriceListName || 'Select Price List'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#6B7280" />
+                  </>
+                )}
+              </TouchableOpacity>
+              {selectedPriceListName && (
+                <TouchableOpacity
+                  style={styles.clearSelectionButton}
+                  onPress={() => handleSelectPriceList(null)}
+                >
+                  <Ionicons name="close-circle" size={20} color="#EF4444" />
+                </TouchableOpacity>
+              )}
+            </View>
+            {selectedPriceListName && (
+              <View style={styles.plInfoRow}>
+                <Text style={styles.plInfoLabel}>Difference:</Text>
+                <Text style={[styles.plInfoValue, priceListDifference < 0 && styles.plInfoValueNegative]}>
+                  {priceListDifference > 0 ? '+' : ''}{priceListDifference}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Product Selection */}
         <View style={styles.section}>
@@ -2224,6 +2398,52 @@ const AdminCreateOrder = () => {
             }
           />
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Price List Dropdown Modal */}
+      <Modal
+        visible={showPriceListDropdown}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowPriceListDropdown(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowPriceListDropdown(false)}
+            >
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Select Price List</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <ScrollView style={styles.dropdownList} keyboardShouldPersistTaps="handled">
+            <TouchableOpacity
+              style={styles.dropdownItem}
+              onPress={() => { handleSelectPriceList(null); setShowPriceListDropdown(false); }}
+            >
+              <Text style={styles.dropdownItemText}>None</Text>
+              <Text style={styles.dropdownItemSubtext}>No price list applied</Text>
+            </TouchableOpacity>
+            {priceListNames.map((name) => (
+              <TouchableOpacity
+                key={name}
+                style={[styles.dropdownItem, selectedPriceListName === name && styles.addedProductItem]}
+                onPress={() => { handleSelectPriceList(name); setShowPriceListDropdown(false); }}
+              >
+                <View style={styles.plModalItemRow}>
+                  <Text style={[styles.dropdownItemText, selectedPriceListName === name && styles.addedProductText]}>
+                    {name}
+                  </Text>
+                  {selectedPriceListName === name && (
+                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -3018,6 +3238,68 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Price list styles
+  plInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  plInfoLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  plInfoValue: {
+    fontSize: 14,
+    color: '#1D4ED8',
+    fontWeight: '700',
+  },
+  plInfoValueNegative: {
+    color: '#D97706',
+  },
+  plItemRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  plItemField: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  plItemLabel: {
+    fontSize: 10,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  plItemValue: {
+    fontSize: 13,
+    color: '#1F2937',
+    fontWeight: '600',
+  },
+  plItemValueAmber: {
+    color: '#D97706',
+  },
+  plFinalRateValue: {
+    color: '#059669',
+  },
+  plModalItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 });
 

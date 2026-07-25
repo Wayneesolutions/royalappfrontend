@@ -1094,6 +1094,24 @@ class ApiService {
     }
   }
 
+  async getPriceLists(params?: { plname?: string; itemguid?: string; cmpcode?: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/pricelists', { params });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getPriceListNames(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/pricelists/names');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   async getOrders(params?: {
     page?: number;
     limit?: number;
