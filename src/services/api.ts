@@ -1764,6 +1764,15 @@ class ApiService {
     }
   }
 
+  async getOutstandingHierarchy(): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/outstanding/hierarchy');
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   // ==================== LEDGER MANAGEMENT ====================
   async getLedgers(params?: any): Promise<ApiResponse<any>> {
     try {

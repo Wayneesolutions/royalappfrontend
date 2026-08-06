@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../context/AuthContext';
+import apiService from '../../../services/api';
 
 interface Outstanding {
   _id: string;
@@ -72,9 +73,38 @@ const OutstandingManagementScreen = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'hierarchy'>('list');
   const [expandedParties, setExpandedParties] = useState<Record<string, boolean>>({});
 
+  // Hierarchy-specific state (independent of list filters)
+  const [hierarchyParties, setHierarchyParties] = useState<any[]>([]);
+  const [hierarchySummary, setHierarchySummary] = useState<{ totalParties: number; totalOutstanding: number; totalInvoices: number } | null>(null);
+  const [hierarchyLoading, setHierarchyLoading] = useState(false);
+  const [hierarchyRefreshing, setHierarchyRefreshing] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, [filter, sortBy, searchQuery]);
+
+  useEffect(() => {
+    if (activeTab === 'hierarchy' && hierarchyParties.length === 0 && !hierarchyLoading) {
+      fetchHierarchyData();
+    }
+  }, [activeTab]);
+
+  const fetchHierarchyData = async (refreshing = false) => {
+    try {
+      if (refreshing) setHierarchyRefreshing(true);
+      else setHierarchyLoading(true);
+      const result = await apiService.getOutstandingHierarchy();
+      if (result?.success) {
+        setHierarchyParties(result.data?.parties || []);
+        setHierarchySummary(result.data?.summary || null);
+      }
+    } catch (error) {
+      console.error('Error fetching outstanding hierarchy:', error);
+    } finally {
+      setHierarchyLoading(false);
+      setHierarchyRefreshing(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -117,6 +147,9 @@ const OutstandingManagementScreen = () => {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
+    if (activeTab === 'hierarchy') {
+      fetchHierarchyData(true);
+    }
   };
 
   const handleViewDetails = (outstanding: Outstanding) => {
@@ -277,39 +310,6 @@ const OutstandingManagementScreen = () => {
     </TouchableOpacity>
   );
 
-  interface PartyNode {
-    partyName: string;
-    partyType: string;
-    count: number;
-    totalOutstanding: number;
-    overdueCount: number;
-    items: Outstanding[];
-  }
-
-  const buildPartyHierarchy = (): PartyNode[] => {
-    const map = new Map<string, PartyNode>();
-    outstandingList.forEach(o => {
-      const key = o.partyName || 'Unknown';
-      if (map.has(key)) {
-        const node = map.get(key)!;
-        node.count += 1;
-        node.totalOutstanding += o.outstandingAmount || 0;
-        if (o.daysOverdue > 0) node.overdueCount += 1;
-        node.items.push(o);
-      } else {
-        map.set(key, {
-          partyName: key,
-          partyType: o.partyType || '',
-          count: 1,
-          totalOutstanding: o.outstandingAmount || 0,
-          overdueCount: o.daysOverdue > 0 ? 1 : 0,
-          items: [o],
-        });
-      }
-    });
-    return Array.from(map.values()).sort((a, b) => b.totalOutstanding - a.totalOutstanding);
-  };
-
   const toggleParty = (name: string) =>
     setExpandedParties(prev => ({ ...prev, [name]: !prev[name] }));
 
@@ -325,41 +325,60 @@ const OutstandingManagementScreen = () => {
   );
 
   const renderHierarchyTab = () => {
-    const partyNodes = buildPartyHierarchy();
+    if (hierarchyLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#077BC3" />
+          <Text style={styles.loadingText}>Loading hierarchy...</Text>
+        </View>
+      );
+    }
+
+    const totalOutstanding = hierarchySummary?.totalOutstanding || 0;
+
     return (
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 15, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={hierarchyRefreshing}
+            onRefresh={() => fetchHierarchyData(true)}
+          />
+        }
       >
         {/* Summary Strip */}
         <View style={styles.hierStrip}>
           <View style={styles.hierStripItem}>
             <Ionicons name="document-text" size={20} color="#fff" />
-            <Text style={styles.hierStripVal}>{outstandingList.length}</Text>
+            <Text style={styles.hierStripVal}>{hierarchySummary?.totalInvoices ?? 0}</Text>
             <Text style={styles.hierStripLab}>Total Bills</Text>
           </View>
           <View style={[styles.hierStripItem, styles.hierStripDivider]}>
             <Ionicons name="people" size={20} color="#fff" />
-            <Text style={styles.hierStripVal}>{partyNodes.length}</Text>
+            <Text style={styles.hierStripVal}>{hierarchySummary?.totalParties ?? 0}</Text>
             <Text style={styles.hierStripLab}>Parties</Text>
           </View>
           <View style={[styles.hierStripItem, styles.hierStripDivider]}>
             <Ionicons name="cash" size={20} color="#fff" />
             <Text style={styles.hierStripVal}>
-              ₹{((summary?.totalOutstanding || 0) / 100000).toFixed(1)}L
+              ₹{totalOutstanding >= 100000
+                ? `${(totalOutstanding / 100000).toFixed(1)}L`
+                : totalOutstanding >= 1000
+                ? `${(totalOutstanding / 1000).toFixed(1)}K`
+                : totalOutstanding.toFixed(0)}
             </Text>
             <Text style={styles.hierStripLab}>Outstanding</Text>
           </View>
         </View>
 
-        {partyNodes.length === 0 ? (
+        {hierarchyParties.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="document-text" size={48} color="#9CA3AF" />
             <Text style={styles.emptyStateText}>No outstanding data</Text>
           </View>
-        ) : partyNodes.map(node => {
-          const initials = node.partyName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        ) : hierarchyParties.map(node => {
+          const initials = (node.partyName || 'UN').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
           const isExpanded = expandedParties[node.partyName];
           return (
             <View key={node.partyName} style={{ marginBottom: 12 }}>
@@ -384,7 +403,7 @@ const OutstandingManagementScreen = () => {
                 </View>
                 <View style={styles.partyCardRight}>
                   <View style={styles.partyStatItem}>
-                    <Text style={styles.partyStatVal}>{node.count}</Text>
+                    <Text style={styles.partyStatVal}>{node.invoiceCount}</Text>
                     <Text style={styles.partyStatLab}>BILLS</Text>
                   </View>
                   <View style={styles.partyStatDivider} />
@@ -409,26 +428,29 @@ const OutstandingManagementScreen = () => {
 
               {isExpanded && (
                 <View style={styles.expandedItems}>
-                  {node.items.map(item => (
-                    <TouchableOpacity
-                      key={item._id}
-                      style={styles.expandedCard}
-                      onPress={() => handleViewDetails(item)}
-                    >
+                  {(node.invoices || []).map((inv: any) => (
+                    <View key={inv._id || inv.outstandingId} style={styles.expandedCard}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <Text style={styles.expandedOrderNum}>{item.orderNumber}</Text>
-                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                          <Text style={styles.statusText}>{item.status.replace('_', ' ')}</Text>
+                        <Text style={styles.expandedOrderNum}>{inv.vchnumber || inv.outstandingId || '—'}</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(inv.status) }]}>
+                          <Text style={styles.statusText}>{(inv.status || '').replace('_', ' ')}</Text>
                         </View>
                       </View>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                        <Text style={styles.expandedLabel}>Due: {new Date(item.dueDate).toLocaleDateString()}</Text>
-                        <Text style={styles.expandedAmount}>₹{item.outstandingAmount.toLocaleString()}</Text>
-                      </View>
-                      {item.daysOverdue > 0 && (
-                        <Text style={styles.expandedOverdue}>{item.daysOverdue} days overdue</Text>
+                      {inv.vchdate && (
+                        <Text style={styles.expandedLabel}>
+                          Date: {new Date(inv.vchdate).toLocaleDateString()}
+                        </Text>
                       )}
-                    </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                        <Text style={styles.expandedLabel}>
+                          Due: {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—'}
+                        </Text>
+                        <Text style={styles.expandedAmount}>₹{(inv.outstandingAmount || 0).toLocaleString()}</Text>
+                      </View>
+                      {inv.daysOverdue > 0 && (
+                        <Text style={styles.expandedOverdue}>{inv.daysOverdue} days overdue</Text>
+                      )}
+                    </View>
                   ))}
                 </View>
               )}
