@@ -38,6 +38,8 @@ interface Dealer {
   LedgerAddress1?: string;
   LedgerAddress2?: string;
   LedgerState?: string;
+  Other1?: string; // Price list name assigned to this dealer
+  Other2?: string; // Dealer-specific discount
   address?: {
     street?: string;
     city?: string;
@@ -368,6 +370,7 @@ const AdminCreateOrder = () => {
   const [selectedPriceListName, setSelectedPriceListName] = useState<string | null>(null);
   const [priceListEntries, setPriceListEntries] = useState<PriceListEntry[]>([]);
   const [priceListDifference, setPriceListDifference] = useState(0);
+  const [dealerDiscount, setDealerDiscount] = useState(0);
   const [loadingPriceLists, setLoadingPriceLists] = useState(false);
   const [showPriceListDropdown, setShowPriceListDropdown] = useState(false);
 
@@ -538,6 +541,8 @@ const AdminCreateOrder = () => {
           LedgerAddress1: ledger.LedgerAddress1,
           LedgerAddress2: ledger.LedgerAddress2,
           LedgerState: ledger.LedgerState,
+          Other1: ledger.Other1,
+          Other2: ledger.Other2,
           address: {
             street: ledger.LedgerAddress1 || '',
             city: ledger.LedgerAddress2 || '',
@@ -607,9 +612,22 @@ const AdminCreateOrder = () => {
   const handleDealerSelect = async (dealer: Dealer) => {
     console.log('🎯 Dealer selected:', dealer);
     setSelectedDealer(dealer);
-    setSelectedSubDealer(null); // Reset sub dealer selection
+    setSelectedSubDealer(null);
     setShowDealerDropdown(false);
-    
+
+    // Auto-apply dealer's price list and discount from Ledger.Other1 / Other2
+    const plName = dealer.Other1 && dealer.Other1 !== '-' ? dealer.Other1.trim() : null;
+    const discount = parseFloat(dealer.Other2 || '0') || 0;
+    setDealerDiscount(discount);
+    if (plName) {
+      await handleSelectPriceList(plName, discount);
+    } else {
+      // Reset price list if dealer has none assigned
+      setSelectedPriceListName(null);
+      setPriceListEntries([]);
+      setPriceListDifference(0);
+    }
+
     // Fetch subdealers for this specific dealer
     try {
       console.log('🔍 Fetching subdealers for dealer:', dealer._id);
@@ -678,7 +696,7 @@ const AdminCreateOrder = () => {
     setShowSubDealerDropdown(false);
   };
 
-  const handleSelectPriceList = async (plname: string | null) => {
+  const handleSelectPriceList = async (plname: string | null, discountOverride?: number) => {
     setSelectedPriceListName(plname);
 
     if (!plname) {
@@ -703,9 +721,9 @@ const AdminCreateOrder = () => {
       if (response?.success && Array.isArray(response.data)) {
         const entries: PriceListEntry[] = response.data;
         setPriceListEntries(entries);
-        // Global difference from first entry's other1 (same across all entries in one price list)
-        const globalDiff = entries.length > 0 ? (parseFloat(entries[0].other1 || '0') || 0) : 0;
-        setPriceListDifference(globalDiff);
+        // Discount comes from dealer's Other2; discountOverride used when called from handleDealerSelect
+        const discount = discountOverride !== undefined ? discountOverride : dealerDiscount;
+        setPriceListDifference(discount);
         setOrderItems((prev) =>
           applyGstToItems(
             prev.map((item) => {
@@ -714,11 +732,11 @@ const AdminCreateOrder = () => {
               );
               if (entry) {
                 const plrate = entry.plrate || 0;
-                const finalRate = plrate + globalDiff;
+                const finalRate = plrate + discount;
                 return {
                   ...item,
                   priceListRate: plrate,
-                  difference: globalDiff,
+                  difference: discount,
                   finalRate,
                   unitPrice: Math.max(0, finalRate > 0 ? finalRate : plrate),
                 };
@@ -1777,6 +1795,10 @@ const AdminCreateOrder = () => {
                 onPress={() => {
                   setSelectedDealer(null);
                   setSelectedSubDealer(null);
+                  setDealerDiscount(0);
+                  setSelectedPriceListName(null);
+                  setPriceListEntries([]);
+                  setPriceListDifference(0);
                 }}
               >
                 <Ionicons name="close-circle" size={20} color="#EF4444" />
