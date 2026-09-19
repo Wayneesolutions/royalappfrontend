@@ -38,8 +38,9 @@ interface Dealer {
   LedgerAddress1?: string;
   LedgerAddress2?: string;
   LedgerState?: string;
-  Other1?: string; // Price list name assigned to this dealer
-  Other2?: string; // Dealer-specific discount
+  Other1?: string; // Price list name for dealer
+  Other2?: string; // Dealer discount
+  Other3?: string; // Price list name for sub-dealer
   address?: {
     street?: string;
     city?: string;
@@ -374,6 +375,9 @@ const AdminCreateOrder = () => {
   const [loadingPriceLists, setLoadingPriceLists] = useState(false);
   const [showPriceListDropdown, setShowPriceListDropdown] = useState(false);
 
+  // Manual rate mode: true when no price list is selected (dealer/sub-dealer has none assigned)
+  const isManualRate = !selectedPriceListName;
+
   // Date of Order Entry - set to current date
   const [orderEntryDate] = useState(() => {
     const today = new Date();
@@ -543,6 +547,7 @@ const AdminCreateOrder = () => {
           LedgerState: ledger.LedgerState,
           Other1: ledger.Other1,
           Other2: ledger.Other2,
+          Other3: ledger.Other3,
           address: {
             street: ledger.LedgerAddress1 || '',
             city: ledger.LedgerAddress2 || '',
@@ -669,14 +674,47 @@ const AdminCreateOrder = () => {
     }
   };
 
-  const handleSubDealerSelect = (subDealer: SubDealer) => {
+  const handleSubDealerSelect = async (subDealer: SubDealer) => {
     console.log('🎯 Sub dealer selected:', subDealer);
     setSelectedSubDealer(subDealer);
     setSubDealerInput(subDealer.SDName || subDealer.name || '');
     setShowSubDealerDropdown(false);
+
+    // Sub-dealer uses dealer.Other3 price list, no discount
+    if (selectedDealer) {
+      const subPlName = selectedDealer.Other3 && selectedDealer.Other3 !== '-' ? selectedDealer.Other3.trim() : null;
+      setDealerDiscount(0);
+      if (subPlName) {
+        await handleSelectPriceList(subPlName, 0);
+      } else {
+        setSelectedPriceListName(null);
+        setPriceListEntries([]);
+        setPriceListDifference(0);
+      }
+    }
   };
 
-  const handleSaveCustomSubDealer = (name: string) => {
+  const handleClearSubDealer = async () => {
+    setSelectedSubDealer(null);
+    setSubDealerInput('');
+    setShowSubDealerDropdown(false);
+
+    // Revert to dealer's own price list + discount
+    if (selectedDealer) {
+      const plName = selectedDealer.Other1 && selectedDealer.Other1 !== '-' ? selectedDealer.Other1.trim() : null;
+      const discount = parseFloat(selectedDealer.Other2 || '0') || 0;
+      setDealerDiscount(discount);
+      if (plName) {
+        await handleSelectPriceList(plName, discount);
+      } else {
+        setSelectedPriceListName(null);
+        setPriceListEntries([]);
+        setPriceListDifference(0);
+      }
+    }
+  };
+
+  const handleSaveCustomSubDealer = async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const alreadyExists =
@@ -694,6 +732,19 @@ const AdminCreateOrder = () => {
     setSelectedSubDealer(customEntry);
     setSubDealerInput(trimmed);
     setShowSubDealerDropdown(false);
+
+    // Apply same Other3 pricing logic as regular sub-dealer select
+    if (selectedDealer) {
+      const subPlName = selectedDealer.Other3 && selectedDealer.Other3 !== '-' ? selectedDealer.Other3.trim() : null;
+      setDealerDiscount(0);
+      if (subPlName) {
+        await handleSelectPriceList(subPlName, 0);
+      } else {
+        setSelectedPriceListName(null);
+        setPriceListEntries([]);
+        setPriceListDifference(0);
+      }
+    }
   };
 
   const handleSelectPriceList = async (plname: string | null, discountOverride?: number) => {
@@ -1344,6 +1395,10 @@ const AdminCreateOrder = () => {
             setOtherReference('');
             setTermsOfDelivery1('');
             setTermsOfDelivery2('');
+            setSelectedPriceListName(null);
+            setPriceListEntries([]);
+            setPriceListDifference(0);
+            setDealerDiscount(0);
 
             setCreatedOrder({
               orderNumber: response.order?.orderNumber || 'N/A',
@@ -1582,7 +1637,33 @@ const AdminCreateOrder = () => {
         {item.category ? (
           <Text style={styles.orderItemMeta}>Category: {item.category}</Text>
         ) : null}
-        <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
+        {isManualRate ? (
+          <View style={styles.manualRateRow}>
+            <Text style={styles.plItemLabel}>Rate (Manual)</Text>
+            <TextInput
+              style={styles.manualRateInput}
+              value={item.unitPrice > 0 ? item.unitPrice.toString() : ''}
+              onChangeText={(text) => {
+                const rate = parseFloat(text) || 0;
+                setOrderItems((prev) =>
+                  applyGstToItems(
+                    prev.map((i) =>
+                      i.productId === item.productId && i.unit === item.unit
+                        ? { ...i, unitPrice: rate }
+                        : i
+                    ),
+                    gstType
+                  )
+                );
+              }}
+              keyboardType="numeric"
+              placeholder="Enter rate"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+        ) : (
+          <Text style={styles.orderItemPrice}>{formatCurrency(item.unitPrice)}</Text>
+        )}
         {item.priceListRate > 0 && (
           <View style={styles.plItemRow}>
             <View style={styles.plItemField}>
@@ -1843,7 +1924,7 @@ const AdminCreateOrder = () => {
                   setSubDealerInput(text);
                   setShowSubDealerDropdown(true);
                   if (selectedSubDealer && (selectedSubDealer.SDName || selectedSubDealer.name) !== text) {
-                    setSelectedSubDealer(null);
+                    handleClearSubDealer();
                   }
                 }}
                 onFocus={() => setShowSubDealerDropdown(true)}
@@ -1867,11 +1948,7 @@ const AdminCreateOrder = () => {
               />
               {subDealerInput.length > 0 && (
                 <TouchableOpacity
-                  onPress={() => {
-                    setSubDealerInput('');
-                    setSelectedSubDealer(null);
-                    setShowSubDealerDropdown(false);
-                  }}
+                  onPress={() => handleClearSubDealer()}
                 >
                   <Ionicons name="close-circle" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -3286,6 +3363,23 @@ const styles = StyleSheet.create({
   },
   plInfoValueNegative: {
     color: '#D97706',
+  },
+  manualRateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  manualRateInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#D97706',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 13,
+    color: '#111827',
+    backgroundColor: '#FFFBEB',
   },
   plItemRow: {
     flexDirection: 'row',

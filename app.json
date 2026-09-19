@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Royal Software",
-    "slug": "royal-software",
+    "slug": "royaltally",
     "version": "1.0.0",
     "scheme": "expo-nativewind-ts-app",
     "orientation": "portrait",
@@ -46,12 +46,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6957d73a-221c-41a6-8d7e-a75d0af06188"
+        "projectId": "bb565fa4-b850-414a-8bee-38581fd50c97"
       }
     },
-    "owner": "royaltally",
-    "updates": {
-      "url": "https://u.expo.dev/6957d73a-221c-41a6-8d7e-a75d0af06188"
-    }
+    "owner": "wayneesolutions"
   }
 }
