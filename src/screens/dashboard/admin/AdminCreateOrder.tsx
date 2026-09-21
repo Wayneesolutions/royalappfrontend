@@ -367,13 +367,11 @@ const AdminCreateOrder = () => {
   const [termsOfDelivery2, setTermsOfDelivery2] = useState('');
 
   // Price list state
-  const [priceListNames, setPriceListNames] = useState<string[]>([]);
   const [selectedPriceListName, setSelectedPriceListName] = useState<string | null>(null);
   const [priceListEntries, setPriceListEntries] = useState<PriceListEntry[]>([]);
   const [priceListDifference, setPriceListDifference] = useState(0);
   const [dealerDiscount, setDealerDiscount] = useState(0);
   const [loadingPriceLists, setLoadingPriceLists] = useState(false);
-  const [showPriceListDropdown, setShowPriceListDropdown] = useState(false);
 
   // Manual rate mode: true when no price list is selected (dealer/sub-dealer has none assigned)
   const isManualRate = !selectedPriceListName;
@@ -597,15 +595,6 @@ const AdminCreateOrder = () => {
       setProducts(activeProducts);
       console.log('✅ Products loaded:', activeProducts.length, '(filtered', normalizedProducts.length - activeProducts.length, 'inactive)');
 
-      // Fetch price list names (non-critical)
-      try {
-        const plResponse = await apiService.getPriceListNames();
-        if (plResponse?.success && Array.isArray(plResponse.plnames)) {
-          setPriceListNames(plResponse.plnames);
-        }
-      } catch {
-        // non-critical, ignore
-      }
     } catch (error) {
       console.error('❌ Error fetching initial data:', error);
       Alert.alert('Error', 'Failed to load data: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -2029,42 +2018,29 @@ const AdminCreateOrder = () => {
           )}
         </View>
 
-        {/* Price List Selection */}
-        {priceListNames.length > 0 && (
+        {/* Price List — auto-filled from dealer */}
+        {(selectedPriceListName || loadingPriceLists) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Price List (Optional)</Text>
-            <View style={styles.selectionRow}>
-              <TouchableOpacity
-                style={[styles.dropdownButton, styles.selectionButton]}
-                onPress={() => setShowPriceListDropdown(true)}
-                disabled={loadingPriceLists}
-              >
-                {loadingPriceLists ? (
-                  <ActivityIndicator size="small" color="#3B82F6" />
-                ) : (
-                  <>
-                    <Text style={[styles.dropdownButtonText, !selectedPriceListName && styles.placeholderText]}>
-                      {selectedPriceListName || 'Select Price List'}
+            <Text style={styles.sectionTitle}>Price List</Text>
+            {loadingPriceLists ? (
+              <View style={styles.plChip}>
+                <ActivityIndicator size="small" color="#3B82F6" />
+                <Text style={styles.plChipLoading}>Loading price list...</Text>
+              </View>
+            ) : (
+              <View style={styles.plChip}>
+                <Ionicons name="pricetag-outline" size={16} color="#1D4ED8" />
+                <Text style={styles.plChipName}>{selectedPriceListName}</Text>
+                {priceListDifference !== 0 && (
+                  <View style={[styles.plDiscountBadge, priceListDifference < 0 ? styles.plDiscountBadgeGreen : styles.plDiscountBadgeAmber]}>
+                    <Text style={[styles.plDiscountText, priceListDifference < 0 ? styles.plDiscountTextGreen : styles.plDiscountTextAmber]}>
+                      {priceListDifference > 0 ? '+' : ''}{priceListDifference}%
                     </Text>
-                    <Ionicons name="chevron-down" size={20} color="#6B7280" />
-                  </>
+                  </View>
                 )}
-              </TouchableOpacity>
-              {selectedPriceListName && (
-                <TouchableOpacity
-                  style={styles.clearSelectionButton}
-                  onPress={() => handleSelectPriceList(null)}
-                >
-                  <Ionicons name="close-circle" size={20} color="#EF4444" />
+                <TouchableOpacity onPress={() => handleSelectPriceList(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={20} color="#9CA3AF" />
                 </TouchableOpacity>
-              )}
-            </View>
-            {selectedPriceListName && (
-              <View style={styles.plInfoRow}>
-                <Text style={styles.plInfoLabel}>Difference:</Text>
-                <Text style={[styles.plInfoValue, priceListDifference < 0 && styles.plInfoValueNegative]}>
-                  {priceListDifference > 0 ? '+' : ''}{priceListDifference}
-                </Text>
               </View>
             )}
           </View>
@@ -2499,51 +2475,6 @@ const AdminCreateOrder = () => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Price List Dropdown Modal */}
-      <Modal
-        visible={showPriceListDropdown}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setShowPriceListDropdown(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowPriceListDropdown(false)}
-            >
-              <Ionicons name="close" size={24} color="#374151" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Select Price List</Text>
-            <View style={styles.placeholder} />
-          </View>
-          <ScrollView style={styles.dropdownList} keyboardShouldPersistTaps="handled">
-            <TouchableOpacity
-              style={styles.dropdownItem}
-              onPress={() => { handleSelectPriceList(null); setShowPriceListDropdown(false); }}
-            >
-              <Text style={styles.dropdownItemText}>None</Text>
-              <Text style={styles.dropdownItemSubtext}>No price list applied</Text>
-            </TouchableOpacity>
-            {priceListNames.map((name) => (
-              <TouchableOpacity
-                key={name}
-                style={[styles.dropdownItem, selectedPriceListName === name && styles.addedProductItem]}
-                onPress={() => { handleSelectPriceList(name); setShowPriceListDropdown(false); }}
-              >
-                <View style={styles.plModalItemRow}>
-                  <Text style={[styles.dropdownItemText, selectedPriceListName === name && styles.addedProductText]}>
-                    {name}
-                  </Text>
-                  {selectedPriceListName === name && (
-                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -3363,6 +3294,50 @@ const styles = StyleSheet.create({
   },
   plInfoValueNegative: {
     color: '#D97706',
+  },
+  plChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  plChipLoading: {
+    flex: 1,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  plChipName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E40AF',
+    letterSpacing: 0.2,
+  },
+  plDiscountBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  plDiscountBadgeGreen: {
+    backgroundColor: '#DCFCE7',
+  },
+  plDiscountBadgeAmber: {
+    backgroundColor: '#FEF3C7',
+  },
+  plDiscountText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  plDiscountTextGreen: {
+    color: '#166534',
+  },
+  plDiscountTextAmber: {
+    color: '#92400E',
   },
   manualRateRow: {
     flexDirection: 'row',
