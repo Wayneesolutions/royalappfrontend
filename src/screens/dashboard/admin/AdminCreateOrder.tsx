@@ -293,18 +293,18 @@ const formatCurrency = (value: number) => `₹${value.toFixed(2)}`;
 const AdminCreateOrder = () => {
   const navigation = useNavigation();
   const { user, getProducts, getProductById, createOrder } = useAuth();
-  
+
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
     if (!address) return 'Address not specified';
-    
+
     const parts = [];
     if (address.street) parts.push(address.street);
     if (address.city) parts.push(address.city);
     if (address.state) parts.push(address.state);
     if (address.pincode) parts.push(address.pincode);
     if (address.country) parts.push(address.country);
-    
+
     return parts.length > 0 ? parts.join(', ') : 'Address not specified';
   };
 
@@ -317,7 +317,7 @@ const AdminCreateOrder = () => {
     pincode: address?.pincode || '',
     country: address?.country || 'India',
   });
-  
+
 
   const [subDealerInput, setSubDealerInput] = useState('');
   const [filteredSubDealers, setFilteredSubDealers] = useState<SubDealer[]>([]);
@@ -333,17 +333,17 @@ const AdminCreateOrder = () => {
   // State for selected values
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
   const [selectedSubDealer, setSelectedSubDealer] = useState<SubDealer | null>(null);
-  
+
   // State for dropdown visibility
   const [showDealerDropdown, setShowDealerDropdown] = useState(false);
   const [showSubDealerDropdown, setShowSubDealerDropdown] = useState(false);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
-  
+
   // State for order items
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [productSelections, setProductSelections] = useState<Record<string, ProductSelectionState>>({});
   const [bulkAdding, setBulkAdding] = useState(false);
-  
+
   // State for loading
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -356,7 +356,7 @@ const AdminCreateOrder = () => {
   const [showAddSubDealerModal, setShowAddSubDealerModal] = useState(false);
   const [addSubDealerForm, setAddSubDealerForm] = useState({ SDName: '', SDMobileNo: '', SDEmail: '', SDAddress1: '', SDAddress2: '', SDState: '' });
   const [addingSubDealer, setAddingSubDealer] = useState(false);
-  
+
   // State for order details
   const [orderNotes, setOrderNotes] = useState('');
   const [mode, setMode] = useState('');
@@ -524,12 +524,12 @@ const AdminCreateOrder = () => {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch dealers from Ledger table
       console.log('🔍 Fetching dealers from Ledger...');
       const dealersResponse = await apiService.adminGetAllDealers({ includeInactive: false });
       console.log('📡 Dealers response:', dealersResponse);
-      
+
       if (dealersResponse?.success && dealersResponse.data?.dealers) {
         // Map Ledger fields to Dealer interface
         const mappedDealers = dealersResponse.data.dealers.map((ledger: any) => ({
@@ -561,15 +561,15 @@ const AdminCreateOrder = () => {
         Alert.alert('Error', 'Failed to load dealers: ' + (dealersResponse?.message || 'Unknown error'));
         setDealers([]);
       }
-      
+
       // Don't fetch all sub dealers upfront - will fetch when dealer is selected
       setSubDealers([]);
-      
+
       // Fetch products
       console.log('🔍 Fetching products...');
       const productsResponse = await getProducts({ limit: 100, isActive: true });
       console.log('📡 Products response:', productsResponse);
-      
+
       let productList: any[] = [];
       if (Array.isArray(productsResponse)) {
         productList = productsResponse;
@@ -627,7 +627,7 @@ const AdminCreateOrder = () => {
       console.log('🔍 Fetching subdealers for dealer:', dealer._id);
       const response = await apiService.getSubDealersByDealer(dealer._id);
       console.log('📡 Subdealers response:', response);
-      
+
       if (response?.success && response.data?.subdealers) {
         const subdealers = response.data.subdealers || [];
         // Map SubDealer fields to SubDealer interface
@@ -903,8 +903,8 @@ const AdminCreateOrder = () => {
     if (!response?.success || !response.product) {
       throw new Error(response?.message || 'Product not available at the moment.');
     }
-  const rawProduct = response.product || response.data?.product || response.data;
-  return normalizeProduct(rawProduct);
+    const rawProduct = response.product || response.data?.product || response.data;
+    return normalizeProduct(rawProduct);
   };
 
   const handleProductQuantityChange = (product: Product, rawValue: string) => {
@@ -1206,17 +1206,17 @@ const AdminCreateOrder = () => {
   const updateQuantity = async (productId: string, newQuantity: number) => {
     const item = orderItems.find(item => item.productId === productId);
     if (!item) return;
-    
+
     if (newQuantity < 0) return; // Don't allow negative quantities
-    
+
     setOrderItems((prevItems) =>
       applyGstToItems(
         prevItems.map((it) =>
           it.productId === productId
             ? {
-                ...it,
-                quantity: newQuantity,
-              }
+              ...it,
+              quantity: newQuantity,
+            }
             : it
         ),
         gstType
@@ -1247,35 +1247,71 @@ const AdminCreateOrder = () => {
     }));
   };
 
+  const resetForm = () => {
+    // Dealer
+    setSelectedDealer(null);
+    setDealerSearchQuery('');
+    setShowDealerDropdown(false);
+
+    // Sub dealer (the part that was missing)
+    setSelectedSubDealer(null);
+    setSubDealerInput('');
+    setSubDealers([]);
+    setFilteredSubDealers([]);
+    setCustomSubDealerEntries([]);
+    setShowSubDealerDropdown(false);
+    subDealerInputRef.current?.blur();
+
+    // Items / product picker
+    setOrderItems([]);
+    setProductSelections({});
+    setProductSearchQuery('');
+    setShowProductDropdown(false);
+
+    // Payment / extra details
+    setOrderNotes('');
+    setMode('');
+    setCustomMode('');
+    setTermsOfPayment('');
+    setOtherReference('');
+    setTermsOfDelivery1('');
+    setTermsOfDelivery2('');
+
+    // Price list
+    setSelectedPriceListName(null);
+    setPriceListEntries([]);
+    setPriceListDifference(0);
+    setDealerDiscount(0);
+  };
   const handleCreateOrder = async () => {
     if (!selectedDealer) {
       Alert.alert('Validation Error', 'Please select a dealer');
       return;
     }
-    
+
     // Validate dealer ID
     if (!selectedDealer._id) {
       Alert.alert('Validation Error', 'Dealer ID is missing. Please select a valid dealer.');
       return;
     }
-    
+
     // Make sub dealer optional for now due to API permission issues
     // if (!selectedSubDealer) {
     //   Alert.alert('Validation Error', 'Please select a shipping address (sub dealer)');
     //   return;
     // }
-    
+
     if (orderItems.length === 0) {
       Alert.alert('Validation Error', 'Please add at least one product to the order');
       return;
     }
-    
+
     const itemsWithQuantity = orderItems.filter(item => item.quantity > 0);
     if (itemsWithQuantity.length === 0) {
       Alert.alert('Validation Error', 'Please set quantity for at least one product');
       return;
     }
-    
+
     try {
       setSaving(true);
       if (mode === 'Other' && !customMode.trim()) {
@@ -1283,7 +1319,7 @@ const AdminCreateOrder = () => {
         setSaving(false);
         return;
       }
-      
+
       const trimmedCustomMode = customMode.trim();
       const trimmedTermsOfPayment = termsOfPayment.trim();
       const trimmedOtherReference = otherReference.trim();
@@ -1292,24 +1328,24 @@ const AdminCreateOrder = () => {
       const modePayload = mode === 'Other' ? (trimmedCustomMode || 'Other') : mode;
 
       const finalSummary = calculateOrderSummary(itemsWithQuantity);
-      
+
       // Ensure IDs are properly converted to strings
       const dealerId = selectedDealer._id?.toString();
       const rawSubDealerId = selectedSubDealer?._id?.toString();
       const subDealerId =
         rawSubDealerId && !rawSubDealerId.startsWith('custom_') ? rawSubDealerId : null;
-      
+
       if (!dealerId) {
         Alert.alert('Validation Error', 'Invalid dealer ID. Please select a valid dealer.');
         setSaving(false);
         return;
       }
-      
+
       console.log('📋 Order creation - Dealer ID:', dealerId);
       console.log('📋 Order creation - SubDealer ID:', subDealerId);
       console.log('📋 Order creation - Selected Dealer:', selectedDealer);
       console.log('📋 Order creation - Selected SubDealer:', selectedSubDealer);
-      
+
       const orderData: any = {
         customerId: dealerId,
         customerName: selectedDealer.LedgerName || selectedDealer.name || '',
@@ -1364,40 +1400,41 @@ const AdminCreateOrder = () => {
       if (mode === 'Other') {
         orderData.customMode = trimmedCustomMode;
       }
-      
+
       console.log('📦 Creating order with data:', orderData);
-      
+
       const response = await createOrder(orderData);
       console.log('📡 Order creation response:', response);
-      
-          if (response?.success) {
-            console.log('✅ Order created successfully:', response.order);
-            // Reset form
-            setSelectedDealer(null);
-            setSelectedSubDealer(null);
-            setOrderItems([]);
-            setOrderNotes('');
-            setSubDealers([]);
-            setMode('');
-            setCustomMode('');
-            setTermsOfPayment('');
-            setOtherReference('');
-            setTermsOfDelivery1('');
-            setTermsOfDelivery2('');
-            setSelectedPriceListName(null);
-            setPriceListEntries([]);
-            setPriceListDifference(0);
-            setDealerDiscount(0);
 
-            setCreatedOrder({
-              orderNumber: response.order?.orderNumber || 'N/A',
-              totalAmount: finalSummary.totalAmount,
-            });
-            setShowSuccessModal(true);
-          } else {
-            console.log('❌ Order creation failed:', response?.message);
-            Alert.alert('Error', response?.message || 'Failed to create order');
-          }
+      if (response?.success) {
+        console.log('✅ Order created successfully:', response.order);
+        // Reset form
+        setSelectedDealer(null);
+        setSelectedSubDealer(null);
+        setOrderItems([]);
+        setOrderNotes('');
+        setSubDealers([]);
+        setMode('');
+        setCustomMode('');
+        setTermsOfPayment('');
+        setOtherReference('');
+        setTermsOfDelivery1('');
+        setTermsOfDelivery2('');
+        setSelectedPriceListName(null);
+        setPriceListEntries([]);
+        setPriceListDifference(0);
+        setDealerDiscount(0);
+
+        setCreatedOrder({
+          orderNumber: response.order?.orderNumber || 'N/A',
+          totalAmount: finalSummary.totalAmount,
+        });
+        resetForm();
+        setShowSuccessModal(true);
+      } else {
+        console.log('❌ Order creation failed:', response?.message);
+        Alert.alert('Error', response?.message || 'Failed to create order');
+      }
     } catch (error) {
       console.error('Error creating order:', error);
       Alert.alert('Error', 'Failed to create order. Please try again.');
@@ -1484,14 +1521,14 @@ const AdminCreateOrder = () => {
               {item.productCode} • ₹{resolvedPrice.toFixed(2)}
             </Text>
             {partNumber ? (
-            <Text
-              style={[
-                styles.dropdownItemSubtext,
-                existingItem && styles.addedProductSubtext,
-              ]}
-            >
+              <Text
+                style={[
+                  styles.dropdownItemSubtext,
+                  existingItem && styles.addedProductSubtext,
+                ]}
+              >
                 Part No: {partNumber}
-            </Text>
+              </Text>
             ) : null}
             <Text
               style={[
@@ -1539,7 +1576,7 @@ const AdminCreateOrder = () => {
               style={[
                 styles.selectionQuantityButton,
                 (quantityNumber <= 0 || isLoading) &&
-                  styles.selectionQuantityButtonDisabled,
+                styles.selectionQuantityButtonDisabled,
               ]}
               onPress={() => adjustProductSelectionQuantity(item, -1)}
               disabled={quantityNumber <= 0 || isLoading}
@@ -1865,6 +1902,10 @@ const AdminCreateOrder = () => {
                 onPress={() => {
                   setSelectedDealer(null);
                   setSelectedSubDealer(null);
+                  setSubDealerInput('');
+                  setSubDealers([]);
+                  setCustomSubDealerEntries([]);
+                  setShowSubDealerDropdown(false);
                   setDealerDiscount(0);
                   setSelectedPriceListName(null);
                   setPriceListEntries([]);
@@ -1921,7 +1962,7 @@ const AdminCreateOrder = () => {
                   setTimeout(() => {
                     setShowSubDealerDropdown(false);
                     const trimmed = subDealerInput.trim();
-                    if (trimmed && !selectedSubDealer) {
+                    if (trimmed && !selectedSubDealer && selectedDealer) {
                       handleSaveCustomSubDealer(trimmed);
                     }
                   }, 200);
