@@ -39,6 +39,7 @@ import AdminOrderList from '../../screens/dashboard/admin/AdminOrderList';
 import AdminEditOrder from '../../screens/dashboard/admin/AdminEditOrder';
 import DealersListScreen from '../../screens/dashboard/admin/DealersListScreen';
 import SubDealersListScreen from '../../screens/dashboard/admin/SubDealersListScreen';
+import LedgerReportScreen from '../../screens/dashboard/GroupUser/LedgerReportScreen';
 // Order Management Screens (Admin can only monitor, not create)
 // import OrderManagement from '../../screens/dashboard/admin/saleOrder/OrderManagement';
 // import ProductManagement from '../../screens/dashboard/admin/saleOrder/ProductManagement';
@@ -73,6 +74,7 @@ export default function AdminNavigator() {
         <AdminStack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
             <AdminStack.Screen name="ClearOrdersScreen" component={ClearOrdersScreen} />
             <AdminStack.Screen name="OutstandingScreen" component={OutstandingScreen} />
+            <AdminStack.Screen name="LedgerReportScreen" component={LedgerReportScreen} />
 
             <AdminStack.Screen name="AdminCreateOrder" component={AdminCreateOrder} />
             <AdminStack.Screen name="AdminOrderList" component={AdminOrderList} />

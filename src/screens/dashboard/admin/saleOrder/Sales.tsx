@@ -29,7 +29,7 @@ interface Order {
   _id: string;
   orderNumber: string;
   customerName: string;
-  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'pending_approval' | 'draft' | 'approved' | 'sent_to_tally' | 'dispatched';
   finalAmount: number;
   orderDate: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
@@ -85,16 +85,21 @@ const Sales = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
+      case 'approved':
       case 'confirmed':
       case 'delivered':
         return <MaterialIcons name="check-box" size={18} color="#10B981" />;
       case 'cancelled':
       case 'returned':
         return <MaterialIcons name="cancel" size={18} color="#EF4444" />;
+      case 'pending_approval':
+      case 'draft':
       case 'pending':
         return <MaterialIcons name="schedule" size={18} color="#F59E0B" />;
+      case 'sent_to_tally':
       case 'processing':
         return <MaterialIcons name="settings" size={18} color="#3B82F6" />;
+      case 'dispatched':
       case 'shipped':
         return <MaterialIcons name="local-shipping" size={18} color="#8B5CF6" />;
       default:
@@ -104,21 +109,40 @@ const Sales = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'approved':
       case 'confirmed':
       case 'delivered':
         return '#10B981';
       case 'cancelled':
       case 'returned':
         return '#EF4444';
+      case 'pending_approval':
+      case 'draft':
       case 'pending':
         return '#F59E0B';
+      case 'sent_to_tally':
       case 'processing':
         return '#3B82F6';
+      case 'dispatched':
       case 'shipped':
         return '#8B5CF6';
       default:
         return '#6B7280';
     }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      pending_approval: 'Pending',
+      draft: 'Draft',
+      approved: 'Confirmed',
+      sent_to_tally: 'Processing',
+      dispatched: 'Shipped',
+      delivered: 'Delivered',
+      cancelled: 'Cancelled',
+      returned: 'Returned',
+    };
+    return labels[status] || status.toUpperCase();
   };
 
   const getPriorityColor = (priority: string) => {
@@ -131,7 +155,17 @@ const Sales = () => {
     }
   };
 
-  const filteredOrders = filter === 'All' ? orders : orders.filter((order) => order.status === filter);
+  const statusFilterMap: Record<string, string[]> = {
+    pending: ['pending_approval', 'draft'],
+    confirmed: ['approved'],
+    processing: ['sent_to_tally'],
+    shipped: ['dispatched'],
+    delivered: ['delivered'],
+    cancelled: ['cancelled'],
+  };
+  const filteredOrders = filter === 'All'
+    ? orders
+    : orders.filter((order) => (statusFilterMap[filter] || [filter]).includes(order.status));
 
   const StatCard = ({ title, value, icon, color, onPress }: {
     title: string;
@@ -285,7 +319,7 @@ const Sales = () => {
                   </View>
                   <View style={styles.orderCell}>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-                      <Text style={styles.statusText}>{order.status.toUpperCase()}</Text>
+                      <Text style={styles.statusText}>{getStatusLabel(order.status)}</Text>
                     </View>
                     {order.priority !== 'medium' && (
                       <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(order.priority) }]}>

@@ -96,6 +96,7 @@ type AdminStackParamList = {
       AdminEditOrder: { order: any };
       DealersList: undefined;
       SubDealersList: undefined;
+      LedgerReportScreen: undefined;
 } & CommonStackParamList;
 
 // ==================== ZONAL SCREENS (ZSM - Zonal Sales Manager) ====================
@@ -225,6 +226,11 @@ type GroupUserStackParamList = {
   AdminOrderList: undefined;
   AdminEditOrder: { order: any };
   DealersListScreen: undefined;
+  LedgerReportScreen: undefined;
+  OutstandingReportScreen: undefined;
+  PendingOrdersScreen: undefined;
+  SalesStockScreen: undefined;
+  StockSummaryScreen: undefined;
 } & CommonStackParamList;
 
 // ==================== DISTRIBUTOR SCREENS ====================

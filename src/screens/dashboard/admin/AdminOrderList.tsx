@@ -36,6 +36,8 @@ interface Order {
   totalQuantity: number;
   totalAmount: number;
   status: 'draft' | 'pending_approval' | 'approved' | 'sent_to_tally' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'rejected';
+  tallySyncStatus?: 'pending' | 'synced' | 'failed';
+  tallyRemarks?: string;
   createdAt: string;
   paymentMethod?: string;
   // raw API order for edit/approve passthrough
@@ -106,6 +108,8 @@ const AdminOrderList = () => {
     totalQuantity: (order.items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
     totalAmount: order.finalAmount || order.totalAmount || 0,
     status: order.status || 'draft',
+    tallySyncStatus: order.tallySyncStatus,
+    tallyRemarks: order.tallyRemarks,
     createdAt: order.orderDate || order.createdAt || new Date().toISOString(),
     paymentMethod: order.paymentMethod,
     _raw: order,
@@ -621,18 +625,35 @@ const AdminOrderList = () => {
             {new Date(order.createdAt).toLocaleDateString()}
           </Text>
         </View>
-        <View style={[
-          styles.orderStatusBadge,
-          { backgroundColor: getStatusColor(order.status) + '20' }
-        ]}>
-          <Ionicons
-            name={getStatusIcon(order.status) as any}
-            size={14}
-            color={getStatusColor(order.status)}
-          />
-          <Text style={[styles.orderStatusText, { color: getStatusColor(order.status) }]}>
-            {getStatusLabel(order.status)}
-          </Text>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <View style={[
+            styles.orderStatusBadge,
+            { backgroundColor: getStatusColor(order.status) + '20' }
+          ]}>
+            <Ionicons
+              name={getStatusIcon(order.status) as any}
+              size={14}
+              color={getStatusColor(order.status)}
+            />
+            <Text style={[styles.orderStatusText, { color: getStatusColor(order.status) }]}>
+              {getStatusLabel(order.status)}
+            </Text>
+          </View>
+          {order.status === 'sent_to_tally' && (
+            <View style={[
+              styles.orderStatusBadge,
+              { backgroundColor: order.tallySyncStatus === 'synced' ? '#D1FAE5' : order.tallySyncStatus === 'failed' ? '#FEE2E2' : '#FEF3C7' }
+            ]}>
+              <Ionicons
+                name={order.tallySyncStatus === 'synced' ? 'checkmark-circle' : order.tallySyncStatus === 'failed' ? 'close-circle' : 'time-outline'}
+                size={12}
+                color={order.tallySyncStatus === 'synced' ? '#059669' : order.tallySyncStatus === 'failed' ? '#DC2626' : '#D97706'}
+              />
+              <Text style={[styles.orderStatusText, { color: order.tallySyncStatus === 'synced' ? '#059669' : order.tallySyncStatus === 'failed' ? '#DC2626' : '#D97706' }]}>
+                {order.tallySyncStatus === 'synced' ? 'Tally ✓' : order.tallySyncStatus === 'failed' ? 'Tally ✗' : 'Tally...'}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
