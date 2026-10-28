@@ -35,11 +35,15 @@ const LedgerReportScreen = () => {
 
   useEffect(() => {
     fetchLedgers();
-    // Set default date range to this year
+    // Set default date range to this fiscal year (Apr 1 – Mar 31)
     const today = new Date();
     const yearStart = new Date(today.getFullYear(), 3, 1);
     const yearEnd = new Date(today.getFullYear() + 1, 2, 31);
+    const startStr = yearStart.toISOString().split('T')[0];
+    const endStr = yearEnd.toISOString().split('T')[0];
     setDateRange(`${formatDate(yearStart)} - ${formatDate(yearEnd)}`);
+    setStartDateParam(startStr);
+    setEndDateParam(endStr);
   }, []);
 
   const fetchLedgers = async () => {

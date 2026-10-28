@@ -12,7 +12,6 @@ import {
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
-import GlobalFAB from '../GlobalFAB';
 
 interface OrderStats {
   totalOrders: number;
@@ -212,15 +211,7 @@ const Sales = () => {
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Sales Overview</Text>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => {
-              // Navigate to create order
-              console.log('Navigate to create order');
-            }}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.addButton} />
         </View>
 
         {/* Stats Overview */}
@@ -291,7 +282,7 @@ const Sales = () => {
               style={styles.viewAllButton}
               onPress={() => {
                 // Navigate to all orders
-                console.log('Navigate to all orders');
+                navigation.navigate('AdminOrderList' as never);
               }}
             >
               <Text style={styles.viewAllText}>View All</Text>
@@ -302,13 +293,9 @@ const Sales = () => {
           {filteredOrders.length > 0 ? (
             <View style={styles.ordersList}>
               {filteredOrders.map((order, index) => (
-                <TouchableOpacity
+                <View
                   key={order._id}
                   style={[styles.orderRow, index % 2 === 1 && styles.altRow]}
-                  onPress={() => {
-                    // Navigate to order details
-                    console.log('Navigate to order details:', order._id);
-                  }}
                 >
                   <View style={styles.orderCell}>
                     {getStatusIcon(order.status)}
@@ -333,7 +320,7 @@ const Sales = () => {
                       {new Date(order.orderDate).toLocaleDateString()}
                     </Text>
                   </View>
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           ) : (
@@ -346,7 +333,6 @@ const Sales = () => {
           )}
         </View>
       </ScrollView>
-      <GlobalFAB />
     </View>
   );
 };
