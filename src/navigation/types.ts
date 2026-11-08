@@ -45,6 +45,7 @@ type CommonStackParamList = {
   ProfileScreen: undefined;
   SettingsScreen: undefined;
   MyTargetsScreen: undefined;
+  Rewards: undefined;
 };
 
 // ==================== SUPER ADMIN SCREENS ====================

@@ -8,7 +8,8 @@ import {
   Dimensions,
   Image,
   ActivityIndicator,
-  Alert
+  Alert,
+  Linking
 } from 'react-native';
 import {
   Ionicons,
@@ -22,6 +23,7 @@ import Profile from '../../../../assets/images/profile.png'
 import DashboardHeader from './AdminHeader';
 import { useAuth } from '../../../context/AuthContext';
 import CreateDealerModal from './CreateDealerModal';
+import apiService from '../../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -155,6 +157,17 @@ const DashboardHome = () => {
   };
 
   // Profile press handler
+  const openLoyaltyConsole = async () => {
+    const r = await apiService.getLoyaltyConsoleLink();
+    if (r.success && r.url) {
+      Linking.openURL(r.url).catch(() => Alert.alert('Loyalty console', 'Could not open the browser.'));
+    } else {
+      Alert.alert('Loyalty console', r.code === 'NOT_LINKED'
+        ? 'Loyvexa is not connected yet. Open Connectors in the Loyvexa console and link Korvo.'
+        : r.message || 'Not reachable right now.');
+    }
+  };
+
   const handleProfilePress = () => {
     try {
       navigation.navigate('ProfileScreen');
@@ -349,6 +362,23 @@ const DashboardHome = () => {
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.dealerCard, { marginTop: 12 }]}
+              onPress={openLoyaltyConsole}
+              activeOpacity={0.7}
+            >
+              <View style={styles.dealerCardContent}>
+                <View style={[styles.dealerIconContainer, { backgroundColor: '#FFEDD5' }]}>
+                  {renderIcon('sparkles-outline', 'Ionicons', 28, '#EA580C')}
+                </View>
+                <View style={styles.dealerCardText}>
+                  <Text style={styles.dealerCardTitle}>Loyalty & AI console</Text>
+                  <Text style={styles.dealerCardSubtitle}>Schemes, payouts, today's AI plan</Text>
+                </View>
+              </View>
+              <Ionicons name="open-outline" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           </View>
         </View>
