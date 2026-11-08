@@ -1699,6 +1699,28 @@ class ApiService {
     }
   }
 
+  // ==================== REWARDS (Loyvexa, Bundle B) ====================
+
+  /** Dealer: a 1-hour Loyvexa token for the Rewards tab. The connector key stays on the server. */
+  async getRewardsSession(): Promise<{ success: boolean; token: string; baseUrl: string; expiresIn: number; message?: string; code?: string }> {
+    try {
+      const response = await this.axiosInstance.get('/rewards/session');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, token: '', baseUrl: '', expiresIn: 0, message: error?.response?.data?.message || 'Rewards are not reachable right now', code: error?.response?.data?.code };
+    }
+  }
+
+  /** Admin: one-click sign-in link to the Loyvexa loyalty & AI console (valid 60 seconds). */
+  async getLoyaltyConsoleLink(): Promise<{ success: boolean; url?: string; message?: string; code?: string }> {
+    try {
+      const response = await this.axiosInstance.get('/integrations/loyvexa/console-link');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error?.response?.data?.message || 'Loyalty console is not reachable right now', code: error?.response?.data?.code };
+    }
+  }
+
   // ==================== OUTSTANDING MANAGEMENT ====================
 
   async getOutstandingSummary(params?: any): Promise<ApiResponse<any>> {
