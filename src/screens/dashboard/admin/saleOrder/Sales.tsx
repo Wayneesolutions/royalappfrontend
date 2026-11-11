@@ -47,28 +47,29 @@ const Sales = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch orders
+
       const ordersParams: any = { page: 1, limit: 20 };
       if (filter !== 'All') {
         ordersParams.status = filter;
       }
-      
+
       const ordersResponse = await getOrders(ordersParams);
       if (ordersResponse?.success) {
         setOrders(ordersResponse.orders || []);
       }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setLoading(false);
+    }
 
-      // Fetch stats
+    try {
       const statsResponse = await getOrderStats();
       if (statsResponse?.success) {
         setStats(statsResponse.stats);
       }
     } catch (error) {
-      console.error('Error fetching sales data:', error);
-      Alert.alert('Error', 'Failed to fetch sales data');
-    } finally {
-      setLoading(false);
+      console.error('Error fetching order stats:', error);
     }
   };
 
