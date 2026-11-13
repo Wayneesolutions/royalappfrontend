@@ -1273,6 +1273,30 @@ class ApiService {
     }
   }
 
+  async bulkApproveRejectOrders(orderIds: string[], action: 'approved' | 'rejected', notes?: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post('/approvals/bulk-action', {
+        orderIds,
+        action,
+        notes
+      });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async unapproveOrder(orderId: string, notes?: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.post(`/approvals/${orderId}/unapprove`, {
+        notes
+      });
+      return response.data;
+    } catch (error) {
+      this.handleApiError(error as AxiosError);
+    }
+  }
+
   async getApprovalHistory(orderId: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get(`/approvals/${orderId}/history`);

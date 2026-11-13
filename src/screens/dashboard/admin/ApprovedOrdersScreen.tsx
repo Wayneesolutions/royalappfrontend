@@ -72,7 +72,7 @@ interface OrderSummary {
 }
 
 const ApprovedOrdersScreen = () => {
-  const { getOrders, getOrderStats, getOrderById, updateOrderStatus } = useAuth();
+  const { getOrders, getOrderStats, getOrderById, updateOrderStatus, unapproveOrder } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [summary, setSummary] = useState<OrderSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,6 +181,33 @@ const ApprovedOrdersScreen = () => {
     }
   };
 
+  const handleUnapprove = async (orderId: string) => {
+    Alert.alert(
+      'Unapprove Order',
+      'Return this order to pending approval?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unapprove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await unapproveOrder(orderId, 'Returned to pending by admin');
+              if (response?.success) {
+                Alert.alert('Success', 'Order returned to pending approval');
+                fetchOrders();
+              } else {
+                Alert.alert('Error', response?.message || 'Failed to unapprove order');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to unapprove order');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return '#10B981';
@@ -272,7 +299,7 @@ const ApprovedOrdersScreen = () => {
       </View>
 
       <View style={styles.cardFooter}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.viewButton}
           onPress={() => handleViewDetails(item)}
           disabled={loadingOrderDetails === item._id}
@@ -286,6 +313,15 @@ const ApprovedOrdersScreen = () => {
             {loadingOrderDetails === item._id ? 'Loading...' : 'View Details'}
           </Text>
         </TouchableOpacity>
+        {item.status === 'approved' && (
+          <TouchableOpacity
+            style={[styles.viewButton, { marginLeft: 8, borderColor: '#F59E0B' }]}
+            onPress={() => handleUnapprove(item._id)}
+          >
+            <Ionicons name="arrow-undo" size={16} color="#F59E0B" />
+            <Text style={[styles.viewButtonText, { color: '#F59E0B' }]}>Unapprove</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );

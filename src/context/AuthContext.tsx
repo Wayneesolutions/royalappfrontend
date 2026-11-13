@@ -36,6 +36,8 @@ interface AuthContextType {
   submitOrderForApproval: (orderId: string) => Promise<any>;
   getPendingApprovals: (params?: any) => Promise<any>;
   approveRejectOrder: (orderId: string, action: 'approved' | 'rejected', notes?: string) => Promise<any>;
+  bulkApproveRejectOrders: (orderIds: string[], action: 'approved' | 'rejected', notes?: string) => Promise<any>;
+  unapproveOrder: (orderId: string, notes?: string) => Promise<any>;
   getApprovalHistory: (orderId: string) => Promise<any>;
   getMyOrders: (params?: any) => Promise<any>;
   // Product Management
@@ -457,6 +459,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return result;
     } catch (error) {
       console.error('Failed to approve/reject order:', error);
+      throw error;
+    }
+  };
+
+  const bulkApproveRejectOrders = async (orderIds: string[], action: 'approved' | 'rejected', notes?: string): Promise<any> => {
+    try {
+      const result = await apiService.bulkApproveRejectOrders(orderIds, action, notes);
+      return result;
+    } catch (error) {
+      console.error('Failed to bulk approve/reject orders:', error);
+      throw error;
+    }
+  };
+
+  const unapproveOrder = async (orderId: string, notes?: string): Promise<any> => {
+    try {
+      const result = await apiService.unapproveOrder(orderId, notes);
+      return result;
+    } catch (error) {
+      console.error('Failed to unapprove order:', error);
       throw error;
     }
   };
@@ -1222,6 +1244,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     submitOrderForApproval,
     getPendingApprovals,
     approveRejectOrder,
+    bulkApproveRejectOrders,
+    unapproveOrder,
     getApprovalHistory,
     getMyOrders,
     // Product Management

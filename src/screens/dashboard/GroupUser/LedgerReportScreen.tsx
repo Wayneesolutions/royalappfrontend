@@ -337,43 +337,62 @@ const LedgerReportScreen = () => {
           <Text style={styles.emptySubtitle}>No transactions found for selected period</Text>
         </View>
       ) : (
-        <FlatList
-          data={transactions}
-          keyExtractor={(item, i) => item._id || item.id || String(i)}
-          renderItem={({ item }) => {
-            const amount = getTxnAmount(item);
-            const isNeg = isDebit(item);
-            return (
-              <TouchableOpacity style={styles.reportCard} onPress={() => { setSelectedVoucher(item); setCurrentView('detail'); }}>
-                <View style={styles.voucherHeader}>
-                  <View>
-                    <Text style={styles.vDate}>{getTxnDate(item)} | {getTxnType(item)}</Text>
-                    {item.items?.map((prod: any, idx: number) => (
-                      <Text key={idx} style={styles.itemSmallText}>{prod.name || prod.productName} ({prod.qty || prod.quantity} {prod.unit || 'pc'})</Text>
-                    ))}
-                    {!item.items && item.description && (
-                      <Text style={styles.itemSmallText}>{item.description}</Text>
-                    )}
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[styles.vAmount, { color: isNeg ? '#D32F2F' : '#388E3C' }]}>
-                      {isNeg ? '-' : ''}{formatAmount(amount)}
-                    </Text>
-                    <Text style={styles.vRunningBal}>({formatAmount(getTxnBalance(item))})</Text>
-                  </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View>
+            {/* Table header */}
+            <View style={styles.tableHeader}>
+              <Text style={[styles.thCell, { width: 72 }]}>Date</Text>
+              <Text style={[styles.thCell, { width: 120 }]}>Particulars</Text>
+              <Text style={[styles.thCell, { width: 72 }]}>Vch No</Text>
+              <Text style={[styles.thCell, { width: 72 }]}>VchType</Text>
+              <Text style={[styles.thCell, { width: 80, textAlign: 'right' }]}>Debit</Text>
+              <Text style={[styles.thCell, { width: 80, textAlign: 'right' }]}>Credit</Text>
+              <Text style={[styles.thCell, { width: 80, textAlign: 'right' }]}>Balance</Text>
+            </View>
+            {/* Table rows */}
+            {transactions.map((item: any, index: number) => {
+              const debit = item.debit > 0 ? item.debit : (item.amount > 0 ? item.amount : 0);
+              const credit = item.credit > 0 ? item.credit : (item.amount < 0 ? Math.abs(item.amount) : 0);
+              const balance = item.balance || item.runningBalance || 0;
+              const date = item.date || item.createdAt;
+              const dateStr = date ? new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+              const particulars = item.partyName || item.description || item.vchpartyname || '—';
+              const vchNo = item.voucherNo || item.vchnumber || item.invoiceNo || '—';
+              const vchType = item.type || item.vchtype || item.voucherType || '—';
+              return (
+                <View key={item._id || index} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
+                  <Text style={[styles.tdCell, { width: 72 }]}>{dateStr}</Text>
+                  <Text style={[styles.tdCell, { width: 120 }]} numberOfLines={2}>{particulars}</Text>
+                  <Text style={[styles.tdCell, { width: 72 }]} numberOfLines={1}>{vchNo}</Text>
+                  <Text style={[styles.tdCell, { width: 72 }]} numberOfLines={1}>{vchType}</Text>
+                  <Text style={[styles.tdCell, { width: 80, textAlign: 'right', color: debit > 0 ? '#D32F2F' : '#1F2937' }]}>
+                    {debit > 0 ? debit.toLocaleString('en-IN') : ''}
+                  </Text>
+                  <Text style={[styles.tdCell, { width: 80, textAlign: 'right', color: credit > 0 ? '#388E3C' : '#1F2937' }]}>
+                    {credit > 0 ? credit.toLocaleString('en-IN') : ''}
+                  </Text>
+                  <Text style={[styles.tdCell, { width: 80, textAlign: 'right' }]}>
+                    {balance !== 0 ? balance.toLocaleString('en-IN') : ''}
+                  </Text>
                 </View>
-              </TouchableOpacity>
-            );
-          }}
-          ListFooterComponent={() =>
-            ledgerSummary ? (
-              <View style={[styles.balanceRow, { borderTopWidth: 1, borderColor: '#eee', marginTop: 10 }]}>
-                <Text style={styles.balanceLabel}>Closing Balance</Text>
-                <Text style={styles.balanceValue}>{formatAmount(ledgerSummary?.closingBalance ?? 0)}</Text>
+              );
+            })}
+            {/* Footer - closing balance */}
+            {ledgerSummary && (
+              <View style={[styles.tableRow, { backgroundColor: '#EBF4FF' }]}>
+                <Text style={[styles.tdCell, { width: 72, fontWeight: 'bold' }]}></Text>
+                <Text style={[styles.tdCell, { width: 120, fontWeight: 'bold' }]}>Closing Balance</Text>
+                <Text style={[styles.tdCell, { width: 72 }]}></Text>
+                <Text style={[styles.tdCell, { width: 72 }]}></Text>
+                <Text style={[styles.tdCell, { width: 80 }]}></Text>
+                <Text style={[styles.tdCell, { width: 80 }]}></Text>
+                <Text style={[styles.tdCell, { width: 80, textAlign: 'right', fontWeight: 'bold' }]}>
+                  {(ledgerSummary.closingBalance || 0).toLocaleString('en-IN')}
+                </Text>
               </View>
-            ) : null
-          }
-        />
+            )}
+          </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -619,6 +638,34 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937', marginBottom: 6 },
   emptySubtitle: { fontSize: 13, color: '#6B7280' },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#1E3A5F',
+    paddingVertical: 8,
+  },
+  thCell: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingVertical: 6,
+  },
+  tableRowAlt: {
+    backgroundColor: '#F9FAFB',
+  },
+  tdCell: {
+    fontSize: 11,
+    color: '#374151',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
 });
 
 export default LedgerReportScreen;
