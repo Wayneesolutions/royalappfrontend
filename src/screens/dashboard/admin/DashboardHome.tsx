@@ -50,6 +50,7 @@ const menuItems: MenuItem[] = [
   { label: 'Sales Overview', icon: 'trending-up-outline', iconType: 'Ionicons', navigationScreen: 'Sales' },
   { label: 'Outstanding', icon: 'file-document-outline', iconType: 'MaterialCommunityIcons', navigationScreen: 'OutstandingScreen' },
   { label: 'Ledger Report', icon: 'book-outline', iconType: 'Ionicons', navigationScreen: 'LedgerReportScreen' },
+  { label: 'Pending Approvals', icon: 'hourglass-outline', iconType: 'Ionicons', navigationScreen: 'PendingApprovalsScreen' },
   { label: 'Pending Orders', icon: 'time-outline', iconType: 'Ionicons', navigationScreen: 'PendingOrdersScreen' },
   { label: 'Approved Orders', icon: 'checkmark-done-circle-outline', iconType: 'Ionicons', navigationScreen: 'ApprovedOrdersScreen' },
 ];

@@ -34,6 +34,7 @@ import SaleOrderApprove from '../../screens/dashboard/admin/saleOrder/SaleOrderA
 import TargetAssignmentScreen from '../../screens/dashboard/admin/target/TargetAssignmentScreen';
 import MyTargetsScreen from '../../screens/dashboard/common/MyTargetsScreen';
 import ApprovedOrdersScreen from '../../screens/dashboard/admin/ApprovedOrdersScreen';
+import PendingApprovalsScreen from '../../screens/dashboard/admin/approval/PendingApprovalsScreen';
 import AdminCreateOrder from '../../screens/dashboard/admin/AdminCreateOrder';
 import AdminOrderList from '../../screens/dashboard/admin/AdminOrderList';
 import AdminEditOrder from '../../screens/dashboard/admin/AdminEditOrder';
@@ -72,6 +73,7 @@ export default function AdminNavigator() {
         <AdminStack.Screen name="TargetAssignmentScreen" component={TargetAssignmentScreen} />
         <AdminStack.Screen name="MyTargetsScreen" component={MyTargetsScreen} />
         <AdminStack.Screen name="ApprovedOrdersScreen" component={ApprovedOrdersScreen} />
+        <AdminStack.Screen name="PendingApprovalsScreen" component={PendingApprovalsScreen} />
             <AdminStack.Screen name="ClearOrdersScreen" component={ClearOrdersScreen} />
             <AdminStack.Screen name="OutstandingScreen" component={OutstandingScreen} />
             <AdminStack.Screen name="LedgerReportScreen" component={LedgerReportScreen} />
