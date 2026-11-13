@@ -2297,6 +2297,34 @@ class ApiService {
       }
     }
   }
+
+  /**
+   * List Tally vouchers for a company with optional filters
+   * @route GET /api/v1/tally/vouchers
+   */
+  async getTallyVoucherList(params: {
+    cmpcode?: string;
+    guid?: string;
+    vchtype?: string;
+    startDate?: string;
+    endDate?: string;
+    vchpartyguid?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.axiosInstance.get('/tally/vouchers', { params });
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response) {
+        const message = (axiosError.response.data as any)?.message || axiosError.message;
+        return { success: false, message } as any;
+      } else if (axiosError.request) {
+        return { success: false, message: 'Network error - No response received' } as any;
+      } else {
+        return { success: false, message: axiosError.message || 'Unknown error' } as any;
+      }
+    }
+  }
 }
 
 // Create and export a singleton instance
