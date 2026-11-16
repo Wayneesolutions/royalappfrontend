@@ -53,7 +53,7 @@ interface Order {
 }
 
 const PendingApprovalsScreen = () => {
-  const { getPendingApprovals, approveRejectOrder, bulkApproveRejectOrders } = useAuth();
+  const { getPendingApprovals, approveRejectOrder, bulkApproveRejectOrders, submitOrderForApproval } = useAuth();
   const navigation = useNavigation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +102,25 @@ const PendingApprovalsScreen = () => {
     if (!selectedOrder) return;
     try {
       setProcessing(true);
+
+      // Draft orders: submit for approval (self-approves for admin/top-level users)
+      if (selectedOrder.status === 'draft') {
+        if (action === 'rejected') {
+          Alert.alert('Info', 'Draft orders cannot be rejected. Delete the order from Order List instead.');
+          return;
+        }
+        const result = await submitOrderForApproval(selectedOrder._id);
+        if (result?.success) {
+          Alert.alert('Success', result.isSelfApproved ? 'Order approved successfully!' : 'Order submitted for approval!', [
+            { text: 'OK', onPress: () => { setShowActionModal(false); setSelectedOrder(null); setNotes(''); fetchPendingApprovals(); } }
+          ]);
+        } else {
+          Alert.alert('Error', result?.message || 'Failed to process order');
+        }
+        return;
+      }
+
+      // pending_approval orders: use the approval API
       const response = await approveRejectOrder(selectedOrder._id, action, notes);
       if (response?.success) {
         Alert.alert('Success', `Order ${action} successfully`, [
@@ -142,16 +161,55 @@ const PendingApprovalsScreen = () => {
   const handleBulkAction = async () => {
     try {
       setProcessing(true);
-      const response = await bulkApproveRejectOrders([...selectedIds], bulkAction, bulkNotes || undefined);
-      if (response?.success) {
-        Alert.alert('Success', response.message || `${selectedIds.size} orders processed`);
-        setSelectedIds(new Set());
-        setShowBulkModal(false);
-        setBulkNotes('');
-        fetchPendingApprovals();
+
+      const draftOrders = orders.filter(o => selectedIds.has(o._id) && o.status === 'draft');
+      const pendingOrders = orders.filter(o => selectedIds.has(o._id) && o.status === 'pending_approval');
+      let processed = 0;
+      let failed = 0;
+
+      if (bulkAction === 'approved') {
+        // Submit each draft order (self-approves for admin)
+        for (const order of draftOrders) {
+          try {
+            const result = await submitOrderForApproval(order._id);
+            if (result?.success) processed++; else failed++;
+          } catch { failed++; }
+        }
+
+        // Bulk approve pending_approval orders
+        if (pendingOrders.length > 0) {
+          const response = await bulkApproveRejectOrders(pendingOrders.map(o => o._id), 'approved', bulkNotes || undefined);
+          if (response?.success) {
+            processed += (response.results?.filter((r: any) => r.success).length ?? pendingOrders.length);
+            failed += (response.results?.filter((r: any) => !r.success).length ?? 0);
+          } else {
+            failed += pendingOrders.length;
+          }
+        }
       } else {
-        Alert.alert('Error', response?.message || `Failed to process orders`);
+        // Reject: only handle pending_approval orders; skip drafts (they can be deleted from Order List)
+        if (draftOrders.length > 0 && pendingOrders.length === 0) {
+          Alert.alert('Info', 'Draft orders cannot be rejected here. Delete them from the Order List.');
+          return;
+        }
+        if (pendingOrders.length > 0) {
+          const response = await bulkApproveRejectOrders(pendingOrders.map(o => o._id), 'rejected', bulkNotes || undefined);
+          if (response?.success) {
+            processed += pendingOrders.length;
+          } else {
+            failed += pendingOrders.length;
+          }
+        }
       }
+
+      const msg = failed > 0
+        ? `${processed} processed, ${failed} failed`
+        : `${processed} order(s) processed successfully`;
+      Alert.alert('Done', msg);
+      setSelectedIds(new Set());
+      setShowBulkModal(false);
+      setBulkNotes('');
+      fetchPendingApprovals();
     } catch (error) {
       Alert.alert('Error', 'Failed to process orders');
     } finally {
@@ -162,7 +220,8 @@ const PendingApprovalsScreen = () => {
   // ── Colour helpers ───────────────────────────────────────────────────────
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending_approval': return '#F59E0B';
+      case 'draft': return '#F59E0B';
+      case 'pending_approval': return '#F97316';
       case 'approved': return '#10B981';
       case 'rejected': return '#EF4444';
       default: return '#6B7280';
@@ -263,16 +322,18 @@ const PendingApprovalsScreen = () => {
               style={[styles.actionButton, styles.approveButton]}
               onPress={() => { setSelectedOrder(item); setAction('approved'); setShowActionModal(true); }}
             >
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-              <Text style={styles.approveButtonText}>Approve</Text>
+              <Ionicons name={item.status === 'draft' ? 'send' : 'checkmark-circle'} size={16} color="#10B981" />
+              <Text style={styles.approveButtonText}>{item.status === 'draft' ? 'Approve' : 'Approve'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
-              onPress={() => { setSelectedOrder(item); setAction('rejected'); setShowActionModal(true); }}
-            >
-              <Ionicons name="close-circle" size={16} color="#EF4444" />
-              <Text style={styles.rejectButtonText}>Reject</Text>
-            </TouchableOpacity>
+            {item.status !== 'draft' && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.rejectButton]}
+                onPress={() => { setSelectedOrder(item); setAction('rejected'); setShowActionModal(true); }}
+              >
+                <Ionicons name="close-circle" size={16} color="#EF4444" />
+                <Text style={styles.rejectButtonText}>Reject</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -351,7 +412,7 @@ const PendingApprovalsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
-              {action === 'approved' ? 'Approve Order' : 'Reject Order'}
+              {selectedOrder?.status === 'draft' ? 'Approve Draft Order' : action === 'approved' ? 'Approve Order' : 'Reject Order'}
             </Text>
             {selectedOrder && (
               <View style={styles.orderSummary}>

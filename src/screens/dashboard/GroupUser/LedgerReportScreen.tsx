@@ -1,516 +1,498 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, SafeAreaView, ScrollView, TextInput, ActivityIndicator, Share
+  Modal, SafeAreaView, ScrollView, TextInput, ActivityIndicator,
+  Platform,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import apiService from '../../../services/api';
 
-const LedgerReportScreen = () => {
-  // --- UI Navigation ---
-  const [currentView, setCurrentView] = useState('hierarchy');
-  const [selectedLedger, setSelectedLedger] = useState<any>(null);
-  const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-  // --- Ledger list state ---
-  const [ledgers, setLedgers] = useState<any[]>([]);
+interface Transaction {
+  _id: string;
+  source: string;
+  date: string;
+  voucherNo: string;
+  type: string;
+  amount: number;
+  debit: number;
+  credit: number;
+  partyName?: string;
+  description?: string;
+  balance: number;
+  runningBalance?: number;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const formatDate = (date: Date) =>
+  `${String(date.getDate()).padStart(2,'0')} ${SHORT_MONTHS[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`;
+
+const toApiDate = (date: Date) => date.toISOString().split('T')[0];
+
+const fmtAmt = (n: number) => {
+  if (!n && n !== 0) return '—';
+  return Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+};
+
+const fmtBalance = (n: number) => {
+  if (n === 0) return '—';
+  return `₹${Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })} ${n >= 0 ? 'Dr' : 'Cr'}`;
+};
+
+const vchTypeColor = (type: string) => {
+  switch ((type || '').toLowerCase()) {
+    case 'sales':    return { bg: '#E8F5E9', text: '#2E7D32' };
+    case 'purchase': return { bg: '#FFF3E0', text: '#E65100' };
+    case 'receipt':  return { bg: '#E3F2FD', text: '#1565C0' };
+    case 'payment':  return { bg: '#FCE4EC', text: '#C62828' };
+    case 'journal':  return { bg: '#F3E5F5', text: '#6A1B9A' };
+    default:         return { bg: '#F5F5F5', text: '#546E7A' };
+  }
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+const LedgerReportScreen = () => {
+  const [currentView, setCurrentView] = useState<'list' | 'report'>('list');
+  const [selectedLedger, setSelectedLedger] = useState<any>(null);
+
+  // Ledger list
+  const [ledgers, setLedgers]       = useState<any[]>([]);
   const [loadingLedgers, setLoadingLedgers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- Transaction state ---
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [ledgerDetail, setLedgerDetail] = useState<any>(null);   // full ledger doc
-  const [ledgerSummary, setLedgerSummary] = useState<any>(null); // summary stats
-  const [loadingTransactions, setLoadingTransactions] = useState(false);
+  // Transactions
+  const [transactions, setTransactions]     = useState<Transaction[]>([]);
+  const [ledgerSummary, setLedgerSummary]   = useState<any>(null);
+  const [loadingTxns, setLoadingTxns]       = useState(false);
 
-  // --- Date States ---
+  // Date filter
   const [isDateModalVisible, setDateModalVisible] = useState(false);
-  const [dateLabel, setDateLabel] = useState('This Year');
-  const [dateRange, setDateRange] = useState('');
+  const [dateLabel, setDateLabel]     = useState('All');
+  const [dateRange, setDateRange]     = useState('All Time');
   const [showCalendar, setShowCalendar] = useState(false);
-  const [calendarStartDate, setCalendarStartDate] = useState<Date | null>(null);
-  const [calendarEndDate, setCalendarEndDate] = useState<Date | null>(null);
+  const [calStart, setCalStart] = useState<Date | null>(null);
+  const [calEnd,   setCalEnd]   = useState<Date | null>(null);
   const [startDateParam, setStartDateParam] = useState<string | undefined>(undefined);
-  const [endDateParam, setEndDateParam] = useState<string | undefined>(undefined);
+  const [endDateParam,   setEndDateParam]   = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    fetchLedgers();
-    // Default to "All Time" so data from any fiscal year shows immediately
-    setDateLabel('All');
-    setDateRange('All Time');
-    setStartDateParam(undefined);
-    setEndDateParam(undefined);
-  }, []);
+  useEffect(() => { fetchLedgers(); }, []);
+
+  // ── Data fetching ────────────────────────────────────────────────────────
 
   const fetchLedgers = async () => {
     try {
       setLoadingLedgers(true);
       const result = await apiService.adminGetAllDealers();
-      if (result?.success && result?.data?.dealers) {
-        setLedgers(result.data.dealers);
+      setLedgers(result?.data?.dealers || []);
+    } catch { setLedgers([]); }
+    finally { setLoadingLedgers(false); }
+  };
+
+  const fetchLedgerDetails = async (ledgerId: string, sd?: string, ed?: string) => {
+    try {
+      setLoadingTxns(true);
+      const params: any = {};
+      if (sd) params.startDate = sd;
+      if (ed) params.endDate   = ed;
+      const result = await apiService.getLedgerDetails(ledgerId, params);
+      if (result?.success && result?.data) {
+        setLedgerSummary(result.data.summary || null);
+        const raw: Transaction[] = result.data.transactions || [];
+        // Calculate running balance (ascending order = oldest first from backend)
+        const opening = result.data.summary?.openingBalance || 0;
+        let running = opening;
+        const withBalance = raw.map(t => {
+          running = running + (t.debit || 0) - (t.credit || 0);
+          return { ...t, runningBalance: running };
+        });
+        setTransactions(withBalance);
       } else {
-        setLedgers([]);
+        setLedgerSummary(null);
+        setTransactions([]);
       }
-    } catch (e) {
-      setLedgers([]);
-    } finally {
-      setLoadingLedgers(false);
+    } catch {
+      setLedgerSummary(null);
+      setTransactions([]);
+    } finally { setLoadingTxns(false); }
+  };
+
+  // ── Date helpers ─────────────────────────────────────────────────────────
+
+  const applyDateRange = (label: string, start: Date | null, end: Date | null, range: string) => {
+    const sd = start ? toApiDate(start) : undefined;
+    const ed = end   ? toApiDate(end)   : undefined;
+    setDateLabel(label);
+    setDateRange(range);
+    setStartDateParam(sd);
+    setEndDateParam(ed);
+    setDateModalVisible(false);
+    if (selectedLedger) fetchLedgerDetails(selectedLedger._id, sd, ed);
+  };
+
+  const handlePredefinedDate = (item: string) => {
+    const today = new Date();
+    switch (item) {
+      case 'Today':
+        applyDateRange('Today', today, today, formatDate(today));
+        break;
+      case 'Yesterday': {
+        const y = new Date(today); y.setDate(y.getDate() - 1);
+        applyDateRange('Yesterday', y, y, formatDate(y));
+        break;
+      }
+      case 'This Week': {
+        const s = new Date(today); s.setDate(today.getDate() - today.getDay());
+        applyDateRange('This Week', s, today, `${formatDate(s)} - ${formatDate(today)}`);
+        break;
+      }
+      case 'This Month': {
+        const s = new Date(today.getFullYear(), today.getMonth(), 1);
+        applyDateRange('This Month', s, today, `${formatDate(s)} - ${formatDate(today)}`);
+        break;
+      }
+      case 'Last Month': {
+        const s = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const e = new Date(today.getFullYear(), today.getMonth(), 0);
+        applyDateRange('Last Month', s, e, `${formatDate(s)} - ${formatDate(e)}`);
+        break;
+      }
+      case 'This Year': {
+        const s = new Date(today.getFullYear(), 3, 1);
+        const e = new Date(today.getFullYear() + 1, 2, 31);
+        applyDateRange('This Year', s, e, `${formatDate(s)} - ${formatDate(e)}`);
+        break;
+      }
+      case 'Last Year': {
+        const s = new Date(today.getFullYear() - 1, 3, 1);
+        const e = new Date(today.getFullYear(), 2, 31);
+        applyDateRange('Last Year', s, e, `${formatDate(s)} - ${formatDate(e)}`);
+        break;
+      }
+      case 'All':
+        applyDateRange('All', null, null, 'All Time');
+        break;
     }
   };
 
-  const fetchLedgerDetails = async (ledgerId: string) => {
-    try {
-      setLoadingTransactions(true);
-      const params: any = {};
-      if (startDateParam) params.startDate = startDateParam;
-      if (endDateParam) params.endDate = endDateParam;
-      const result = await apiService.getLedgerDetails(ledgerId, params);
-      if (result?.success && result?.data) {
-        setLedgerDetail(result.data?.ledger || null);
-        setLedgerSummary(result.data?.summary || null);
-        const txns = result.data?.transactions || result.data?.entries || [];
-        setTransactions(Array.isArray(txns) ? txns : []);
-      } else {
-        setTransactions([]);
-        setLedgerDetail(null);
-        setLedgerSummary(null);
-      }
-    } catch (e) {
-      setTransactions([]);
-      setLedgerDetail(null);
-      setLedgerSummary(null);
-    } finally {
-      setLoadingTransactions(false);
+  const handleCalendarSave = () => {
+    if (calStart && calEnd) {
+      const label = 'Custom';
+      const range = `${formatDate(calStart)} - ${formatDate(calEnd)}`;
+      applyDateRange(label, calStart, calEnd, range);
+      setShowCalendar(false);
+      setCalStart(null);
+      setCalEnd(null);
     }
   };
+
+  const handleDayPress = (date: Date) => {
+    if (!calStart || (calStart && calEnd)) {
+      setCalStart(date); setCalEnd(null);
+    } else {
+      if (date < calStart) { setCalEnd(calStart); setCalStart(date); }
+      else { setCalEnd(date); }
+    }
+  };
+
+  const isSameDay = (a: Date | null, b: Date | null) =>
+    !!a && !!b && a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+
+  const inRange = (d: Date, s: Date | null, e: Date | null) =>
+    !!s && !!e && d >= s && d <= e;
+
+  // ── Calendar render (past months only) ──────────────────────────────────
+
+  const renderCalendarMonth = (year: number, month: number) => {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay    = new Date(year, month, 1).getDay();
+    const cells: React.ReactNode[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(<View key={`e${i}`} style={styles.calDay} />);
+    for (let day = 1; day <= daysInMonth; day++) {
+      const cur     = new Date(year, month, day);
+      const isStart = isSameDay(cur, calStart);
+      const isEnd   = isSameDay(cur, calEnd);
+      const inR     = calStart && calEnd && inRange(cur, calStart, calEnd);
+      cells.push(
+        <TouchableOpacity
+          key={day}
+          style={[styles.calDay, (isStart || isEnd) && styles.calDaySelected, inR && !isStart && !isEnd && styles.calDayInRange]}
+          onPress={() => handleDayPress(cur)}
+        >
+          <Text style={[(isStart || isEnd) ? styles.calDayTxtSel : styles.calDayTxt]}>{day}</Text>
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <View key={`${year}-${month}`} style={styles.calMonth}>
+        <Text style={styles.calMonthTitle}>{MONTH_NAMES[month]} {year}</Text>
+        <View style={styles.calWeekRow}>
+          {['S','M','T','W','T','F','S'].map((d, i) => <Text key={i} style={styles.calWeekDay}>{d}</Text>)}
+        </View>
+        <View style={styles.calGrid}>{cells}</View>
+      </View>
+    );
+  };
+
+  // Build past 12 months array (oldest → newest, so user sees most recent at bottom)
+  const calMonths = Array.from({ length: 13 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (12 - i));
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  // ── List view ────────────────────────────────────────────────────────────
 
   const filteredLedgers = ledgers.filter(l =>
     (l.LedgerName || l.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // --- DATE HELPERS ---
-  const formatDate = (date: Date) => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = monthNames[date.getMonth()];
-    const year = String(date.getFullYear()).slice(-2);
-    return `${day} ${month} ${year}`;
-  };
-
-  const toApiDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
-  };
-
-  const handlePredefinedDateSelect = (item: string) => {
-    const today = new Date();
-    let start: Date | null = null;
-    let end: Date | null = null;
-    let range = '';
-
-    switch (item) {
-      case 'Today':
-        start = today; end = today;
-        range = formatDate(today);
-        break;
-      case 'Yesterday':
-        const yest = new Date(today); yest.setDate(yest.getDate() - 1);
-        start = yest; end = yest;
-        range = formatDate(yest);
-        break;
-      case 'This Week':
-        start = new Date(today); start.setDate(today.getDate() - today.getDay());
-        end = today;
-        range = `${formatDate(start)} - ${formatDate(end)}`;
-        break;
-      case 'This Month':
-        start = new Date(today.getFullYear(), today.getMonth(), 1);
-        end = today;
-        range = `${formatDate(start)} - ${formatDate(end)}`;
-        break;
-      case 'Last Month':
-        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        end = new Date(today.getFullYear(), today.getMonth(), 0);
-        range = `${formatDate(start)} - ${formatDate(end)}`;
-        break;
-      case 'This Quarter':
-        const qm = Math.floor(today.getMonth() / 3) * 3;
-        start = new Date(today.getFullYear(), qm, 1); end = today;
-        range = `${formatDate(start)} - ${formatDate(end)}`;
-        break;
-      case 'This Year':
-        start = new Date(today.getFullYear(), 3, 1);
-        end = new Date(today.getFullYear() + 1, 2, 31);
-        range = `${formatDate(start)} - ${formatDate(end)}`;
-        break;
-      case 'Last Year':
-        start = new Date(today.getFullYear() - 1, 3, 1);
-        end = new Date(today.getFullYear(), 2, 31);
-        range = `${formatDate(start)} - ${formatDate(end)}`;
-        break;
-      case 'All':
-        range = 'All Time'; start = null; end = null;
-        break;
-    }
-
-    setDateLabel(item);
-    setDateRange(range);
-    setStartDateParam(start ? toApiDate(start) : undefined);
-    setEndDateParam(end ? toApiDate(end) : undefined);
-    setDateModalVisible(false);
-
-    if (selectedLedger) {
-      fetchLedgerDetails(selectedLedger._id || selectedLedger.id);
-    }
-  };
-
-  const handleCalendarSave = () => {
-    if (calendarStartDate && calendarEndDate) {
-      setDateLabel('Custom Date');
-      setDateRange(`${formatDate(calendarStartDate)} - ${formatDate(calendarEndDate)}`);
-      setStartDateParam(toApiDate(calendarStartDate));
-      setEndDateParam(toApiDate(calendarEndDate));
-      setShowCalendar(false);
-      setCalendarStartDate(null);
-      setCalendarEndDate(null);
-      if (selectedLedger) fetchLedgerDetails(selectedLedger._id || selectedLedger.id);
-    }
-  };
-
-  const handleCalendarDatePress = (date: Date) => {
-    if (!calendarStartDate || (calendarStartDate && calendarEndDate)) {
-      setCalendarStartDate(date); setCalendarEndDate(null);
-    } else {
-      if (date < calendarStartDate) {
-        setCalendarEndDate(calendarStartDate); setCalendarStartDate(date);
-      } else {
-        setCalendarEndDate(date);
-      }
-    }
-  };
-
-  const isSameDay = (d1: Date | null, d2: Date | null) => {
-    if (!d1 || !d2) return false;
-    return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
-  };
-
-  const isInRange = (date: Date, start: Date | null, end: Date | null) => {
-    if (!start || !end) return false;
-    return date >= start && date <= end;
-  };
-
-  const renderCalendarMonth = (year: number, month: number) => {
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const days: React.ReactNode[] = [];
-    for (let i = 0; i < firstDay; i++) days.push(<View key={`e-${i}`} style={styles.calendarDay} />);
-    for (let day = 1; day <= daysInMonth; day++) {
-      const cur = new Date(year, month, day);
-      const isStart = isSameDay(cur, calendarStartDate);
-      const isEnd = isSameDay(cur, calendarEndDate);
-      const inRange = calendarStartDate && calendarEndDate && isInRange(cur, calendarStartDate, calendarEndDate);
-      days.push(
-        <TouchableOpacity key={day} style={[styles.calendarDay, (isStart || isEnd) && styles.calendarDaySelected, inRange && !isStart && !isEnd && styles.calendarDayInRange]} onPress={() => handleCalendarDatePress(cur)}>
-          <Text style={[(isStart || isEnd) && styles.calendarDayTextSelected, styles.calendarDayText]}>{day}</Text>
-        </TouchableOpacity>
-      );
-    }
-    return (
-      <View key={`${year}-${month}`} style={styles.calendarMonthContainer}>
-        <Text style={styles.calendarMonthTitle}>{monthNames[month]} {year}</Text>
-        <View style={styles.calendarWeekDays}>
-          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <Text key={i} style={styles.calendarWeekDay}>{d}</Text>)}
-        </View>
-        <View style={styles.calendarDaysGrid}>{days}</View>
+  const renderLedgerItem = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      style={styles.ledgerRow}
+      onPress={() => {
+        setSelectedLedger(item);
+        setCurrentView('report');
+        fetchLedgerDetails(item._id, startDateParam, endDateParam);
+      }}
+    >
+      <View style={styles.ledgerRowLeft}>
+        <Text style={styles.ledgerName}>{item.LedgerName || item.name}</Text>
+        {item.LedgerMobile ? <Text style={styles.ledgerSub}>{item.LedgerMobile}</Text> : null}
       </View>
-    );
-  };
+      {item.LedgerOpening ? (
+        <Text style={styles.ledgerBalance}>
+          ₹{Math.abs(item.LedgerOpening).toLocaleString('en-IN')}
+        </Text>
+      ) : null}
+      <Ionicons name="chevron-forward" size={18} color="#CBD5E0" style={{ marginLeft: 4 }} />
+    </TouchableOpacity>
+  );
 
-  // Format currency
-  const formatAmount = (amount: number) => {
-    if (!amount && amount !== 0) return '—';
-    return `₹ ${Math.abs(amount).toLocaleString('en-IN')}`;
-  };
-
-  // Get transaction type label
-  const getTxnType = (txn: any) => txn.type || txn.voucherType || txn.transactionType || 'Entry';
-  const getTxnAmount = (txn: any) => txn.amount || txn.debit || txn.credit || 0;
-  const getTxnBalance = (txn: any) => txn.balance || txn.runningBalance || 0;
-  const getTxnDate = (txn: any) => {
-    const d = txn.date || txn.createdAt;
-    if (!d) return '—';
-    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
-  };
-  const getTxnVoucher = (txn: any) => txn.voucherNo || txn.invoiceNo || txn.reference || txn._id?.slice(-6).toUpperCase();
-  const isDebit = (txn: any) => (txn.debit > 0) || (txn.amount < 0) || (txn.type === 'Purchase');
-
-  // --- SCREEN RENDERS ---
-  const renderGroups = () => (
-    <View style={styles.container}>
-      <View style={styles.headerBlue}>
-        <Text style={styles.headerTitle}>All Ledgers</Text>
-        <View style={styles.searchContainer}>
+  const renderList = () => (
+    <View style={styles.flex1}>
+      <View style={styles.listHeader}>
+        <Text style={styles.listHeaderTitle}>Ledger Report</Text>
+        <View style={styles.searchBox}>
+          <Ionicons name="search-outline" size={16} color="#A0AEC0" />
           <TextInput
-            style={styles.searchBar}
-            placeholder="Search Ledgers..."
-            placeholderTextColor="#A0D8F1"
+            style={styles.searchInput}
+            placeholder="Search ledger..."
+            placeholderTextColor="#A0AEC0"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={16} color="#A0AEC0" />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
       {loadingLedgers ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color="#0088CC" />
-          <Text style={styles.loadingText}>Loading ledgers...</Text>
-        </View>
+        <View style={styles.centered}><ActivityIndicator size="large" color="#2B6CB0" /></View>
       ) : filteredLedgers.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyIcon}>📒</Text>
+        <View style={styles.centered}>
+          <Ionicons name="book-outline" size={48} color="#CBD5E0" />
           <Text style={styles.emptyTitle}>No Ledgers Found</Text>
-          <Text style={styles.emptySubtitle}>No ledger records available</Text>
         </View>
       ) : (
         <FlatList
           data={filteredLedgers}
-          keyExtractor={(item) => item._id || item.id || item.LedgerName}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.groupRow}
-              onPress={() => {
-                setSelectedLedger(item);
-                setCurrentView('report');
-                fetchLedgerDetails(item._id || item.id);
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.groupText}>{item.LedgerName || item.name}</Text>
-                {item.LedgerMobile && <Text style={styles.groupSub}>{item.LedgerMobile}</Text>}
-              </View>
-              <Text style={{ color: '#ccc', fontSize: 20 }}>›</Text>
-            </TouchableOpacity>
-          )}
+          keyExtractor={i => i._id || i.LedgerName}
+          renderItem={renderLedgerItem}
+          contentContainerStyle={{ paddingBottom: 20 }}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
     </View>
   );
 
-  const renderReport = () => (
-    <View style={styles.container}>
-      <View style={styles.headerBlue}>
-        <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => setCurrentView('hierarchy')}>
-            <Text style={styles.whiteLink}>← {selectedLedger?.LedgerName || selectedLedger?.name}</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.dateSelectorBar} onPress={() => setDateModalVisible(true)}>
-          <Text style={styles.chevronIcon}>‹</Text>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <Text style={styles.dateLabelText}>{dateLabel.toUpperCase()}</Text>
-            <Text style={styles.dateRangeText}>{dateRange}</Text>
+  // ── Report view ──────────────────────────────────────────────────────────
+
+  const opening  = ledgerSummary?.openingBalance  ?? 0;
+  const totDebit = ledgerSummary?.totalDebit      ?? 0;
+  const totCredit= ledgerSummary?.totalCredit     ?? 0;
+  const closing  = ledgerSummary?.closingBalance  ?? opening;
+
+  const renderTxnCard = ({ item, index }: { item: Transaction & { runningBalance: number }, index: number }) => {
+    const hasDebit  = (item.debit  || 0) > 0;
+    const hasCredit = (item.credit || 0) > 0;
+    const dateStr   = item.date
+      ? new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
+      : '—';
+    const typeMeta  = vchTypeColor(item.type);
+    const bal       = item.runningBalance ?? 0;
+    const balDr     = bal >= 0;
+    const particulars = item.partyName || item.description || selectedLedger?.LedgerName || '—';
+
+    return (
+      <View style={[styles.txnCard, index === 0 && { marginTop: 8 }]}>
+        {/* Row 1: Vch No + VchType badge */}
+        <View style={styles.txnRow1}>
+          <Text style={styles.txnVchNo}>{item.voucherNo || '—'}</Text>
+          <View style={[styles.typeBadge, { backgroundColor: typeMeta.bg }]}>
+            <Text style={[styles.typeBadgeTxt, { color: typeMeta.text }]}>{item.type || '—'}</Text>
           </View>
-          <Text style={styles.chevronIcon}>›</Text>
+        </View>
+
+        {/* Row 2: Particulars */}
+        <Text style={styles.txnParticulars} numberOfLines={2}>{particulars}</Text>
+
+        {/* Divider */}
+        <View style={styles.txnDivider} />
+
+        {/* Row 3: Date | Dr/Cr Amount | Running Balance */}
+        <View style={styles.txnRow3}>
+          <Text style={styles.txnDate}>{dateStr}</Text>
+          <View style={styles.txnAmtBlock}>
+            {hasDebit && (
+              <Text style={styles.txnDebit}>Dr ₹{fmtAmt(item.debit)}</Text>
+            )}
+            {hasCredit && (
+              <Text style={styles.txnCredit}>Cr ₹{fmtAmt(item.credit)}</Text>
+            )}
+            {!hasDebit && !hasCredit && (
+              <Text style={styles.txnDebit}>—</Text>
+            )}
+          </View>
+          <Text style={[styles.txnBal, { color: balDr ? '#1565C0' : '#C62828' }]}>
+            ₹{fmtAmt(bal)}{'\n'}
+            <Text style={styles.txnBalLabel}>{balDr ? 'Dr' : 'Cr'}</Text>
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderReport = () => (
+    <View style={styles.flex1}>
+      {/* Header */}
+      <View style={styles.reportHeader}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => setCurrentView('list')}>
+          <Ionicons name="arrow-back" size={20} color="#fff" />
+          <Text style={styles.backBtnTxt} numberOfLines={1}>
+            {selectedLedger?.LedgerName || 'Back'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.datePill} onPress={() => setDateModalVisible(true)}>
+          <Ionicons name="calendar-outline" size={14} color="#90CDF4" />
+          <View style={{ marginLeft: 6 }}>
+            <Text style={styles.datePillLabel}>{dateLabel.toUpperCase()}</Text>
+            <Text style={styles.datePillRange}>{dateRange}</Text>
+          </View>
+          <Ionicons name="chevron-down" size={14} color="#90CDF4" style={{ marginLeft: 4 }} />
         </TouchableOpacity>
       </View>
 
-      {(ledgerSummary || ledgerDetail) && (
-        <View style={styles.balanceRow}>
-          <Text style={styles.balanceLabel}>Opening Balance</Text>
-          <Text style={styles.balanceValue}>{formatAmount(ledgerSummary?.openingBalance ?? ledgerDetail?.LedgerOpening ?? 0)}</Text>
+      {/* Summary cards */}
+      {ledgerSummary && (
+        <View style={styles.summarySection}>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLbl}>Opening Balance</Text>
+              <Text style={[styles.summaryVal, { color: '#2D3748' }]}>{fmtBalance(opening)}</Text>
+            </View>
+          </View>
+          <View style={[styles.summaryRow, { marginTop: 8 }]}>
+            <View style={[styles.summaryItem, styles.summaryHalf]}>
+              <Text style={styles.summaryLbl}>Total Debit</Text>
+              <Text style={[styles.summaryVal, { color: '#C53030' }]}>₹{fmtAmt(totDebit)}</Text>
+            </View>
+            <View style={styles.summaryDividerV} />
+            <View style={[styles.summaryItem, styles.summaryHalf]}>
+              <Text style={styles.summaryLbl}>Total Credit</Text>
+              <Text style={[styles.summaryVal, { color: '#276749' }]}>₹{fmtAmt(totCredit)}</Text>
+            </View>
+          </View>
+          <View style={styles.closingRow}>
+            <Text style={styles.closingLbl}>Closing Balance</Text>
+            <Text style={[styles.closingVal, { color: closing >= 0 ? '#1565C0' : '#C62828' }]}>
+              {fmtBalance(closing)}
+            </Text>
+          </View>
         </View>
       )}
 
-      {loadingTransactions ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color="#0088CC" />
-          <Text style={styles.loadingText}>Loading transactions...</Text>
+      {/* Transaction list */}
+      {loadingTxns ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#2B6CB0" />
+          <Text style={styles.loadingTxt}>Loading transactions...</Text>
         </View>
       ) : transactions.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyIcon}>📄</Text>
+        <View style={styles.centered}>
+          <Ionicons name="document-text-outline" size={52} color="#CBD5E0" />
           <Text style={styles.emptyTitle}>No Transactions</Text>
-          <Text style={styles.emptySubtitle}>No transactions found for selected period</Text>
+          <Text style={styles.emptySubtitle}>Try selecting a wider date range</Text>
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View>
-            {/* Table header */}
-            <View style={styles.tableHeader}>
-              <Text style={[styles.thCell, { width: 72 }]}>Date</Text>
-              <Text style={[styles.thCell, { width: 120 }]}>Particulars</Text>
-              <Text style={[styles.thCell, { width: 72 }]}>Vch No</Text>
-              <Text style={[styles.thCell, { width: 72 }]}>VchType</Text>
-              <Text style={[styles.thCell, { width: 80, textAlign: 'right' }]}>Debit</Text>
-              <Text style={[styles.thCell, { width: 80, textAlign: 'right' }]}>Credit</Text>
-              <Text style={[styles.thCell, { width: 80, textAlign: 'right' }]}>Balance</Text>
-            </View>
-            {/* Table rows */}
-            {transactions.map((item: any, index: number) => {
-              const debit = item.debit > 0 ? item.debit : (item.amount > 0 ? item.amount : 0);
-              const credit = item.credit > 0 ? item.credit : (item.amount < 0 ? Math.abs(item.amount) : 0);
-              const balance = item.balance || item.runningBalance || 0;
-              const date = item.date || item.createdAt;
-              const dateStr = date ? new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
-              const particulars = item.partyName || item.description || item.vchpartyname || '—';
-              const vchNo = item.voucherNo || item.vchnumber || item.invoiceNo || '—';
-              const vchType = item.type || item.vchtype || item.voucherType || '—';
-              return (
-                <View key={item._id || index} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
-                  <Text style={[styles.tdCell, { width: 72 }]}>{dateStr}</Text>
-                  <Text style={[styles.tdCell, { width: 120 }]} numberOfLines={2}>{particulars}</Text>
-                  <Text style={[styles.tdCell, { width: 72 }]} numberOfLines={1}>{vchNo}</Text>
-                  <Text style={[styles.tdCell, { width: 72 }]} numberOfLines={1}>{vchType}</Text>
-                  <Text style={[styles.tdCell, { width: 80, textAlign: 'right', color: debit > 0 ? '#D32F2F' : '#1F2937' }]}>
-                    {debit > 0 ? debit.toLocaleString('en-IN') : ''}
-                  </Text>
-                  <Text style={[styles.tdCell, { width: 80, textAlign: 'right', color: credit > 0 ? '#388E3C' : '#1F2937' }]}>
-                    {credit > 0 ? credit.toLocaleString('en-IN') : ''}
-                  </Text>
-                  <Text style={[styles.tdCell, { width: 80, textAlign: 'right' }]}>
-                    {balance !== 0 ? balance.toLocaleString('en-IN') : ''}
-                  </Text>
-                </View>
-              );
-            })}
-            {/* Footer - closing balance */}
-            {ledgerSummary && (
-              <View style={[styles.tableRow, { backgroundColor: '#EBF4FF' }]}>
-                <Text style={[styles.tdCell, { width: 72, fontWeight: 'bold' }]}></Text>
-                <Text style={[styles.tdCell, { width: 120, fontWeight: 'bold' }]}>Closing Balance</Text>
-                <Text style={[styles.tdCell, { width: 72 }]}></Text>
-                <Text style={[styles.tdCell, { width: 72 }]}></Text>
-                <Text style={[styles.tdCell, { width: 80 }]}></Text>
-                <Text style={[styles.tdCell, { width: 80 }]}></Text>
-                <Text style={[styles.tdCell, { width: 80, textAlign: 'right', fontWeight: 'bold' }]}>
-                  {(ledgerSummary.closingBalance || 0).toLocaleString('en-IN')}
+        <FlatList
+          data={transactions as any}
+          keyExtractor={(item, i) => item._id || String(i)}
+          renderItem={renderTxnCard}
+          contentContainerStyle={styles.txnList}
+          ListFooterComponent={
+            ledgerSummary ? (
+              <View style={styles.closingCard}>
+                <Text style={styles.closingCardLbl}>Closing Balance</Text>
+                <Text style={[styles.closingCardVal, { color: closing >= 0 ? '#1565C0' : '#C62828' }]}>
+                  {fmtBalance(closing)}
                 </Text>
               </View>
-            )}
-          </View>
-        </ScrollView>
+            ) : null
+          }
+        />
       )}
     </View>
   );
 
-  const renderDetail = () => {
-    if (!selectedVoucher) return null;
-    const amount = getTxnAmount(selectedVoucher);
-    const isNeg = isDebit(selectedVoucher);
-    const isPaid = selectedVoucher.status === 'paid' || selectedVoucher.status === 'PAID';
+  // ── Date Modal ───────────────────────────────────────────────────────────
 
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.detailHeader}>
-          <TouchableOpacity onPress={() => setCurrentView('report')}>
-            <Text style={styles.whiteLink}>← Voucher: {getTxnVoucher(selectedVoucher)}</Text>
-          </TouchableOpacity>
-          <View style={styles.detailHero}>
-            <Text style={styles.detailAmountBig}>{isNeg ? '-' : ''}{formatAmount(amount)}</Text>
-            <Text style={styles.detailClientName}>{selectedLedger?.LedgerName || selectedLedger?.name}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: isPaid ? '#388E3C' : '#D32F2F' }]}>
-              <Text style={styles.statusText}>{selectedVoucher.status?.toUpperCase() || (isNeg ? 'DEBIT' : 'CREDIT')}</Text>
-            </View>
-          </View>
-          <View style={styles.invoiceDueDates}>
-            <View>
-              <Text style={styles.dateSub}>Date</Text>
-              <Text style={styles.dateMain}>{getTxnDate(selectedVoucher)}</Text>
-            </View>
-            {selectedVoucher.dueDate && (
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.dateSub}>Due Date</Text>
-                <Text style={styles.dateMain}>{new Date(selectedVoucher.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</Text>
-              </View>
-            )}
-          </View>
-        </View>
+  const DATE_OPTIONS = ['Today','Yesterday','This Week','This Month','Last Month','This Year','Last Year','All','Custom Date'];
 
-        <ScrollView style={styles.scrollContent}>
-          {selectedVoucher.items && selectedVoucher.items.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>ITEMS</Text>
-              {selectedVoucher.items.map((item: any, i: number) => (
-                <View key={i} style={styles.itemCard}>
-                  <View style={styles.itemHeader}>
-                    <Text style={styles.fullItemName}>{item.name || item.productName}</Text>
-                    <Text style={styles.fullItemPrice}>₹ {(item.total || item.amount || 0).toLocaleString('en-IN')}</Text>
-                  </View>
-                  <View style={styles.itemDetails}>
-                    <Text style={styles.itemDetailText}>Qty: {item.qty || item.quantity} {item.unit || 'pc'}</Text>
-                    <Text style={styles.itemDetailText}>Rate: ₹ {(item.rate || item.price || 0).toLocaleString('en-IN')}</Text>
-                  </View>
-                </View>
-              ))}
-            </>
-          )}
-
-          <Text style={styles.sectionTitle}>SUMMARY</Text>
-          <View style={styles.summaryBox}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabelBlue}>Gross Total</Text>
-              <Text style={styles.summaryValueBlue}>{formatAmount(selectedVoucher.grossTotal || amount)}</Text>
-            </View>
-            {selectedVoucher.taxAmount > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tax</Text>
-                <Text style={styles.summaryValue}>{formatAmount(selectedVoucher.taxAmount)}</Text>
-              </View>
-            )}
-            <View style={[styles.summaryRow, styles.summaryTotal]}>
-              <Text style={styles.summaryTotalLabel}>Total</Text>
-              <Text style={styles.summaryTotalValue}>{formatAmount(selectedVoucher.netAmount || amount)}</Text>
-            </View>
-          </View>
-
-          {selectedVoucher.notes && (
-            <>
-              <Text style={styles.sectionTitle}>NOTES</Text>
-              <View style={styles.termsBox}>
-                <Text style={styles.termsText}>{selectedVoucher.notes}</Text>
-              </View>
-            </>
-          )}
-          <View style={{ height: 20 }} />
-        </ScrollView>
-
-        <TouchableOpacity
-          style={styles.shareBtn}
-          onPress={() => Share.share({ message: `Ledger Entry\nVoucher: ${getTxnVoucher(selectedVoucher)}\nAmount: ${formatAmount(amount)}\nDate: ${getTxnDate(selectedVoucher)}` })}
-        >
-          <Text style={styles.shareBtnText}>SHARE DETAILS</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  };
+  // ── Main render ──────────────────────────────────────────────────────────
 
   return (
-    <View style={{ flex: 1 }}>
-      {currentView === 'hierarchy' && renderGroups()}
+    <View style={styles.flex1}>
+      {currentView === 'list'   && renderList()}
       {currentView === 'report' && renderReport()}
-      {currentView === 'detail' && renderDetail()}
 
-      {/* Date Modal */}
+      {/* Date picker modal */}
       <Modal visible={isDateModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Date</Text>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Select Period</Text>
               <TouchableOpacity onPress={() => setDateModalVisible(false)}>
-                <Text style={{ fontSize: 20 }}>✕</Text>
+                <Ionicons name="close" size={22} color="#4A5568" />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {['Today', 'Yesterday', 'This Week', 'This Month', 'Last Month', 'This Quarter', 'This Year', 'Last Year', 'All', 'Custom Date'].map(item => (
-                <TouchableOpacity key={item} style={styles.modalOption} onPress={() => {
-                  if (item === 'Custom Date') {
-                    setDateModalVisible(false);
-                    setTimeout(() => setShowCalendar(true), 300);
-                  } else {
-                    handlePredefinedDateSelect(item);
-                  }
-                }}>
-                  <Text style={[styles.optionText, item === dateLabel && { color: '#0088cc', fontWeight: 'bold' }]}>{item}</Text>
+              {DATE_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.modalOpt, opt === dateLabel && styles.modalOptActive]}
+                  onPress={() => {
+                    if (opt === 'Custom Date') {
+                      setDateModalVisible(false);
+                      setTimeout(() => setShowCalendar(true), 300);
+                    } else {
+                      handlePredefinedDate(opt);
+                    }
+                  }}
+                >
+                  <Text style={[styles.modalOptTxt, opt === dateLabel && styles.modalOptTxtActive]}>
+                    {opt}
+                  </Text>
+                  {opt === dateLabel && <Ionicons name="checkmark" size={18} color="#2B6CB0" />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -518,30 +500,37 @@ const LedgerReportScreen = () => {
         </View>
       </Modal>
 
-      {/* Calendar Modal */}
+      {/* Calendar modal */}
       <Modal visible={showCalendar} transparent animationType="slide">
-        <View style={styles.calendarOverlay}>
-          <View style={styles.calendarModal}>
-            <View style={styles.calendarHeader}>
-              <TouchableOpacity onPress={() => { setShowCalendar(false); setCalendarStartDate(null); setCalendarEndDate(null); }}>
-                <Text style={styles.calendarCloseBtn}>✕</Text>
+        <View style={styles.calOverlay}>
+          <View style={styles.calContainer}>
+            {/* Cal header */}
+            <View style={styles.calHeader}>
+              <TouchableOpacity onPress={() => { setShowCalendar(false); setCalStart(null); setCalEnd(null); }}>
+                <Ionicons name="close" size={22} color="#fff" />
               </TouchableOpacity>
-              <Text style={styles.calendarHeaderTitle}>SELECT RANGE</Text>
-              <TouchableOpacity onPress={handleCalendarSave} disabled={!calendarStartDate || !calendarEndDate}>
-                <Text style={[styles.calendarSaveBtn, (!calendarStartDate || !calendarEndDate) && { opacity: 0.3 }]}>SAVE</Text>
+              <Text style={styles.calHeaderTitle}>SELECT DATE RANGE</Text>
+              <TouchableOpacity
+                onPress={handleCalendarSave}
+                disabled={!calStart || !calEnd}
+              >
+                <Text style={[styles.calSaveBtn, (!calStart || !calEnd) && { opacity: 0.3 }]}>SAVE</Text>
               </TouchableOpacity>
             </View>
-            {calendarStartDate && calendarEndDate && (
-              <View style={styles.calendarSelectedRange}>
-                <Text style={styles.calendarSelectedText}>{formatDate(calendarStartDate)} - {formatDate(calendarEndDate)}</Text>
+
+            {/* Selected range display */}
+            {(calStart || calEnd) && (
+              <View style={styles.calRangeBar}>
+                <Text style={styles.calRangeTxt}>
+                  {calStart ? formatDate(calStart) : '—'} → {calEnd ? formatDate(calEnd) : '—'}
+                </Text>
               </View>
             )}
+
+            {/* Months (past 12 + current, scroll up to see older) */}
             <ScrollView showsVerticalScrollIndicator={false}>
-              {[0, 1, 2, 3, 4, 5].map(offset => {
-                const d = new Date(); d.setMonth(d.getMonth() + offset);
-                return renderCalendarMonth(d.getFullYear(), d.getMonth());
-              })}
-              <View style={{ height: 20 }} />
+              {calMonths.map(({ year, month }) => renderCalendarMonth(year, month))}
+              <View style={{ height: 24 }} />
             </ScrollView>
           </View>
         </View>
@@ -550,118 +539,172 @@ const LedgerReportScreen = () => {
   );
 };
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7F9' },
-  headerBlue: { backgroundColor: '#0088CC', padding: 15, paddingTop: 40 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0077B3', borderRadius: 5, paddingHorizontal: 10, marginTop: 10 },
-  searchBar: { flex: 1, height: 40, color: '#fff' },
-  headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  whiteLink: { color: '#fff', fontSize: 16 },
-  dateSelectorBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0077B3', padding: 10, borderRadius: 5, marginTop: 15 },
-  dateLabelText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  dateRangeText: { color: '#fff', fontSize: 13 },
-  chevronIcon: { color: '#fff', fontSize: 20 },
-  groupRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff' },
-  groupText: { fontSize: 16, color: '#333' },
-  groupSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-  balanceRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: '#EBF4FA' },
-  balanceLabel: { color: '#555', fontSize: 14 },
-  balanceValue: { fontWeight: 'bold', fontSize: 16, color: '#333' },
-  reportCard: { backgroundColor: '#fff', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  voucherHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  vDate: { color: '#555', fontSize: 14, fontWeight: 'bold' },
-  itemSmallText: { fontSize: 12, color: '#888', marginTop: 2 },
-  vAmount: { fontSize: 16, fontWeight: 'bold' },
-  vRunningBal: { color: '#999', fontSize: 12 },
-  detailHeader: { backgroundColor: '#0088CC', padding: 15, paddingTop: 40 },
-  detailHero: { alignItems: 'center', paddingVertical: 20 },
-  detailAmountBig: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
-  detailClientName: { color: '#fff', fontSize: 18, marginTop: 5 },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4, marginTop: 10 },
-  statusText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  invoiceDueDates: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
-  dateSub: { color: '#AAD4FF', fontSize: 12 },
-  dateMain: { color: '#fff', fontSize: 15, fontWeight: '500' },
-  scrollContent: { flex: 1, padding: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#999', marginTop: 20, marginBottom: 12, letterSpacing: 0.5 },
-  itemCard: { backgroundColor: '#fff', padding: 15, borderRadius: 6, marginBottom: 10, borderWidth: 1, borderColor: '#E5E5E5' },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  fullItemName: { fontSize: 16, color: '#333', fontWeight: '500', flex: 1 },
-  fullItemPrice: { fontSize: 16, fontWeight: 'bold', color: '#333', marginLeft: 10 },
-  itemDetails: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  itemDetailText: { fontSize: 13, color: '#777' },
-  summaryBox: { backgroundColor: '#F9FAFB', padding: 15, borderRadius: 6, borderWidth: 1, borderColor: '#E5E5E5' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
-  summaryLabel: { fontSize: 14, color: '#666' },
-  summaryValue: { fontSize: 14, color: '#333', fontWeight: '500' },
-  summaryLabelBlue: { fontSize: 15, color: '#0088CC', fontWeight: '600' },
-  summaryValueBlue: { fontSize: 15, color: '#0088CC', fontWeight: '600' },
-  summaryTotal: { borderTopWidth: 1, borderTopColor: '#E0E0E0', marginTop: 8, paddingTop: 12 },
-  summaryTotalLabel: { fontSize: 16, color: '#333', fontWeight: 'bold' },
-  summaryTotalValue: { fontSize: 16, color: '#333', fontWeight: 'bold' },
-  termsBox: { backgroundColor: '#F9FAFB', padding: 15, borderRadius: 6, borderWidth: 1, borderColor: '#E5E5E5' },
-  termsText: { color: '#555', fontSize: 14, lineHeight: 20 },
-  shareBtn: { margin: 15, padding: 16, backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#0088CC', alignItems: 'center', borderRadius: 6 },
-  shareBtnText: { color: '#0088CC', fontWeight: 'bold', fontSize: 15 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 15, borderTopRightRadius: 15, padding: 20, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#eee', paddingBottom: 15, marginBottom: 10 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold' },
-  modalOption: { paddingVertical: 15, borderBottomWidth: 0.5, borderColor: '#f0f0f0' },
-  optionText: { fontSize: 16, color: '#444' },
-  calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  calendarModal: { flex: 1, backgroundColor: '#0088CC', paddingTop: 40 },
-  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
-  calendarCloseBtn: { color: '#fff', fontSize: 24, fontWeight: 'bold', width: 40 },
-  calendarHeaderTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
-  calendarSaveBtn: { color: '#fff', fontSize: 14, fontWeight: 'bold', width: 40, textAlign: 'right' },
-  calendarSelectedRange: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0088CC', paddingHorizontal: 15, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#0077B3' },
-  calendarSelectedText: { color: '#fff', fontSize: 15 },
-  calendarMonthContainer: { backgroundColor: '#fff', marginBottom: 1, padding: 15 },
-  calendarMonthTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 15 },
-  calendarWeekDays: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
-  calendarWeekDay: { width: 40, textAlign: 'center', fontSize: 13, fontWeight: '600', color: '#666' },
-  calendarDaysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calendarDay: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', margin: 2 },
-  calendarDayText: { fontSize: 15, color: '#333' },
-  calendarDaySelected: { backgroundColor: '#0088CC', borderRadius: 20 },
-  calendarDayTextSelected: { color: '#fff', fontWeight: 'bold' },
-  calendarDayInRange: { backgroundColor: '#B3E5FC', borderRadius: 20 },
-  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
-  loadingText: { color: '#6B7280', marginTop: 12, fontSize: 14 },
-  emptyBox: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937', marginBottom: 6 },
-  emptySubtitle: { fontSize: 13, color: '#6B7280' },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#1E3A5F',
-    paddingVertical: 8,
+  flex1: { flex: 1, backgroundColor: '#F7FAFC' },
+
+  // ── List ──
+  listHeader: {
+    backgroundColor: '#1A365D',
+    paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  thCell: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+  listHeaderTitle: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  searchBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#2D4A7A', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    gap: 8,
   },
-  tableRow: {
-    flexDirection: 'row',
+  searchInput: { flex: 1, color: '#fff', fontSize: 14 },
+
+  ledgerRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14,
+  },
+  ledgerRowLeft: { flex: 1 },
+  ledgerName: { fontSize: 15, fontWeight: '600', color: '#1A202C' },
+  ledgerSub:  { fontSize: 12, color: '#718096', marginTop: 2 },
+  ledgerBalance: { fontSize: 14, fontWeight: '700', color: '#2B6CB0', marginRight: 4 },
+  separator: { height: 1, backgroundColor: '#EDF2F7', marginLeft: 16 },
+
+  // ── Report header ──
+  reportHeader: {
+    backgroundColor: '#1A365D',
+    paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  backBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '600', flex: 1 },
+  datePill: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#2A4A7F', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, alignSelf: 'flex-start',
+  },
+  datePillLabel: { color: '#BEE3F8', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  datePillRange: { color: '#fff', fontSize: 13, fontWeight: '500', marginTop: 1 },
+
+  // ── Summary ──
+  summarySection: {
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingVertical: 6,
+    marginHorizontal: 12,
+    marginTop: 10,
+    borderRadius: 12,
+    padding: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
-  tableRowAlt: {
-    backgroundColor: '#F9FAFB',
+  summaryRow: { flexDirection: 'row', alignItems: 'center' },
+  summaryItem: { flex: 1 },
+  summaryHalf: { flex: 1, alignItems: 'center' },
+  summaryLbl: { fontSize: 11, color: '#718096', fontWeight: '500', marginBottom: 2 },
+  summaryVal: { fontSize: 15, fontWeight: '700' },
+  summaryDividerV: { width: 1, height: 36, backgroundColor: '#E2E8F0' },
+  closingRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 10, paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: '#E2E8F0',
   },
-  tdCell: {
-    fontSize: 11,
-    color: '#374151',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  closingLbl: { fontSize: 13, fontWeight: '600', color: '#2D3748' },
+  closingVal: { fontSize: 16, fontWeight: '800' },
+
+  // ── Transaction cards ──
+  txnList: { paddingHorizontal: 12, paddingBottom: 20 },
+  txnCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10, marginBottom: 8,
+    padding: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    borderWidth: 1, borderColor: '#EDF2F7',
   },
+  txnRow1: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  txnVchNo: { fontSize: 14, fontWeight: '700', color: '#1A202C', flex: 1 },
+  typeBadge: {
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6,
+  },
+  typeBadgeTxt: { fontSize: 11, fontWeight: '700' },
+
+  txnParticulars: { fontSize: 13, color: '#4A5568', marginBottom: 8, lineHeight: 18 },
+
+  txnDivider: { height: 1, backgroundColor: '#EDF2F7', marginBottom: 8 },
+
+  txnRow3: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  txnDate: { fontSize: 12, color: '#718096', fontWeight: '500', flex: 0, minWidth: 68 },
+  txnAmtBlock: { flex: 1, alignItems: 'center' },
+  txnDebit:  { fontSize: 13, fontWeight: '700', color: '#C53030' },
+  txnCredit: { fontSize: 13, fontWeight: '700', color: '#276749' },
+  txnBal:    { fontSize: 13, fontWeight: '800', textAlign: 'right' },
+  txnBalLabel: { fontSize: 10, fontWeight: '600' },
+
+  // Closing balance card
+  closingCard: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#EBF8FF',
+    marginHorizontal: 0, marginTop: 4,
+    borderRadius: 10, padding: 14,
+    borderWidth: 1, borderColor: '#BEE3F8',
+  },
+  closingCardLbl: { fontSize: 14, fontWeight: '700', color: '#2D3748' },
+  closingCardVal: { fontSize: 16, fontWeight: '800' },
+
+  // ── Common ──
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60, gap: 10 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#4A5568' },
+  emptySubtitle: { fontSize: 13, color: '#A0AEC0', marginTop: 4 },
+  loadingTxt: { fontSize: 14, color: '#718096', marginTop: 8 },
+
+  // ── Date Modal ──
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, maxHeight: '70%',
+  },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1A202C' },
+  modalOpt: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F7FAFC',
+  },
+  modalOptActive: { backgroundColor: '#EBF8FF', marginHorizontal: -4, paddingHorizontal: 4, borderRadius: 8 },
+  modalOptTxt: { fontSize: 16, color: '#4A5568' },
+  modalOptTxtActive: { color: '#2B6CB0', fontWeight: '700' },
+
+  // ── Calendar ──
+  calOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  calContainer: { flex: 1, backgroundColor: '#1A365D', paddingTop: Platform.OS === 'ios' ? 44 : 0 },
+  calHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16,
+  },
+  calHeaderTitle: { color: '#fff', fontSize: 14, fontWeight: '700', letterSpacing: 1 },
+  calSaveBtn: { color: '#90CDF4', fontSize: 15, fontWeight: '700' },
+  calRangeBar: {
+    backgroundColor: '#2A4A7F', paddingHorizontal: 16, paddingVertical: 10,
+  },
+  calRangeTxt: { color: '#BEE3F8', fontSize: 14, textAlign: 'center' },
+  calMonth: { backgroundColor: '#fff', marginBottom: 2, padding: 14 },
+  calMonthTitle: { fontSize: 16, fontWeight: '700', color: '#1A202C', marginBottom: 12 },
+  calWeekRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 6 },
+  calWeekDay: { width: 36, textAlign: 'center', fontSize: 12, fontWeight: '600', color: '#718096' },
+  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calDay: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', margin: 2 },
+  calDayTxt: { fontSize: 14, color: '#2D3748' },
+  calDaySelected: { backgroundColor: '#2B6CB0', borderRadius: 18 },
+  calDayTxtSel: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  calDayInRange: { backgroundColor: '#BEE3F8', borderRadius: 18 },
 });
 
 export default LedgerReportScreen;

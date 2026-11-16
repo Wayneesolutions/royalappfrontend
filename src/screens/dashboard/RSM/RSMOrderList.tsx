@@ -78,7 +78,7 @@ interface Order {
   totalQuantity: number;
   totalAmount: number;
   notes?: string;
-  status: 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'draft' | 'pending_approval' | 'approved' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'rejected';
   orderType: string;
   createdAt: string;
   updatedAt: string;
@@ -88,7 +88,7 @@ interface Order {
 const RSMOrderList = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { user, getOrders, updateOrderStatus } = useAuth();
+  const { user, getOrders, updateOrderStatus, submitOrderForApproval } = useAuth();
   
   // Helper function to format address object to string
   const formatAddress = (address?: { street?: string; city?: string; state?: string; pincode?: string; country?: string }) => {
@@ -135,7 +135,7 @@ const RSMOrderList = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'draft' | 'approved' | 'processing' | 'shipped' | 'delivered'>('all');
+  const [filter, setFilter] = useState<'all' | 'draft' | 'pending_approval' | 'approved' | 'processing' | 'shipped' | 'delivered' | 'rejected'>('all');
   const isInitialMount = useRef(true);
 
   useEffect(() => {
@@ -207,21 +207,20 @@ const RSMOrderList = () => {
 
   const handleApproveOrder = async (orderId: string) => {
     try {
-      const response = await updateOrderStatus(orderId, { 
-        status: 'approved',
-        notes: 'Order approved by admin'
-      });
-      
+      const response = await submitOrderForApproval(orderId);
       if (response?.success) {
-        Alert.alert('Success', 'Order approved successfully!');
-        fetchOrders(); // Refresh the list
         setShowDetailsModal(false);
+        fetchOrders();
+        const msg = response.isSelfApproved
+          ? 'Order approved successfully!'
+          : 'Order submitted for approval successfully!';
+        Alert.alert('Success', msg);
       } else {
-        Alert.alert('Error', response?.message || 'Failed to approve order');
+        Alert.alert('Error', response?.message || 'Failed to submit order');
       }
     } catch (error) {
-      console.error('Error approving order:', error);
-      Alert.alert('Error', 'Failed to approve order');
+      console.error('Error submitting order for approval:', error);
+      Alert.alert('Error', 'Failed to submit order for approval');
     }
   };
 
@@ -233,11 +232,13 @@ const RSMOrderList = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return '#F59E0B';
+      case 'pending_approval': return '#F97316';
       case 'approved': return '#10B981';
       case 'processing': return '#3B82F6';
       case 'shipped': return '#8B5CF6';
       case 'delivered': return '#059669';
       case 'cancelled': return '#EF4444';
+      case 'rejected': return '#DC2626';
       default: return '#6B7280';
     }
   };
@@ -245,11 +246,13 @@ const RSMOrderList = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'draft': return 'document-outline';
+      case 'pending_approval': return 'time-outline';
       case 'approved': return 'checkmark-circle-outline';
-      case 'processing': return 'time-outline';
+      case 'processing': return 'reload-outline';
       case 'shipped': return 'car-outline';
       case 'delivered': return 'checkmark-done-circle-outline';
       case 'cancelled': return 'close-circle-outline';
+      case 'rejected': return 'ban-outline';
       default: return 'help-circle-outline';
     }
   };
@@ -476,8 +479,8 @@ const RSMOrderList = () => {
                   style={[styles.actionButton, styles.approveButton]}
                   onPress={() => handleApproveOrder(selectedOrder._id)}
                 >
-                  <Ionicons name="checkmark-circle-outline" size={20} color="#10B981" />
-                  <Text style={styles.actionButtonText}>Approve</Text>
+                  <Ionicons name="send-outline" size={20} color="#10B981" />
+                  <Text style={styles.actionButtonText}>Submit for Approval</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -525,10 +528,12 @@ const RSMOrderList = () => {
           {[
             { key: 'all', label: 'All' },
             { key: 'draft', label: 'Draft' },
+            { key: 'pending_approval', label: 'Pending Approval' },
             { key: 'approved', label: 'Approved' },
             { key: 'processing', label: 'Processing' },
             { key: 'shipped', label: 'Shipped' },
             { key: 'delivered', label: 'Delivered' },
+            { key: 'rejected', label: 'Rejected' },
           ].map((tab) => (
             <TouchableOpacity
               key={tab.key}
