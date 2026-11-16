@@ -108,7 +108,7 @@ const LedgerReportScreen = () => {
         const opening = result.data.summary?.openingBalance || 0;
         let running = opening;
         const withBalance = raw.map(t => {
-          running = running + (t.debit || 0) - (t.credit || 0);
+          running = running - (t.debit || 0) + (t.credit || 0);
           return { ...t, runningBalance: running };
         });
         setTransactions(withBalance);
