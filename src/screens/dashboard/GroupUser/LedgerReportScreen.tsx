@@ -433,9 +433,9 @@ const LedgerReportScreen = () => {
       {/* Summary cards */}
       {ledgerSummary && (
         <View style={styles.summarySection}>
-          {ledgerDebug?.ledgerParent != null && (
+          {ledgerDebug != null && (
             <Text style={{ fontSize: 10, color: '#A0AEC0', marginBottom: 6 }}>
-              Group: {ledgerDebug.ledgerParent} | Raw: {ledgerDebug.rawOpening}
+              Group: {String(ledgerDebug.ledgerParent ?? 'null')} | Raw: {ledgerDebug.rawOpening}
             </Text>
           )}
           <View style={styles.summaryRow}>
