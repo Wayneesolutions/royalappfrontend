@@ -104,14 +104,42 @@ const LedgerReportScreen = () => {
       if (result?.success && result?.data) {
         setLedgerSummary(result.data.summary || null);
         const raw: Transaction[] = result.data.transactions || [];
-        // Calculate running balance (ascending order = oldest first from backend)
+
+        // Sort oldest→newest; within same date sort by voucherType order
+        const TYPE_ORDER = ['Sales', 'Purchase', 'Receipt', 'Payment', 'Journal'];
+        raw.sort((a, b) => {
+          const dA = new Date(a.date).getTime();
+          const dB = new Date(b.date).getTime();
+          if (dA !== dB) return dA - dB;
+          const tA = TYPE_ORDER.indexOf(a.type ?? '');
+          const tB = TYPE_ORDER.indexOf(b.type ?? '');
+          return (tA < 0 ? 99 : tA) - (tB < 0 ? 99 : tB);
+        });
+
+        // Running balance: Dr always reduces magnitude, Cr always increases magnitude
+        // Works correctly for both Dr opening (positive) and Cr opening (negative)
         const opening = result.data.summary?.openingBalance || 0;
         let running = opening;
         const withBalance = raw.map(t => {
-          running = running - (t.debit || 0) + (t.credit || 0);
+          const sign = running >= 0 ? 1 : -1;
+          const newMag = Math.abs(running) - (t.debit || 0) + (t.credit || 0);
+          running = sign * newMag;
           return { ...t, runningBalance: running };
         });
-        setTransactions(withBalance);
+
+        // Inject date section headers
+        const withHeaders: any[] = [];
+        let lastDateKey = '';
+        withBalance.forEach(t => {
+          const dateKey = new Date(t.date).toDateString();
+          if (dateKey !== lastDateKey) {
+            withHeaders.push({ _isHeader: true, date: t.date, _id: `hdr-${dateKey}` });
+            lastDateKey = dateKey;
+          }
+          withHeaders.push(t);
+        });
+
+        setTransactions(withHeaders as any);
       } else {
         setLedgerSummary(null);
         setTransactions([]);
@@ -320,11 +348,21 @@ const LedgerReportScreen = () => {
   const opening  = ledgerSummary?.openingBalance  ?? 0;
   const totDebit = ledgerSummary?.totalDebit      ?? 0;
   const totCredit= ledgerSummary?.totalCredit     ?? 0;
-  const closing  = transactions.length > 0
-    ? (transactions[transactions.length - 1] as any).runningBalance ?? opening
-    : (ledgerSummary?.closingBalance ?? opening);
+  const lastTxn  = [...transactions].reverse().find((t: any) => !t._isHeader);
+  const closing  = lastTxn ? (lastTxn as any).runningBalance ?? opening : (ledgerSummary?.closingBalance ?? opening);
 
-  const renderTxnCard = ({ item, index }: { item: Transaction & { runningBalance: number }, index: number }) => {
+  const renderTxnCard = ({ item, index }: { item: any, index: number }) => {
+    // Date section header
+    if (item._isHeader) {
+      const d = new Date(item.date);
+      const label = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+      return (
+        <View style={styles.dateHeader}>
+          <Text style={styles.dateHeaderTxt}>{label}</Text>
+        </View>
+      );
+    }
+
     const hasDebit  = (item.debit  || 0) > 0;
     const hasCredit = (item.credit || 0) > 0;
     const dateStr   = item.date
@@ -435,16 +473,6 @@ const LedgerReportScreen = () => {
           keyExtractor={(item, i) => item._id || String(i)}
           renderItem={renderTxnCard}
           contentContainerStyle={styles.txnList}
-          ListFooterComponent={
-            ledgerSummary ? (
-              <View style={styles.closingCard}>
-                <Text style={styles.closingCardLbl}>Closing Balance</Text>
-                <Text style={[styles.closingCardVal, { color: closing >= 0 ? '#1565C0' : '#C62828' }]}>
-                  {fmtBalance(closing)}
-                </Text>
-              </View>
-            ) : null
-          }
         />
       )}
     </View>
@@ -613,6 +641,12 @@ const styles = StyleSheet.create({
 
   // ── Transaction rows (compact) ──
   txnList: { paddingBottom: 20 },
+  dateHeader: {
+    backgroundColor: '#EDF2F7',
+    paddingHorizontal: 16, paddingVertical: 6,
+    borderTopWidth: 1, borderTopColor: '#E2E8F0',
+  },
+  dateHeaderTxt: { fontSize: 12, fontWeight: '700', color: '#4A5568', letterSpacing: 0.3 },
   txnRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     backgroundColor: '#fff',
@@ -629,16 +663,6 @@ const styles = StyleSheet.create({
   txnAmtTxt: { fontSize: 14, fontWeight: '700' },
   txnBalParen: { fontSize: 12, fontWeight: '500', marginTop: 2 },
 
-  // Closing balance card
-  closingCard: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    marginHorizontal: 0, marginTop: 4,
-    borderRadius: 10, padding: 14,
-    borderWidth: 1, borderColor: '#BEE3F8',
-  },
-  closingCardLbl: { fontSize: 14, fontWeight: '700', color: '#2D3748' },
-  closingCardVal: { fontSize: 16, fontWeight: '800' },
 
   // ── Common ──
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60, gap: 10 },
