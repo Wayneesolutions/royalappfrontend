@@ -332,40 +332,33 @@ const LedgerReportScreen = () => {
     const bal       = item.runningBalance ?? 0;
     const balDr     = bal >= 0;
     const particulars = item.partyName || item.description || selectedLedger?.LedgerName || '—';
+    const amtVal    = hasDebit ? item.debit : (hasCredit ? item.credit : 0);
+    const amtLabel  = hasDebit ? 'Dr' : (hasCredit ? 'Cr' : '');
+    const amtColor  = hasDebit ? '#C53030' : '#276749';
 
     return (
-      <View style={[styles.txnCard, index === 0 && { marginTop: 8 }]}>
-        {/* Row 1: Vch No + VchType badge */}
-        <View style={styles.txnRow1}>
+      <View style={[styles.txnRow, index === 0 && { borderTopWidth: 0 }]}>
+        {/* Left: Vch No + date | type + particulars */}
+        <View style={styles.txnLeft}>
           <Text style={styles.txnVchNo}>{item.voucherNo || '—'}</Text>
-          <View style={[styles.typeBadge, { backgroundColor: typeMeta.bg }]}>
-            <Text style={[styles.typeBadgeTxt, { color: typeMeta.text }]}>{item.type || '—'}</Text>
-          </View>
+          <Text style={styles.txnSubLine} numberOfLines={1}>
+            {dateStr}
+            {item.type ? <Text style={[styles.txnTypeInline, { color: typeMeta.text }]}>{`  ${item.type}`}</Text> : null}
+          </Text>
+          <Text style={styles.txnParticulars} numberOfLines={1}>{particulars}</Text>
         </View>
 
-        {/* Row 2: Particulars */}
-        <Text style={styles.txnParticulars} numberOfLines={2}>{particulars}</Text>
-
-        {/* Divider */}
-        <View style={styles.txnDivider} />
-
-        {/* Row 3: Date | Dr/Cr Amount | Running Balance */}
-        <View style={styles.txnRow3}>
-          <Text style={styles.txnDate}>{dateStr}</Text>
-          <View style={styles.txnAmtBlock}>
-            {hasDebit && (
-              <Text style={styles.txnDebit}>Dr ₹{fmtAmt(item.debit)}</Text>
-            )}
-            {hasCredit && (
-              <Text style={styles.txnCredit}>Cr ₹{fmtAmt(item.credit)}</Text>
-            )}
-            {!hasDebit && !hasCredit && (
-              <Text style={styles.txnDebit}>—</Text>
-            )}
-          </View>
-          <Text style={[styles.txnBal, { color: balDr ? '#1565C0' : '#C62828' }]}>
-            ₹{fmtAmt(bal)}{'\n'}
-            <Text style={styles.txnBalLabel}>{balDr ? 'Dr' : 'Cr'}</Text>
+        {/* Right: Amount (Dr/Cr label right of value) + running balance in parens */}
+        <View style={styles.txnRight}>
+          {amtVal ? (
+            <Text style={[styles.txnAmtTxt, { color: amtColor }]}>
+              ₹{fmtAmt(amtVal)} {amtLabel}
+            </Text>
+          ) : (
+            <Text style={styles.txnAmtTxt}>—</Text>
+          )}
+          <Text style={[styles.txnBalParen, { color: balDr ? '#1565C0' : '#C62828' }]}>
+            (₹{fmtAmt(Math.abs(bal))} {balDr ? 'Dr' : 'Cr'})
           </Text>
         </View>
       </View>
@@ -583,7 +576,7 @@ const styles = StyleSheet.create({
   datePill: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#2A4A7F', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 8, alignSelf: 'flex-start',
+    paddingHorizontal: 12, paddingVertical: 8,
   },
   datePillLabel: { color: '#BEE3F8', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   datePillRange: { color: '#fff', fontSize: 13, fontWeight: '500', marginTop: 1 },
@@ -615,38 +608,22 @@ const styles = StyleSheet.create({
   closingLbl: { fontSize: 13, fontWeight: '600', color: '#2D3748' },
   closingVal: { fontSize: 16, fontWeight: '800' },
 
-  // ── Transaction cards ──
-  txnList: { paddingHorizontal: 12, paddingBottom: 20 },
-  txnCard: {
+  // ── Transaction rows (compact) ──
+  txnList: { paddingBottom: 20 },
+  txnRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     backgroundColor: '#fff',
-    borderRadius: 10, marginBottom: 8,
-    padding: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    borderWidth: 1, borderColor: '#EDF2F7',
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderTopWidth: 1, borderTopColor: '#F0F4F8',
   },
-  txnRow1: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  txnVchNo: { fontSize: 14, fontWeight: '700', color: '#1A202C', flex: 1 },
-  typeBadge: {
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 6,
-  },
-  typeBadgeTxt: { fontSize: 11, fontWeight: '700' },
-
-  txnParticulars: { fontSize: 13, color: '#4A5568', marginBottom: 8, lineHeight: 18 },
-
-  txnDivider: { height: 1, backgroundColor: '#EDF2F7', marginBottom: 8 },
-
-  txnRow3: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  txnDate: { fontSize: 12, color: '#718096', fontWeight: '500', flex: 0, minWidth: 68 },
-  txnAmtBlock: { flex: 1, alignItems: 'center' },
-  txnDebit:  { fontSize: 13, fontWeight: '700', color: '#C53030' },
-  txnCredit: { fontSize: 13, fontWeight: '700', color: '#276749' },
-  txnBal:    { fontSize: 13, fontWeight: '800', textAlign: 'right' },
-  txnBalLabel: { fontSize: 10, fontWeight: '600' },
+  txnLeft: { flex: 1, paddingRight: 12 },
+  txnVchNo: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
+  txnSubLine: { fontSize: 12, color: '#718096', marginTop: 2 },
+  txnTypeInline: { fontSize: 12, fontWeight: '600' },
+  txnParticulars: { fontSize: 12, color: '#4A5568', marginTop: 2 },
+  txnRight: { alignItems: 'flex-end', minWidth: 110 },
+  txnAmtTxt: { fontSize: 14, fontWeight: '700' },
+  txnBalParen: { fontSize: 12, fontWeight: '500', marginTop: 2 },
 
   // Closing balance card
   closingCard: {
