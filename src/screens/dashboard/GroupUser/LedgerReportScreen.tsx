@@ -69,6 +69,7 @@ const LedgerReportScreen = () => {
   // Transactions
   const [transactions, setTransactions]     = useState<Transaction[]>([]);
   const [ledgerSummary, setLedgerSummary]   = useState<any>(null);
+  const [ledgerDebug, setLedgerDebug]       = useState<any>(null);
   const [loadingTxns, setLoadingTxns]       = useState(false);
 
   // Date filter
@@ -103,6 +104,7 @@ const LedgerReportScreen = () => {
       const result = await apiService.getLedgerDetails(ledgerId, params);
       if (result?.success && result?.data) {
         setLedgerSummary(result.data.summary || null);
+        setLedgerDebug(result.data._debug || null);
         const raw: Transaction[] = result.data.transactions || [];
 
         // Sort oldest→newest; within same date sort by voucherType order
@@ -431,6 +433,11 @@ const LedgerReportScreen = () => {
       {/* Summary cards */}
       {ledgerSummary && (
         <View style={styles.summarySection}>
+          {ledgerDebug?.ledgerParent != null && (
+            <Text style={{ fontSize: 10, color: '#A0AEC0', marginBottom: 6 }}>
+              Group: {ledgerDebug.ledgerParent} | Raw: {ledgerDebug.rawOpening}
+            </Text>
+          )}
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLbl}>Opening Balance</Text>
             <Text style={[styles.summaryVal, { color: '#2D3748' }]}>{fmtBalance(opening)}</Text>
