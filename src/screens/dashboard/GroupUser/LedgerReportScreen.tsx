@@ -320,7 +320,9 @@ const LedgerReportScreen = () => {
   const opening  = ledgerSummary?.openingBalance  ?? 0;
   const totDebit = ledgerSummary?.totalDebit      ?? 0;
   const totCredit= ledgerSummary?.totalCredit     ?? 0;
-  const closing  = ledgerSummary?.closingBalance  ?? opening;
+  const closing  = transactions.length > 0
+    ? (transactions[transactions.length - 1] as any).runningBalance ?? opening
+    : (ledgerSummary?.closingBalance ?? opening);
 
   const renderTxnCard = ({ item, index }: { item: Transaction & { runningBalance: number }, index: number }) => {
     const hasDebit  = (item.debit  || 0) > 0;
@@ -338,14 +340,17 @@ const LedgerReportScreen = () => {
 
     return (
       <View style={[styles.txnRow, index === 0 && { borderTopWidth: 0 }]}>
-        {/* Left: Vch No + date | type + particulars */}
+        {/* Left: Vch No + date + type badge */}
         <View style={styles.txnLeft}>
           <Text style={styles.txnVchNo}>{item.voucherNo || '—'}</Text>
-          <Text style={styles.txnSubLine} numberOfLines={1}>
-            {dateStr}
-            {item.type ? <Text style={[styles.txnTypeInline, { color: typeMeta.text }]}>{`  ${item.type}`}</Text> : null}
-          </Text>
-          <Text style={styles.txnParticulars} numberOfLines={1}>{particulars}</Text>
+          <View style={styles.txnSubRow}>
+            <Text style={styles.txnDateTxt}>{dateStr}</Text>
+            {item.type ? (
+              <View style={[styles.txnTypeBadge, { backgroundColor: typeMeta.bg }]}>
+                <Text style={[styles.txnTypeBadgeTxt, { color: typeMeta.text }]}>{item.type}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         {/* Right: Amount (Dr/Cr label right of value) + running balance in parens */}
@@ -389,10 +394,8 @@ const LedgerReportScreen = () => {
       {ledgerSummary && (
         <View style={styles.summarySection}>
           <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLbl}>Opening Balance</Text>
-              <Text style={[styles.summaryVal, { color: '#2D3748' }]}>{fmtBalance(opening)}</Text>
-            </View>
+            <Text style={styles.summaryLbl}>Opening Balance</Text>
+            <Text style={[styles.summaryVal, { color: '#2D3748' }]}>{fmtBalance(opening)}</Text>
           </View>
           <View style={[styles.summaryRow, { marginTop: 8 }]}>
             <View style={[styles.summaryItem, styles.summaryHalf]}>
@@ -594,7 +597,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
   },
-  summaryRow: { flexDirection: 'row', alignItems: 'center' },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   summaryItem: { flex: 1 },
   summaryHalf: { flex: 1, alignItems: 'center' },
   summaryLbl: { fontSize: 11, color: '#718096', fontWeight: '500', marginBottom: 2 },
@@ -618,9 +621,10 @@ const styles = StyleSheet.create({
   },
   txnLeft: { flex: 1, paddingRight: 12 },
   txnVchNo: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
-  txnSubLine: { fontSize: 12, color: '#718096', marginTop: 2 },
-  txnTypeInline: { fontSize: 12, fontWeight: '600' },
-  txnParticulars: { fontSize: 12, color: '#4A5568', marginTop: 2 },
+  txnSubRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 },
+  txnDateTxt: { fontSize: 12, color: '#4A5568', fontWeight: '500' },
+  txnTypeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  txnTypeBadgeTxt: { fontSize: 11, fontWeight: '700' },
   txnRight: { alignItems: 'flex-end', minWidth: 110 },
   txnAmtTxt: { fontSize: 14, fontWeight: '700' },
   txnBalParen: { fontSize: 12, fontWeight: '500', marginTop: 2 },
