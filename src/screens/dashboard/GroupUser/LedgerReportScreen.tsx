@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, SafeAreaView, ScrollView, TextInput, ActivityIndicator,
+  Modal, ScrollView, TextInput, ActivityIndicator,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import apiService from '../../../services/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+type SortKey = 'date_asc' | 'date_desc' | 'type_asc' | 'billno_asc' | 'billno_desc';
 
 interface Transaction {
   _id: string;
@@ -23,6 +25,14 @@ interface Transaction {
   balance: number;
   runningBalance?: number;
 }
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'date_asc',   label: 'Date: Oldest First' },
+  { key: 'date_desc',  label: 'Date: Newest First' },
+  { key: 'type_asc',   label: 'Voucher Type (A-Z)' },
+  { key: 'billno_asc', label: 'Bill No (A-Z)' },
+  { key: 'billno_desc',label: 'Bill No (Z-A)' },
+];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -69,8 +79,11 @@ const LedgerReportScreen = () => {
   // Transactions
   const [transactions, setTransactions]     = useState<Transaction[]>([]);
   const [ledgerSummary, setLedgerSummary]   = useState<any>(null);
-  const [ledgerDebug, setLedgerDebug]       = useState<any>(null);
   const [loadingTxns, setLoadingTxns]       = useState(false);
+
+  // Sorting
+  const [sortKey, setSortKey]               = useState<SortKey>('date_asc');
+  const [isSortModalVisible, setSortModalVisible] = useState(false);
 
   // Date filter
   const [isDateModalVisible, setDateModalVisible] = useState(false);
@@ -104,10 +117,9 @@ const LedgerReportScreen = () => {
       const result = await apiService.getLedgerDetails(ledgerId, params);
       if (result?.success && result?.data) {
         setLedgerSummary(result.data.summary || null);
-        setLedgerDebug(result.data._debug || null);
         const raw: Transaction[] = result.data.transactions || [];
 
-        // Sort oldest→newest; within same date sort by voucherType order
+        // Always sort oldest→newest for correct running balance computation
         const TYPE_ORDER = ['Sales', 'Purchase', 'Receipt', 'Payment', 'Journal'];
         raw.sort((a, b) => {
           const dA = new Date(a.date).getTime();
@@ -119,7 +131,6 @@ const LedgerReportScreen = () => {
         });
 
         // Running balance: Dr always reduces magnitude, Cr always increases magnitude
-        // Works correctly for both Dr opening (positive) and Cr opening (negative)
         const opening = result.data.summary?.openingBalance || 0;
         let running = opening;
         const withBalance = raw.map(t => {
@@ -129,19 +140,7 @@ const LedgerReportScreen = () => {
           return { ...t, runningBalance: running };
         });
 
-        // Inject date section headers
-        const withHeaders: any[] = [];
-        let lastDateKey = '';
-        withBalance.forEach(t => {
-          const dateKey = new Date(t.date).toDateString();
-          if (dateKey !== lastDateKey) {
-            withHeaders.push({ _isHeader: true, date: t.date, _id: `hdr-${dateKey}` });
-            lastDateKey = dateKey;
-          }
-          withHeaders.push(t);
-        });
-
-        setTransactions(withHeaders as any);
+        setTransactions(withBalance);
       } else {
         setLedgerSummary(null);
         setTransactions([]);
@@ -350,21 +349,28 @@ const LedgerReportScreen = () => {
   const opening  = ledgerSummary?.openingBalance  ?? 0;
   const totDebit = ledgerSummary?.totalDebit      ?? 0;
   const totCredit= ledgerSummary?.totalCredit     ?? 0;
-  const lastTxn  = [...transactions].reverse().find((t: any) => !t._isHeader);
+
+  // closing = last transaction by date (transactions always stored date_asc)
+  const lastTxn  = transactions.length > 0 ? transactions[transactions.length - 1] : null;
   const closing  = lastTxn ? (lastTxn as any).runningBalance ?? opening : (ledgerSummary?.closingBalance ?? opening);
 
-  const renderTxnCard = ({ item, index }: { item: any, index: number }) => {
-    // Date section header
-    if (item._isHeader) {
-      const d = new Date(item.date);
-      const label = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
-      return (
-        <View style={styles.dateHeader}>
-          <Text style={styles.dateHeaderTxt}>{label}</Text>
-        </View>
-      );
+  const sortedTransactions = useMemo(() => {
+    const arr = [...transactions];
+    switch (sortKey) {
+      case 'date_desc':
+        return arr.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      case 'type_asc':
+        return arr.sort((a, b) => (a.type || '').localeCompare(b.type || ''));
+      case 'billno_asc':
+        return arr.sort((a, b) => (a.voucherNo || '').localeCompare(b.voucherNo || ''));
+      case 'billno_desc':
+        return arr.sort((a, b) => (b.voucherNo || '').localeCompare(a.voucherNo || ''));
+      default: // date_asc — already in correct order
+        return arr;
     }
+  }, [transactions, sortKey]);
 
+  const renderTxnCard = ({ item, index }: { item: Transaction, index: number }) => {
     const hasDebit  = (item.debit  || 0) > 0;
     const hasCredit = (item.credit || 0) > 0;
     const dateStr   = item.date
@@ -420,24 +426,24 @@ const LedgerReportScreen = () => {
             {selectedLedger?.LedgerName || 'Back'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.datePill} onPress={() => setDateModalVisible(true)}>
-          <Ionicons name="calendar-outline" size={14} color="#90CDF4" />
-          <View style={{ marginLeft: 6 }}>
-            <Text style={styles.datePillLabel}>{dateLabel.toUpperCase()}</Text>
-            <Text style={styles.datePillRange}>{dateRange}</Text>
-          </View>
-          <Ionicons name="chevron-down" size={14} color="#90CDF4" style={{ marginLeft: 4 }} />
-        </TouchableOpacity>
+        <View style={styles.headerFilterRow}>
+          <TouchableOpacity style={styles.datePill} onPress={() => setDateModalVisible(true)}>
+            <Ionicons name="calendar-outline" size={14} color="#90CDF4" />
+            <View style={{ marginLeft: 6 }}>
+              <Text style={styles.datePillLabel}>{dateLabel.toUpperCase()}</Text>
+              <Text style={styles.datePillRange}>{dateRange}</Text>
+            </View>
+            <Ionicons name="chevron-down" size={14} color="#90CDF4" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sortBtn} onPress={() => setSortModalVisible(true)}>
+            <Ionicons name="swap-vertical-outline" size={18} color="#90CDF4" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Summary cards */}
       {ledgerSummary && (
         <View style={styles.summarySection}>
-          {ledgerDebug != null && (
-            <Text style={{ fontSize: 10, color: '#A0AEC0', marginBottom: 6 }}>
-              Group: {String(ledgerDebug.ledgerParent ?? 'null')} | Raw: {ledgerDebug.rawOpening}
-            </Text>
-          )}
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLbl}>Opening Balance</Text>
             <Text style={[styles.summaryVal, { color: '#2D3748' }]}>{fmtBalance(opening)}</Text>
@@ -476,7 +482,7 @@ const LedgerReportScreen = () => {
         </View>
       ) : (
         <FlatList
-          data={transactions as any}
+          data={sortedTransactions}
           keyExtractor={(item, i) => item._id || String(i)}
           renderItem={renderTxnCard}
           contentContainerStyle={styles.txnList}
@@ -527,6 +533,32 @@ const LedgerReportScreen = () => {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Sort modal */}
+      <Modal visible={isSortModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Sort By</Text>
+              <TouchableOpacity onPress={() => setSortModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#4A5568" />
+              </TouchableOpacity>
+            </View>
+            {SORT_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.modalOpt, opt.key === sortKey && styles.modalOptActive]}
+                onPress={() => { setSortKey(opt.key); setSortModalVisible(false); }}
+              >
+                <Text style={[styles.modalOptTxt, opt.key === sortKey && styles.modalOptTxtActive]}>
+                  {opt.label}
+                </Text>
+                {opt.key === sortKey && <Ionicons name="checkmark" size={18} color="#2B6CB0" />}
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       </Modal>
@@ -611,10 +643,17 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   backBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '600', flex: 1 },
+  headerFilterRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
   datePill: {
-    flexDirection: 'row', alignItems: 'center',
+    flex: 1, flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#2A4A7F', borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 8,
+  },
+  sortBtn: {
+    backgroundColor: '#2A4A7F', borderRadius: 10,
+    padding: 10, alignItems: 'center', justifyContent: 'center',
   },
   datePillLabel: { color: '#BEE3F8', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   datePillRange: { color: '#fff', fontSize: 13, fontWeight: '500', marginTop: 1 },
@@ -648,12 +687,6 @@ const styles = StyleSheet.create({
 
   // ── Transaction rows (compact) ──
   txnList: { paddingBottom: 20 },
-  dateHeader: {
-    backgroundColor: '#EDF2F7',
-    paddingHorizontal: 16, paddingVertical: 6,
-    borderTopWidth: 1, borderTopColor: '#E2E8F0',
-  },
-  dateHeaderTxt: { fontSize: 12, fontWeight: '700', color: '#4A5568', letterSpacing: 0.3 },
   txnRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     backgroundColor: '#fff',
