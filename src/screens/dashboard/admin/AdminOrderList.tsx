@@ -58,7 +58,7 @@ interface UserNode {
 }
 
 const AdminOrderList = () => {
-  const { getOrders, approveRejectOrder, submitOrderForApproval, deleteOrder, user } = useAuth();
+  const { getOrders, approveRejectOrder, submitOrderForApproval, deleteOrder, unapproveOrder, user } = useAuth();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
 
@@ -463,6 +463,40 @@ const AdminOrderList = () => {
 
   // canDelete: only draft orders can be deleted
   const canDelete = (status: string) => status === 'draft';
+
+  // canUnapprove: approved or sent_to_tally orders can be returned to pending
+  const canUnapprove = (status: string) =>
+    ['approved', 'sent_to_tally'].includes(status);
+
+  const handleUnapprove = () => {
+    if (!selectedOrder?._id) return;
+    Alert.alert(
+      'Unapprove Order',
+      'Return this order to pending approval?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unapprove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await unapproveOrder(selectedOrder._id, 'Returned to pending by admin');
+              if (res?.success) {
+                Alert.alert('Success', 'Order returned to pending approval');
+                setShowOrderDetails(false);
+                setShowActionSheet(false);
+                fetchOrders();
+              } else {
+                Alert.alert('Error', res?.message || 'Failed to unapprove order');
+              }
+            } catch {
+              Alert.alert('Error', 'Failed to unapprove order');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleDeleteOrder = () => {
     if (!selectedOrder) return;
@@ -906,6 +940,15 @@ const AdminOrderList = () => {
                     <Text style={[styles.detailActionText, { color: '#10B981' }]}>Approve</Text>
                   </TouchableOpacity>
                 )}
+                {canUnapprove(selectedOrder.status) && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, { backgroundColor: '#FFF7ED', borderColor: '#F59E0B' }]}
+                    onPress={handleUnapprove}
+                  >
+                    <Ionicons name="arrow-undo-outline" size={18} color="#F59E0B" />
+                    <Text style={[styles.detailActionText, { color: '#F59E0B' }]}>Unapprove</Text>
+                  </TouchableOpacity>
+                )}
                 {canDelete(selectedOrder.status) && (
                   <TouchableOpacity
                     style={[styles.detailActionBtn, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]}
@@ -998,6 +1041,19 @@ const AdminOrderList = () => {
               <View style={styles.sheetActionInfo}>
                 <Text style={[styles.sheetActionTitle, { color: '#10B981' }]}>Approve Order</Text>
                 <Text style={styles.sheetActionSub}>Move order to approved status</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+
+          {canUnapprove(selectedOrder.status) && (
+            <TouchableOpacity style={styles.sheetAction} onPress={handleUnapprove}>
+              <View style={[styles.sheetActionIcon, { backgroundColor: '#FFF7ED' }]}>
+                <Ionicons name="arrow-undo-outline" size={20} color="#F59E0B" />
+              </View>
+              <View style={styles.sheetActionInfo}>
+                <Text style={[styles.sheetActionTitle, { color: '#F59E0B' }]}>Unapprove Order</Text>
+                <Text style={styles.sheetActionSub}>Return to pending approval</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
             </TouchableOpacity>
