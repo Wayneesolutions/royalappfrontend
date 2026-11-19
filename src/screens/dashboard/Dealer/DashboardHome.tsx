@@ -362,6 +362,13 @@ const DashboardHome = () => {
               onPress={() => navigation.navigate('DealerOrderList')}
             />
             <QuickActionCard
+              title="My Rewards"
+              description="Points, schemes, cash-out"
+              icon="gift-outline"
+              color="#F59E0B"
+              onPress={() => navigation.navigate('Rewards' as any)}
+            />
+            <QuickActionCard
               title="Received Orders"
               description="Orders from others"
               icon="download-outline"
