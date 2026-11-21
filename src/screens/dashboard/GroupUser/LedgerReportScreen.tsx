@@ -114,7 +114,7 @@ const LedgerReportScreen = () => {
   const fetchLedgerDetails = async (ledgerId: string, sd?: string, ed?: string) => {
     try {
       setLoadingTxns(true);
-      const params: any = {};
+      const params: any = { limit: 1000 };
       if (sd) params.startDate = sd;
       if (ed) params.endDate   = ed;
       const result = await apiService.getLedgerDetails(ledgerId, params);
