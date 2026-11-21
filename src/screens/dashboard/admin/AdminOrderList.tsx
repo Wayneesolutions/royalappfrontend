@@ -464,9 +464,9 @@ const AdminOrderList = () => {
   // canDelete: only draft orders can be deleted
   const canDelete = (status: string) => status === 'draft';
 
-  // canUnapprove: approved or sent_to_tally orders can be returned to pending
+  // canUnapprove: only sent_to_tally orders can be returned to pending
   const canUnapprove = (status: string) =>
-    ['approved', 'sent_to_tally'].includes(status);
+    status === 'sent_to_tally';
 
   const handleUnapprove = () => {
     if (!selectedOrder?._id) return;
