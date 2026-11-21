@@ -92,8 +92,9 @@ const LedgerReportScreen = () => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [calStart, setCalStart] = useState<Date | null>(null);
   const [calEnd,   setCalEnd]   = useState<Date | null>(null);
-  const [selectedCalYear, setSelectedCalYear] = useState(new Date().getFullYear());
-  const calScrollRef = useRef<any>(null);
+  const [calMode, setCalMode]   = useState<'year' | 'month' | 'day'>('year');
+  const [calNavYear, setCalNavYear]   = useState(new Date().getFullYear());
+  const [calNavMonth, setCalNavMonth] = useState(new Date().getMonth());
   const [startDateParam, setStartDateParam] = useState<string | undefined>(undefined);
   const [endDateParam,   setEndDateParam]   = useState<string | undefined>(undefined);
 
@@ -268,21 +269,25 @@ const LedgerReportScreen = () => {
     );
   };
 
-  // Build past 7 years of months (oldest → newest, so user sees most recent at bottom)
-  const calMonths = Array.from({ length: 85 }, (_, i) => {
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - (84 - i));
-    return { year: d.getFullYear(), month: d.getMonth() };
-  });
+  const CAL_YEARS = useMemo(() => {
+    const y = new Date().getFullYear();
+    return Array.from({ length: 8 }, (_, i) => y - 7 + i);
+  }, []);
 
-  const calYears = [...new Set(calMonths.map(m => m.year))];
+  const handleCalBack = () => {
+    if (calMode === 'year') { setShowCalendar(false); setCalStart(null); setCalEnd(null); }
+    else if (calMode === 'month') setCalMode('year');
+    else setCalMode('month');
+  };
 
-  const scrollToYear = (year: number) => {
-    const idx = calMonths.findIndex(m => m.year === year);
-    if (idx >= 0 && calScrollRef.current) {
-      calScrollRef.current.scrollToIndex({ index: idx, animated: true });
-    }
+  const goToPrevMonth = () => {
+    const d = new Date(calNavYear, calNavMonth - 1, 1);
+    setCalNavYear(d.getFullYear()); setCalNavMonth(d.getMonth());
+  };
+
+  const goToNextMonth = () => {
+    const d = new Date(calNavYear, calNavMonth + 1, 1);
+    setCalNavYear(d.getFullYear()); setCalNavMonth(d.getMonth());
   };
 
   // ── List view ────────────────────────────────────────────────────────────
@@ -529,6 +534,7 @@ const LedgerReportScreen = () => {
                   onPress={() => {
                     if (opt === 'Custom Date') {
                       setDateModalVisible(false);
+                      setCalMode('year');
                       setTimeout(() => setShowCalendar(true), 300);
                     } else {
                       handlePredefinedDate(opt);
@@ -572,67 +578,92 @@ const LedgerReportScreen = () => {
         </View>
       </Modal>
 
-      {/* Calendar modal */}
+      {/* Calendar modal — 3-step: Year → Month → Day */}
       <Modal visible={showCalendar} transparent animationType="slide">
         <View style={styles.calOverlay}>
           <View style={styles.calContainer}>
-            {/* Cal header */}
+
+            {/* Header */}
             <View style={styles.calHeader}>
-              <TouchableOpacity onPress={() => { setShowCalendar(false); setCalStart(null); setCalEnd(null); }}>
-                <Ionicons name="close" size={22} color="#fff" />
+              <TouchableOpacity onPress={handleCalBack} style={{ padding: 4 }}>
+                <Ionicons name={calMode === 'year' ? 'close' : 'arrow-back'} size={22} color="#fff" />
               </TouchableOpacity>
-              <Text style={styles.calHeaderTitle}>SELECT DATE RANGE</Text>
-              <TouchableOpacity
-                onPress={handleCalendarSave}
-                disabled={!calStart || !calEnd}
-              >
+              <Text style={styles.calHeaderTitle}>
+                {calMode === 'year' ? 'SELECT YEAR'
+                 : calMode === 'month' ? String(calNavYear)
+                 : 'SELECT DATES'}
+              </Text>
+              <TouchableOpacity onPress={handleCalendarSave} disabled={!calStart || !calEnd} style={{ padding: 4 }}>
                 <Text style={[styles.calSaveBtn, (!calStart || !calEnd) && { opacity: 0.3 }]}>SAVE</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Selected range display */}
-            {(calStart || calEnd) && (
-              <View style={styles.calRangeBar}>
-                <Text style={styles.calRangeTxt}>
-                  {calStart ? formatDate(calStart) : '—'} → {calEnd ? formatDate(calEnd) : '—'}
-                </Text>
+            {/* Range display */}
+            <View style={styles.calRangeBar}>
+              <Text style={styles.calRangeTxt}>
+                {calStart ? formatDate(calStart) : 'Start'} → {calEnd ? formatDate(calEnd) : 'End'}
+              </Text>
+            </View>
+
+            {/* ── Year picker ── */}
+            {calMode === 'year' && (
+              <View style={styles.calPickerWrap}>
+                {CAL_YEARS.map(yr => (
+                  <TouchableOpacity
+                    key={yr}
+                    style={[styles.calPickerCell, { width: '44%', margin: '3%', paddingVertical: 24 },
+                            calNavYear === yr && styles.calPickerCellActive]}
+                    onPress={() => { setCalNavYear(yr); setCalMode('month'); }}
+                  >
+                    <Text style={[styles.calPickerCellTxt, { fontSize: 22 },
+                                  calNavYear === yr && styles.calPickerCellTxtActive]}>
+                      {yr}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
 
-            {/* Year jump selector */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.yearRow}
-              contentContainerStyle={styles.yearRowContent}
-            >
-              {calYears.map(yr => (
-                <TouchableOpacity
-                  key={yr}
-                  style={[styles.yearBtn, selectedCalYear === yr && styles.yearBtnActive]}
-                  onPress={() => { setSelectedCalYear(yr); scrollToYear(yr); }}
-                >
-                  <Text style={[styles.yearBtnTxt, selectedCalYear === yr && styles.yearBtnTxtActive]}>
-                    {yr}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {/* ── Month picker ── */}
+            {calMode === 'month' && (
+              <View style={styles.calPickerWrap}>
+                {SHORT_MONTHS.map((m, idx) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.calPickerCell, { width: '20%', margin: '2.5%', paddingVertical: 22 },
+                            calNavMonth === idx && styles.calPickerCellActive]}
+                    onPress={() => { setCalNavMonth(idx); setCalMode('day'); }}
+                  >
+                    <Text style={[styles.calPickerCellTxt, calNavMonth === idx && styles.calPickerCellTxtActive]}>
+                      {m}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
-            {/* Month grid */}
-            <FlatList
-              ref={calScrollRef}
-              data={calMonths}
-              keyExtractor={(_, i) => String(i)}
-              renderItem={({ item: { year, month } }) => renderCalendarMonth(year, month)}
-              showsVerticalScrollIndicator={false}
-              style={{ flex: 1 }}
-              getItemLayout={(_, index) => ({ length: 310, offset: 310 * index, index })}
-              onScrollToIndexFailed={info => {
-                calScrollRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
-              }}
-              ListFooterComponent={<View style={{ height: 24 }} />}
-            />
+            {/* ── Day picker ── */}
+            {calMode === 'day' && (
+              <>
+                <View style={styles.calMonthNav}>
+                  <TouchableOpacity onPress={goToPrevMonth} style={{ padding: 6 }}>
+                    <Ionicons name="chevron-back-outline" size={22} color="#90CDF4" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.calMonthNavCenter} onPress={() => setCalMode('month')}>
+                    <Text style={styles.calMonthNavTxt}>{MONTH_NAMES[calNavMonth]} {calNavYear}</Text>
+                    <Ionicons name="chevron-down" size={14} color="#90CDF4" style={{ marginLeft: 6 }} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={goToNextMonth} style={{ padding: 6 }}>
+                    <Ionicons name="chevron-forward-outline" size={22} color="#90CDF4" />
+                  </TouchableOpacity>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                  {renderCalendarMonth(calNavYear, calNavMonth)}
+                  <View style={{ height: 40 }} />
+                </ScrollView>
+              </>
+            )}
+
           </View>
         </View>
       </Modal>
@@ -789,28 +820,41 @@ const styles = StyleSheet.create({
   calDayTxtSel: { color: '#fff', fontWeight: '700', fontSize: 14 },
   calDayInRange: { backgroundColor: '#BEE3F8', borderRadius: 18 },
 
-  // ── Year jump selector ──
-  yearRow: {
-    height: 50,
-    backgroundColor: '#1A365D',
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A4A7F',
+  // ── Year / Month / Day picker ──
+  calPickerWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+    justifyContent: 'center',
+    alignContent: 'center',
   },
-  yearRowContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  yearBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
+  calPickerCell: {
+    borderRadius: 14,
     backgroundColor: '#2A4A7F',
-    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  yearBtnActive: { backgroundColor: '#90CDF4' },
-  yearBtnTxt: { color: '#BEE3F8', fontSize: 14, fontWeight: '600' },
-  yearBtnTxtActive: { color: '#1A365D', fontWeight: '700' },
+  calPickerCellActive: { backgroundColor: '#90CDF4' },
+  calPickerCellTxt: { color: '#BEE3F8', fontSize: 16, fontWeight: '600' },
+  calPickerCellTxtActive: { color: '#1A365D', fontWeight: '800' },
+  calMonthNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1A365D',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#2A4A7F',
+  },
+  calMonthNavCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calMonthNavTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
 
 export default LedgerReportScreen;
