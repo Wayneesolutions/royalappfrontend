@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, ScrollView, TextInput, ActivityIndicator,
-  Platform,
+  Platform, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import apiService from '../../../services/api';
@@ -102,8 +102,8 @@ const LedgerReportScreen = () => {
   const fetchLedgers = async () => {
     try {
       setLoadingLedgers(true);
-      const result = await apiService.adminGetAllDealers();
-      setLedgers(result?.data?.dealers || []);
+      const result = await apiService.getLedgers({ limit: 500 });
+      setLedgers(result?.data?.ledgers || []);
     } catch { setLedgers([]); }
     finally { setLoadingLedgers(false); }
   };
@@ -268,11 +268,11 @@ const LedgerReportScreen = () => {
     );
   };
 
-  // Build past 12 months array (oldest → newest, so user sees most recent at bottom)
-  const calMonths = Array.from({ length: 13 }, (_, i) => {
+  // Build past 7 years of months (oldest → newest, so user sees most recent at bottom)
+  const calMonths = Array.from({ length: 85 }, (_, i) => {
     const d = new Date();
     d.setDate(1);
-    d.setMonth(d.getMonth() - (12 - i));
+    d.setMonth(d.getMonth() - (84 - i));
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
   // ── List ──
   listHeader: {
     backgroundColor: '#1A365D',
-    paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : (StatusBar.currentHeight || 0) + 16,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
   // ── Report header ──
   reportHeader: {
     backgroundColor: '#1A365D',
-    paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : (StatusBar.currentHeight || 0) + 16,
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 10,
