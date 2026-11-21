@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, ScrollView, TextInput, ActivityIndicator,
@@ -92,6 +92,8 @@ const LedgerReportScreen = () => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [calStart, setCalStart] = useState<Date | null>(null);
   const [calEnd,   setCalEnd]   = useState<Date | null>(null);
+  const [selectedCalYear, setSelectedCalYear] = useState(new Date().getFullYear());
+  const calScrollRef = useRef<any>(null);
   const [startDateParam, setStartDateParam] = useState<string | undefined>(undefined);
   const [endDateParam,   setEndDateParam]   = useState<string | undefined>(undefined);
 
@@ -134,9 +136,7 @@ const LedgerReportScreen = () => {
         const opening = result.data.summary?.openingBalance || 0;
         let running = opening;
         const withBalance = raw.map(t => {
-          const sign = running >= 0 ? 1 : -1;
-          const newMag = Math.abs(running) - (t.debit || 0) + (t.credit || 0);
-          running = sign * newMag;
+          running = running + (t.debit || 0) - (t.credit || 0);
           return { ...t, runningBalance: running };
         });
 
@@ -275,6 +275,15 @@ const LedgerReportScreen = () => {
     d.setMonth(d.getMonth() - (84 - i));
     return { year: d.getFullYear(), month: d.getMonth() };
   });
+
+  const calYears = [...new Set(calMonths.map(m => m.year))];
+
+  const scrollToYear = (year: number) => {
+    const idx = calMonths.findIndex(m => m.year === year);
+    if (idx >= 0 && calScrollRef.current) {
+      calScrollRef.current.scrollToIndex({ index: idx, animated: true });
+    }
+  };
 
   // ── List view ────────────────────────────────────────────────────────────
 
@@ -590,11 +599,39 @@ const LedgerReportScreen = () => {
               </View>
             )}
 
-            {/* Months (past 12 + current, scroll up to see older) */}
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {calMonths.map(({ year, month }) => renderCalendarMonth(year, month))}
-              <View style={{ height: 24 }} />
+            {/* Year jump selector */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.yearRow}
+              contentContainerStyle={styles.yearRowContent}
+            >
+              {calYears.map(yr => (
+                <TouchableOpacity
+                  key={yr}
+                  style={[styles.yearBtn, selectedCalYear === yr && styles.yearBtnActive]}
+                  onPress={() => { setSelectedCalYear(yr); scrollToYear(yr); }}
+                >
+                  <Text style={[styles.yearBtnTxt, selectedCalYear === yr && styles.yearBtnTxtActive]}>
+                    {yr}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
+
+            {/* Month grid */}
+            <FlatList
+              ref={calScrollRef}
+              data={calMonths}
+              keyExtractor={(_, i) => String(i)}
+              renderItem={({ item: { year, month } }) => renderCalendarMonth(year, month)}
+              showsVerticalScrollIndicator={false}
+              getItemLayout={(_, index) => ({ length: 310, offset: 310 * index, index })}
+              onScrollToIndexFailed={info => {
+                calScrollRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+              }}
+              ListFooterComponent={<View style={{ height: 24 }} />}
+            />
           </View>
         </View>
       </Modal>
@@ -750,6 +787,14 @@ const styles = StyleSheet.create({
   calDaySelected: { backgroundColor: '#2B6CB0', borderRadius: 18 },
   calDayTxtSel: { color: '#fff', fontWeight: '700', fontSize: 14 },
   calDayInRange: { backgroundColor: '#BEE3F8', borderRadius: 18 },
+
+  // ── Year jump selector ──
+  yearRow: { backgroundColor: '#1A365D', borderBottomWidth: 1, borderBottomColor: '#2A4A7F' },
+  yearRowContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
+  yearBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#2A4A7F' },
+  yearBtnActive: { backgroundColor: '#90CDF4' },
+  yearBtnTxt: { color: '#BEE3F8', fontSize: 14, fontWeight: '600' },
+  yearBtnTxtActive: { color: '#1A365D', fontWeight: '700' },
 });
 
 export default LedgerReportScreen;
