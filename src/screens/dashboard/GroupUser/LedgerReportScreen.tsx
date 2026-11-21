@@ -626,6 +626,7 @@ const LedgerReportScreen = () => {
               keyExtractor={(_, i) => String(i)}
               renderItem={({ item: { year, month } }) => renderCalendarMonth(year, month)}
               showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
               getItemLayout={(_, index) => ({ length: 310, offset: 310 * index, index })}
               onScrollToIndexFailed={info => {
                 calScrollRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
@@ -789,9 +790,24 @@ const styles = StyleSheet.create({
   calDayInRange: { backgroundColor: '#BEE3F8', borderRadius: 18 },
 
   // ── Year jump selector ──
-  yearRow: { backgroundColor: '#1A365D', borderBottomWidth: 1, borderBottomColor: '#2A4A7F' },
-  yearRowContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
-  yearBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#2A4A7F' },
+  yearRow: {
+    height: 50,
+    backgroundColor: '#1A365D',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A4A7F',
+  },
+  yearRowContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  yearBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#2A4A7F',
+    marginRight: 8,
+  },
   yearBtnActive: { backgroundColor: '#90CDF4' },
   yearBtnTxt: { color: '#BEE3F8', fontSize: 14, fontWeight: '600' },
   yearBtnTxtActive: { color: '#1A365D', fontWeight: '700' },
